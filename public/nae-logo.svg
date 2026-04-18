@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 180">
+  <rect width="600" height="180" rx="24" fill="#1C3E3B"/>
+  <circle cx="94" cy="90" r="48" fill="#B2C7C0"/>
+  <text x="165" y="82" fill="#ffffff" font-size="38" font-family="Arial, sans-serif" font-weight="700">National Art</text>
+  <text x="165" y="124" fill="#ffffff" font-size="38" font-family="Arial, sans-serif" font-weight="700">Expressions</text>
+</svg>
