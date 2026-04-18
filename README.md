@@ -26,4 +26,4 @@ This package is a deployable Next.js + Supabase starter for the National Art Exp
 - `.env.example` to copy into `.env.local`
 - `DEPLOY_BEGINNER.md` for step-by-step deployment
 
-Deployment refresh
+Deployment refresh 2

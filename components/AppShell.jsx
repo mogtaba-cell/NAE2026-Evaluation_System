@@ -866,7 +866,6 @@ export default function AppShell({ session }) {
             <div>
               <div style={{ fontSize: 12, letterSpacing: 3, textTransform: "uppercase", opacity: 0.75 }}>National Art Expressions</div>
               <div style={{ fontSize: 34, fontWeight: 800, marginTop: 8 }}>Evaluation & Selection Platform</div>
-              <div style={{ maxWidth: 920, marginTop: 10, fontSize: 14, opacity: 0.85 }}>Online platform ready for Vercel + Supabase with student-level imports, school-level imports, separate evaluators, management revaluation, dashboard analytics, and coordinator assignment.</div>
             </div>
             <div className="filters-row"><div className="small-card" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>{currentUser.username} · {currentUser.role}</div><button className="btn outline" onClick={logout}>Logout</button></div>
           </div>

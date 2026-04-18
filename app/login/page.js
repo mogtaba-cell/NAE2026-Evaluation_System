@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 export default function LoginPage() {
-  const [username, setUsername] = useState("Admin");
-  const [password, setPassword] = useState("NAE2026");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -32,17 +32,30 @@ export default function LoginPage() {
         <div className="hero">
           <div style={{ fontSize: 12, letterSpacing: 3, textTransform: "uppercase", opacity: 0.75 }}>National Art Expressions</div>
           <div style={{ fontSize: 32, fontWeight: 800, marginTop: 8 }}>Platform Login</div>
-          <div style={{ marginTop: 10, opacity: 0.85 }}>Admin default username: Admin · password: NAE2026</div>
+          <div style={{ marginTop: 10, opacity: 0.85 }}>Enter your username and password to continue.</div>
         </div>
         <form className="card" onSubmit={handleSubmit}>
           <div style={{ display: "grid", gap: 14 }}>
             <div>
               <div style={{ fontSize: 13, marginBottom: 6 }}>Username</div>
-              <input className="field" value={username} onChange={(e) => setUsername(e.target.value)} />
+              <input
+              className="field"
+              placeholder="Enter username"
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              />
             </div>
             <div>
               <div style={{ fontSize: 13, marginBottom: 6 }}>Password</div>
-              <input className="field" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <input
+              className="field"
+              type="password"
+              placeholder="Enter password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              />
             </div>
             {error ? <div className="legend-note" style={{ color: "#B42318" }}>{error}</div> : null}
             <button className="btn" type="submit" disabled={loading}>{loading ? "Signing in..." : "Sign In"}</button>
