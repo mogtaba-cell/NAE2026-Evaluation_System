@@ -25,3 +25,5 @@ This package is a deployable Next.js + Supabase starter for the National Art Exp
 - `supabase/seed_admin.sql` to seed the default admin
 - `.env.example` to copy into `.env.local`
 - `DEPLOY_BEGINNER.md` for step-by-step deployment
+
+Deployment refresh
