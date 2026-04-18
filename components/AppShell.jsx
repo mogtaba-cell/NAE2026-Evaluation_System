@@ -865,7 +865,7 @@ export default function AppShell({ session }) {
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
             <div>
               <div style={{ fontSize: 12, letterSpacing: 3, textTransform: "uppercase", opacity: 0.75 }}>National Art Expressions</div>
-              <div style={{ fontSize: 34, fontWeight: 800, marginTop: 8 }}>Evaluation & Selection Platform</div>
+              <div style={{ fontSize: 34, fontWeight: 800, marginTop: 8 }}>NAE 2026 Artwork Evaluation & Selection</div>
             </div>
             <div className="filters-row"><div className="small-card" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>{currentUser.username} · {currentUser.role}</div><button className="btn outline" onClick={logout}>Logout</button></div>
           </div>
