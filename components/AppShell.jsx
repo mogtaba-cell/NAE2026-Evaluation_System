@@ -385,6 +385,7 @@ export default function AppShell({ session }) {
   const [schoolFilters, setSchoolFilters] = useState({ schoolType: "all", region: "all", search: "" });
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
+  const [evaluatorFilterPathway, setEvaluatorFilterPathway] = useState("all");
 
   async function bootstrap() {
     setLoading(true);
@@ -615,6 +616,47 @@ export default function AppShell({ session }) {
     round2Completed: coordinatorProgress.reduce((sum, row) => sum + row.round2Completed, 0),
     finalSelected: coordinatorProgress.reduce((sum, row) => sum + row.finalSelected, 0)
   }), [coordinatorProgress]);
+
+  const evaluatorStats = useMemo(() => {
+    const matchedSubmissions = submissions.filter((submission) =>
+      evaluatorFilterPathway === "all" || submission.pathway === evaluatorFilterPathway
+    );
+
+    const statsMap = Object.fromEntries(
+      evaluators.map((item) => [
+        item.id,
+        {
+          round1Evaluated: 0,
+          round1Selected: 0,
+          round2Evaluated: 0,
+          round2Selected: 0
+        }
+      ])
+    );
+
+    matchedSubmissions.forEach((submission) => {
+      (submission.round1.evaluator_ids || []).forEach((evaluatorId) => {
+        if (!statsMap[evaluatorId]) return;
+        statsMap[evaluatorId].round1Evaluated += 1;
+        if (submission.round1.autoAdvanced) statsMap[evaluatorId].round1Selected += 1;
+      });
+
+      (submission.round2.evaluator_ids || []).forEach((evaluatorId) => {
+        if (!statsMap[evaluatorId]) return;
+        statsMap[evaluatorId].round2Evaluated += 1;
+        if (submission.round2.finalSelected) statsMap[evaluatorId].round2Selected += 1;
+      });
+    });
+
+    return statsMap;
+  }, [evaluators, submissions, evaluatorFilterPathway]);
+
+  const filteredEvaluators = useMemo(() => {
+    return evaluators.filter((item) => {
+      if (evaluatorFilterPathway === "all") return true;
+      return (item.pathways || []).includes(evaluatorFilterPathway);
+    });
+  }, [evaluators, evaluatorFilterPathway]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -1096,9 +1138,48 @@ export default function AppShell({ session }) {
                 <div className="small-card"><div style={{ fontSize: 13, opacity: 0.75 }}>Final Selected</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>{dashboardMatched.filter((x) => x.round2.finalSelected).length}</div></div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-                <div className="small-card" style={{ minHeight: 320 }}><div style={{ fontWeight: 700, marginBottom: 10 }}>By Pathway</div><div style={{ width: "100%", height: 260 }}><ResponsiveContainer><PieChart><Pie data={byPathway} dataKey="value" nameKey="name" outerRadius={90} label>{byPathway.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
-                <div className="small-card" style={{ minHeight: 320 }}><div style={{ fontWeight: 700, marginBottom: 10 }}>Gender</div><div style={{ width: "100%", height: 260 }}><ResponsiveContainer><PieChart><Pie data={byGender} dataKey="value" nameKey="name" outerRadius={90} label>{byGender.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
-                <div className="small-card" style={{ minHeight: 320 }}><div style={{ fontWeight: 700, marginBottom: 10 }}>Nationality</div><div style={{ width: "100%", height: 260 }}><ResponsiveContainer><PieChart><Pie data={byNationality} dataKey="value" nameKey="name" outerRadius={90} label>{byNationality.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip /><Legend /></PieChart></ResponsiveContainer></div></div>
+                <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>By Pathway</div>
+                  <div style={{ width: "100%", height: 340 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
+                        <Pie data={byPathway} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                          {byPathway.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={56} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>Gender</div>
+                  <div style={{ width: "100%", height: 340 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
+                        <Pie data={byGender} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                          {byGender.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={56} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
+                  <div style={{ fontWeight: 700, marginBottom: 10 }}>Nationality</div>
+                  <div style={{ width: "100%", height: 340 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
+                        <Pie data={byNationality} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                          {byNationality.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={56} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
               </div>
               <div className="small-card" style={{ marginTop: 16 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>Submissions by School Type</div>
@@ -1126,23 +1207,78 @@ export default function AppShell({ session }) {
 
         {activeTab === "evaluators" && (
           <div className="card">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>Evaluators</div>
-              <button className="btn" onClick={() => { setEditingEvaluator(null); setEvaluatorModalOpen(true); }}>Add Evaluator</button>
+              <div className="filters-row">
+                <select
+                  className="field"
+                  value={evaluatorFilterPathway}
+                  onChange={(e) => setEvaluatorFilterPathway(e.target.value)}
+                >
+                  <option value="all">All pathways</option>
+                  {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <button className="btn" onClick={() => { setEditingEvaluator(null); setEvaluatorModalOpen(true); }}>
+                  Add Evaluator
+                </button>
+              </div>
             </div>
-            <div className="legend-note" style={{ marginBottom: 14 }}>Evaluators are separate from platform users. Both admin and coordinators can access this page.</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
-              {evaluators.map((item) => (
-                <div key={item.id} className="small-card">
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div><div style={{ fontWeight: 800 }}>{item.name}</div><div style={{ fontSize: 13, opacity: 0.75 }}>{item.active ? "Active" : "Inactive"}</div></div>
-                    <div className="filters-row"><button className="btn outline" onClick={() => { setEditingEvaluator(item); setEvaluatorModalOpen(true); }}>Edit</button><button className="btn outline" onClick={() => deleteEvaluator(item.id)}>Delete</button></div>
+            <div className="legend-note" style={{ marginBottom: 14 }}>
+              Evaluators are separate from platform users. Both admin and coordinators can access this page. Only admin can delete evaluators.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
+              {filteredEvaluators.map((item) => {
+                const stats = evaluatorStats[item.id] || {
+                  round1Evaluated: 0,
+                  round1Selected: 0,
+                  round2Evaluated: 0,
+                  round2Selected: 0
+                };
+
+                return (
+                  <div key={item.id} className="small-card">
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 800 }}>{item.name}</div>
+                        <div style={{ fontSize: 13, opacity: 0.75 }}>{item.active ? "Active" : "Inactive"}</div>
+                      </div>
+                      <div className="filters-row">
+                        <button className="btn outline" onClick={() => { setEditingEvaluator(item); setEvaluatorModalOpen(true); }}>
+                          Edit
+                        </button>
+                        {currentUser.role === "admin" ? (
+                          <button className="btn outline" onClick={() => deleteEvaluator(item.id)}>
+                            Delete
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
+                      <div className="small-card" style={{ background: "var(--sand)" }}>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Round 1 Evaluated</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round1Evaluated}</div>
+                      </div>
+                      <div className="small-card" style={{ background: "var(--mist)" }}>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Round 1 Selected</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round1Selected}</div>
+                      </div>
+                      <div className="small-card" style={{ background: "var(--sand)" }}>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Round 2 Evaluated</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round2Evaluated}</div>
+                      </div>
+                      <div className="small-card" style={{ background: "var(--mist)" }}>
+                        <div style={{ fontSize: 12, opacity: 0.75 }}>Round 2 Selected</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round2Selected}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+                      {pathwayOptions.map((pathway) => <label key={pathway} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}><input type="checkbox" checked={(item.pathways || []).includes(pathway)} onChange={async () => { const next = (item.pathways || []).includes(pathway) ? item.pathways.filter((x) => x !== pathway) : [...(item.pathways || []), pathway]; await fetch(`/api/evaluators/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pathways: next }) }); await bootstrap(); }} /> {pathway}</label>)}
+                    </div>
                   </div>
-                  <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-                    {pathwayOptions.map((pathway) => <label key={pathway} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}><input type="checkbox" checked={(item.pathways || []).includes(pathway)} onChange={async () => { const next = (item.pathways || []).includes(pathway) ? item.pathways.filter((x) => x !== pathway) : [...(item.pathways || []), pathway]; await fetch(`/api/evaluators/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pathways: next }) }); await bootstrap(); }} /> {pathway}</label>)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
