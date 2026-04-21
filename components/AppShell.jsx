@@ -1420,7 +1420,7 @@ export default function AppShell({ session }) {
 
                 <button className="btn" onClick={loadWorkspace}>6. Load Artworks</button>
 
-                <div className="legend-note">Only evaluators appear here. Coordinators can only work on submissions assigned to them. Admin can view all submissions in all other pages.</div>
+                <div className="legend-note">Apply all filters before loading artworks.</div>
 
                 <div className="filters-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
                   <input className="field" placeholder="Search loaded artworks" value={workspaceSearch} onChange={(e) => setWorkspaceSearch(e.target.value)} style={{ flex: 1 }} />
@@ -1506,7 +1506,7 @@ export default function AppShell({ session }) {
                         </div>
                       </div>
 
-                      <div className="legend-note" style={{ marginBottom: 12 }}>Enter one criterion per row, then one evaluator score after the other across the columns.</div>
+                      <div className="legend-note" style={{ marginBottom: 12 }}>Enter each evaluator's score for every criterion.</div>
 
                       <div className="score-grid">
                         <table className="table">
@@ -1848,10 +1848,6 @@ export default function AppShell({ session }) {
                   Add Evaluator
                 </button>
               </div>
-            </div>
-
-            <div className="legend-note" style={{ marginBottom: 14 }}>
-              Evaluators are separate from platform users. Both admin and coordinators can access this page. Only admin can delete evaluators.
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
