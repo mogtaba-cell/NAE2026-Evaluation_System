@@ -1,8 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
+import {
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  Legend,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid
+} from "recharts";
 import { getRubric } from "@/lib/rubric";
 import { calculateAggregate, passesRound1, isFinalSelected } from "@/lib/calculations";
 
@@ -73,6 +87,15 @@ function kpiClass(value, type) {
   return "";
 }
 
+function roundStatusLabel(roundNumber, submission) {
+  if (roundNumber === 1) {
+    if (!submission.round1.completed) return null;
+    return submission.round1.autoAdvanced ? "Round 1 Selected" : "Not Selected Round 1";
+  }
+  if (!submission.round2.completed) return null;
+  return submission.round2.finalSelected ? "Final Selected" : "Not Selected Round 2";
+}
+
 function downloadJson(rows, fileName, format) {
   const ws = XLSX.utils.json_to_sheet(rows);
   if (format === "csv") {
@@ -93,8 +116,13 @@ function downloadJson(rows, fileName, format) {
 
 function PreviewModal({ open, imageUrl, onClose }) {
   const [zoom, setZoom] = useState(1);
-  useEffect(() => { if (open) setZoom(1); }, [open, imageUrl]);
+
+  useEffect(() => {
+    if (open) setZoom(1);
+  }, [open, imageUrl]);
+
   if (!open || !imageUrl) return null;
+
   return (
     <div className="modal-backdrop">
       <div className="modal" style={{ width: "min(1400px, 100%)", maxHeight: "94vh" }}>
@@ -110,6 +138,30 @@ function PreviewModal({ open, imageUrl, onClose }) {
         <div style={{ overflow: "auto", maxHeight: "calc(94vh - 96px)", border: "1px solid var(--border)", borderRadius: 16, background: "#fafafa", padding: 18 }}>
           <img src={imageUrl} alt="Preview" style={{ width: `${zoom * 100}%`, maxWidth: "none", display: "block", margin: "0 auto" }} />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportProgressModal({ open, state }) {
+  if (!open) return null;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ width: "min(520px, 100%)" }}>
+        <div style={{ fontSize: 24, fontWeight: 800, marginBottom: 10 }}>Importing Data</div>
+        <div style={{ opacity: 0.8, marginBottom: 14 }}>{state.message || "Please wait..."}</div>
+        <div style={{ height: 14, background: "var(--sand)", borderRadius: 999, overflow: "hidden", border: "1px solid var(--border)" }}>
+          <div
+            style={{
+              width: `${Math.max(0, Math.min(100, state.progress || 0))}%`,
+              height: "100%",
+              background: "#1C3E3B",
+              transition: "width 240ms ease"
+            }}
+          />
+        </div>
+        <div style={{ marginTop: 10, fontWeight: 700 }}>{Math.round(state.progress || 0)}%</div>
       </div>
     </div>
   );
@@ -131,14 +183,22 @@ function DetailModal({ open, submission, currentUser, coordinators, onClose, onS
       management_round1_comments: submission.management_round1_comments || "",
       management_round2_total_score: submission.management_round2_total_score ?? "",
       management_round2_grade: submission.management_round2_grade || "",
-      management_round2_national_identity: submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined ? "" : submission.management_round2_national_identity ? "yes" : "no",
+      management_round2_national_identity:
+        submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined
+          ? ""
+          : submission.management_round2_national_identity
+            ? "yes"
+            : "no",
       management_round2_comments: submission.management_round2_comments || "",
       assigned_coordinator_id: submission.assigned_coordinator_id || ""
     });
   }, [submission]);
 
   if (!open || !submission || !draft) return null;
+
   const canEdit = currentUser.role === "admin";
+  const round1Status = roundStatusLabel(1, submission);
+  const round2Status = roundStatusLabel(2, submission);
 
   return (
     <div className="modal-backdrop">
@@ -180,6 +240,24 @@ function DetailModal({ open, submission, currentUser, coordinators, onClose, onS
             </div>
 
             <div className="card">
+              <strong>Round Results</strong>
+              <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                <div className="small-card">
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Round 1</div>
+                  <div>Score: {submission.round1?.effective?.totalScore ?? 0}</div>
+                  <div>Grade: {submission.round1?.effective?.grade || "-"}</div>
+                  <div>Status: {round1Status || "Not completed"}</div>
+                </div>
+                <div className="small-card">
+                  <div style={{ fontWeight: 700, marginBottom: 8 }}>Round 2</div>
+                  <div>Score: {submission.round2?.effective?.totalScore ?? 0}</div>
+                  <div>Grade: {submission.round2?.effective?.grade || "-"}</div>
+                  <div>Status: {round2Status || "Not completed"}</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
               <strong>Review Flags</strong>
               <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                 <label><input type="checkbox" checked={draft.seen_reviewed} onChange={(e) => setDraft((prev) => ({ ...prev, seen_reviewed: e.target.checked }))} /> Seen / Reviewed</label>
@@ -208,7 +286,10 @@ function DetailModal({ open, submission, currentUser, coordinators, onClose, onS
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 10 }}>
                     <input className="field" disabled={!canEdit} placeholder="Score" value={draft.management_round1_total_score} onChange={(e) => setDraft((prev) => ({ ...prev, management_round1_total_score: e.target.value }))} />
                     <select className="field" disabled={!canEdit} value={draft.management_round1_grade} onChange={(e) => setDraft((prev) => ({ ...prev, management_round1_grade: e.target.value }))}>
-                      <option value="">No override grade</option><option value="A">A</option><option value="B">B</option><option value="C">C</option>
+                      <option value="">No override grade</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
                     </select>
                   </div>
                   <textarea className="textarea" disabled={!canEdit} style={{ marginTop: 10 }} value={draft.management_round1_comments} onChange={(e) => setDraft((prev) => ({ ...prev, management_round1_comments: e.target.value }))} />
@@ -218,17 +299,25 @@ function DetailModal({ open, submission, currentUser, coordinators, onClose, onS
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginTop: 10 }}>
                     <input className="field" disabled={!canEdit} placeholder="Score" value={draft.management_round2_total_score} onChange={(e) => setDraft((prev) => ({ ...prev, management_round2_total_score: e.target.value }))} />
                     <select className="field" disabled={!canEdit} value={draft.management_round2_grade} onChange={(e) => setDraft((prev) => ({ ...prev, management_round2_grade: e.target.value }))}>
-                      <option value="">No override grade</option><option value="A">A</option><option value="B">B</option><option value="C">C</option>
+                      <option value="">No override grade</option>
+                      <option value="A">A</option>
+                      <option value="B">B</option>
+                      <option value="C">C</option>
                     </select>
                     <select className="field" disabled={!canEdit} value={draft.management_round2_national_identity} onChange={(e) => setDraft((prev) => ({ ...prev, management_round2_national_identity: e.target.value }))}>
-                      <option value="">No override</option><option value="yes">Yes</option><option value="no">No</option>
+                      <option value="">No override</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
                     </select>
                   </div>
                   <textarea className="textarea" disabled={!canEdit} style={{ marginTop: 10 }} value={draft.management_round2_comments} onChange={(e) => setDraft((prev) => ({ ...prev, management_round2_comments: e.target.value }))} />
                 </div>
               </div>
             </div>
-            <div className="filters-row"><button className="btn" onClick={() => onSave(submission.id, draft)}>Save Details</button></div>
+
+            <div className="filters-row">
+              <button className="btn" onClick={() => onSave(submission.id, draft)}>Save Details</button>
+            </div>
           </div>
         </div>
       </div>
@@ -238,10 +327,31 @@ function DetailModal({ open, submission, currentUser, coordinators, onClose, onS
 
 function UserModal({ open, user, onClose, onSave }) {
   const [draft, setDraft] = useState({ username: "", display_name: "", role: "coordinator", active: true, password: "", pathways: [] });
+
   useEffect(() => {
-    setDraft(user ? { username: user.username || "", display_name: user.display_name || "", role: user.role || "coordinator", active: user.active !== false, password: "", pathways: user.pathways || [] } : { username: "", display_name: "", role: "coordinator", active: true, password: "", pathways: [] });
+    setDraft(
+      user
+        ? {
+            username: user.username || "",
+            display_name: user.display_name || "",
+            role: user.role || "coordinator",
+            active: user.active !== false,
+            password: "",
+            pathways: user.pathways || []
+          }
+        : {
+            username: "",
+            display_name: "",
+            role: "coordinator",
+            active: true,
+            password: "",
+            pathways: []
+          }
+    );
   }, [user]);
+
   if (!open) return null;
+
   return (
     <div className="modal-backdrop">
       <div className="modal" style={{ width: "min(640px, 100%)" }}>
@@ -252,10 +362,15 @@ function UserModal({ open, user, onClose, onSave }) {
         <div style={{ display: "grid", gap: 12 }}>
           <input className="field" placeholder="Username" value={draft.username} onChange={(e) => setDraft((prev) => ({ ...prev, username: e.target.value }))} />
           <input className="field" placeholder="Display Name" value={draft.display_name} onChange={(e) => setDraft((prev) => ({ ...prev, display_name: e.target.value }))} />
-          <select className="field" value={draft.role} onChange={(e) => setDraft((prev) => ({ ...prev, role: e.target.value }))}><option value="coordinator">Coordinator</option><option value="admin">Admin</option></select>
+          <select className="field" value={draft.role} onChange={(e) => setDraft((prev) => ({ ...prev, role: e.target.value }))}>
+            <option value="coordinator">Coordinator</option>
+            <option value="admin">Admin</option>
+          </select>
           <input className="field" type="password" placeholder={user ? "New password (optional)" : "Password"} value={draft.password} onChange={(e) => setDraft((prev) => ({ ...prev, password: e.target.value }))} />
           <label><input type="checkbox" checked={draft.active} onChange={(e) => setDraft((prev) => ({ ...prev, active: e.target.checked }))} /> Active</label>
-          <div className="filters-row"><button className="btn" onClick={() => onSave(draft)}>{user ? "Save User" : "Create User"}</button></div>
+          <div className="filters-row">
+            <button className="btn" onClick={() => onSave(draft)}>{user ? "Save User" : "Create User"}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -264,10 +379,13 @@ function UserModal({ open, user, onClose, onSave }) {
 
 function EvaluatorModal({ open, evaluator, onClose, onSave }) {
   const [draft, setDraft] = useState({ name: "", active: true });
+
   useEffect(() => {
     setDraft(evaluator ? { name: evaluator.name || "", active: evaluator.active !== false } : { name: "", active: true });
   }, [evaluator]);
+
   if (!open) return null;
+
   return (
     <div className="modal-backdrop">
       <div className="modal" style={{ width: "min(520px, 100%)" }}>
@@ -278,7 +396,9 @@ function EvaluatorModal({ open, evaluator, onClose, onSave }) {
         <div style={{ display: "grid", gap: 12 }}>
           <input className="field" placeholder="Evaluator Name" value={draft.name} onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))} />
           <label><input type="checkbox" checked={draft.active} onChange={(e) => setDraft((prev) => ({ ...prev, active: e.target.checked }))} /> Active</label>
-          <div className="filters-row"><button className="btn" onClick={() => onSave(draft)}>{evaluator ? "Save Evaluator" : "Create Evaluator"}</button></div>
+          <div className="filters-row">
+            <button className="btn" onClick={() => onSave(draft)}>{evaluator ? "Save Evaluator" : "Create Evaluator"}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -287,6 +407,7 @@ function EvaluatorModal({ open, evaluator, onClose, onSave }) {
 
 function FiltersModal({ open, onClose, tempFilters, setTempFilters, pathwayOptions, schoolNames, schoolTypes, regions, coordinators, onApply, onClear }) {
   if (!open) return null;
+
   return (
     <div className="modal-backdrop">
       <div className="modal" style={{ width: "min(820px, 100%)" }}>
@@ -295,11 +416,26 @@ function FiltersModal({ open, onClose, tempFilters, setTempFilters, pathwayOptio
           <button className="btn outline" onClick={onClose}>Close</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <select className="field" value={tempFilters.pathway} onChange={(e) => setTempFilters((prev) => ({ ...prev, pathway: e.target.value }))}><option value="all">All pathways</option>{pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-          <select className="field" value={tempFilters.schoolName} onChange={(e) => setTempFilters((prev) => ({ ...prev, schoolName: e.target.value }))}><option value="all">All schools</option>{schoolNames.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-          <select className="field" value={tempFilters.schoolType} onChange={(e) => setTempFilters((prev) => ({ ...prev, schoolType: e.target.value }))}><option value="all">All school types</option>{schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-          <select className="field" value={tempFilters.region} onChange={(e) => setTempFilters((prev) => ({ ...prev, region: e.target.value }))}><option value="all">All regions</option>{regions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-          <select className="field" value={tempFilters.coordinator} onChange={(e) => setTempFilters((prev) => ({ ...prev, coordinator: e.target.value }))}><option value="all">All coordinators</option>{coordinators.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select>
+          <select className="field" value={tempFilters.pathway} onChange={(e) => setTempFilters((prev) => ({ ...prev, pathway: e.target.value }))}>
+            <option value="all">All pathways</option>
+            {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select className="field" value={tempFilters.schoolName} onChange={(e) => setTempFilters((prev) => ({ ...prev, schoolName: e.target.value }))}>
+            <option value="all">All schools</option>
+            {schoolNames.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select className="field" value={tempFilters.schoolType} onChange={(e) => setTempFilters((prev) => ({ ...prev, schoolType: e.target.value }))}>
+            <option value="all">All school types</option>
+            {schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select className="field" value={tempFilters.region} onChange={(e) => setTempFilters((prev) => ({ ...prev, region: e.target.value }))}>
+            <option value="all">All regions</option>
+            {regions.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+          <select className="field" value={tempFilters.coordinator} onChange={(e) => setTempFilters((prev) => ({ ...prev, coordinator: e.target.value }))}>
+            <option value="all">All coordinators</option>
+            {coordinators.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+          </select>
           <select className="field" value={tempFilters.status} onChange={(e) => setTempFilters((prev) => ({ ...prev, status: e.target.value }))}>
             <option value="all">All statuses</option>
             <option value="round1_not_complete">Round 1 Not Complete</option>
@@ -309,9 +445,21 @@ function FiltersModal({ open, onClose, tempFilters, setTempFilters, pathwayOptio
             <option value="round2_not_selected">Round 2 Not Selected</option>
             <option value="final_selected">Final Selected</option>
           </select>
-          <select className="field" value={tempFilters.seen_reviewed} onChange={(e) => setTempFilters((prev) => ({ ...prev, seen_reviewed: e.target.value }))}><option value="any">Seen / Reviewed - Any</option><option value="yes">Seen / Reviewed - Yes</option><option value="no">Seen / Reviewed - No</option></select>
-          <select className="field" value={tempFilters.need_fixing_school} onChange={(e) => setTempFilters((prev) => ({ ...prev, need_fixing_school: e.target.value }))}><option value="any">Need Fixing - By School - Any</option><option value="yes">Need Fixing - By School - Yes</option><option value="no">Need Fixing - By School - No</option></select>
-          <select className="field" value={tempFilters.need_fixing_internal} onChange={(e) => setTempFilters((prev) => ({ ...prev, need_fixing_internal: e.target.value }))}><option value="any">Need Fixing - Internal - Any</option><option value="yes">Need Fixing - Internal - Yes</option><option value="no">Need Fixing - Internal - No</option></select>
+          <select className="field" value={tempFilters.seen_reviewed} onChange={(e) => setTempFilters((prev) => ({ ...prev, seen_reviewed: e.target.value }))}>
+            <option value="any">Seen / Reviewed - Any</option>
+            <option value="yes">Seen / Reviewed - Yes</option>
+            <option value="no">Seen / Reviewed - No</option>
+          </select>
+          <select className="field" value={tempFilters.need_fixing_school} onChange={(e) => setTempFilters((prev) => ({ ...prev, need_fixing_school: e.target.value }))}>
+            <option value="any">Need Fixing - By School - Any</option>
+            <option value="yes">Need Fixing - By School - Yes</option>
+            <option value="no">Need Fixing - By School - No</option>
+          </select>
+          <select className="field" value={tempFilters.need_fixing_internal} onChange={(e) => setTempFilters((prev) => ({ ...prev, need_fixing_internal: e.target.value }))}>
+            <option value="any">Need Fixing - Internal - Any</option>
+            <option value="yes">Need Fixing - Internal - Yes</option>
+            <option value="no">Need Fixing - Internal - No</option>
+          </select>
           <input className="field" placeholder="Search" value={tempFilters.search} onChange={(e) => setTempFilters((prev) => ({ ...prev, search: e.target.value }))} />
         </div>
         <div className="filters-row" style={{ marginTop: 16 }}>
@@ -324,6 +472,9 @@ function FiltersModal({ open, onClose, tempFilters, setTempFilters, pathwayOptio
 }
 
 function SubmissionCard({ submission, onOpenDetails, onOpenPreview }) {
+  const round1Status = roundStatusLabel(1, submission);
+  const round2Status = roundStatusLabel(2, submission);
+
   return (
     <div className="small-card" style={{ padding: 0, overflow: "hidden" }}>
       <div style={{ height: 180, background: "var(--sand)", overflow: "hidden" }}>
@@ -336,8 +487,8 @@ function SubmissionCard({ submission, onOpenDetails, onOpenPreview }) {
         <div style={{ marginTop: 8 }}>
           <span className="badge">{submission.pathway}</span>
           {submission.sub_pathway ? <span className="badge-outline">{submission.sub_pathway}</span> : null}
-          {submission.round1.autoAdvanced ? <span className="badge-soft">Round 1 Selected</span> : null}
-          {submission.round2.finalSelected ? <span className="badge">Final Selected</span> : null}
+          {round1Status ? <span className={submission.round1.autoAdvanced ? "badge-soft" : "badge-outline"}>{round1Status}</span> : null}
+          {round2Status ? <span className={submission.round2.finalSelected ? "badge" : "badge-outline"}>{round2Status}</span> : null}
         </div>
         <div className="filters-row" style={{ marginTop: 12 }}>
           {submission.preview_url ? <button className="btn soft" onClick={() => onOpenPreview(submission.preview_url)}>Preview</button> : null}
@@ -349,6 +500,8 @@ function SubmissionCard({ submission, onOpenDetails, onOpenPreview }) {
 }
 
 export default function AppShell({ session }) {
+  const dashboardExportRef = useRef(null);
+
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(session);
   const [users, setUsers] = useState([]);
@@ -361,6 +514,7 @@ export default function AppShell({ session }) {
   const [submissions, setSubmissions] = useState([]);
   const [activeTab, setActiveTab] = useState("workspace");
   const [workspaceSearch, setWorkspaceSearch] = useState("");
+  const [workspaceEvaluationFilter, setWorkspaceEvaluationFilter] = useState("all");
   const [finalFilter, setFinalFilter] = useState("all");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
   const [detailSubmission, setDetailSubmission] = useState(null);
@@ -374,8 +528,20 @@ export default function AppShell({ session }) {
   const [dashboardFilterSchoolType, setDashboardFilterSchoolType] = useState("all");
   const [dashboardFilterRegion, setDashboardFilterRegion] = useState("all");
   const [dashboardFilterCoordinator, setDashboardFilterCoordinator] = useState("all");
-  const [sessionDraft, setSessionDraft] = useState({ pathway: "", evaluatorIds: [], round: "round1", evaluationDate: new Date().toISOString().slice(0, 10), loaded: false });
-  const [sessionState, setSessionState] = useState({ pathway: "", evaluatorIds: [], round: "round1", evaluationDate: new Date().toISOString().slice(0, 10), loaded: false });
+  const [sessionDraft, setSessionDraft] = useState({
+    pathway: "",
+    evaluatorIds: [],
+    round: "round1",
+    evaluationDate: new Date().toISOString().slice(0, 10),
+    loaded: false
+  });
+  const [sessionState, setSessionState] = useState({
+    pathway: "",
+    evaluatorIds: [],
+    round: "round1",
+    evaluationDate: new Date().toISOString().slice(0, 10),
+    loaded: false
+  });
   const [draftEvaluations, setDraftEvaluations] = useState({});
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
@@ -386,11 +552,16 @@ export default function AppShell({ session }) {
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [selectedSchoolId, setSelectedSchoolId] = useState("");
   const [evaluatorFilterPathway, setEvaluatorFilterPathway] = useState("all");
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importProgress, setImportProgress] = useState({ progress: 0, message: "" });
 
   async function bootstrap() {
     setLoading(true);
     const response = await fetch("/api/bootstrap", { cache: "no-store" });
-    if (response.status === 401) { window.location.href = "/login"; return; }
+    if (response.status === 401) {
+      window.location.href = "/login";
+      return;
+    }
     const data = await response.json();
     setCurrentUser(data.currentUser);
     setUsers(data.users || []);
@@ -403,52 +574,77 @@ export default function AppShell({ session }) {
     setLoading(false);
   }
 
-  useEffect(() => { bootstrap(); }, []);
+  useEffect(() => {
+    bootstrap();
+  }, []);
 
   useEffect(() => {
     if (loading) return;
+
     const schoolsById = Object.fromEntries(schools.map((school) => [school.id, school]));
     const studentsById = Object.fromEntries(students.map((student) => [student.id, student]));
     const usersById = Object.fromEntries(users.map((user) => [user.id, user]));
     const evaluatorNames = Object.fromEntries(evaluators.map((item) => [item.id, item.name]));
     const linksBySubmission = {};
+
     submissionStudents.forEach((link) => {
       if (!linksBySubmission[link.submission_id]) linksBySubmission[link.submission_id] = [];
       linksBySubmission[link.submission_id].push(link);
     });
+
     const derived = rawSubmissions.map((submission) => {
       const school = schoolsById[submission.school_id] || null;
       const studentLinks = (linksBySubmission[submission.id] || []).sort((a, b) => a.display_order - b.display_order);
       const linkedStudents = studentLinks.map((link) => studentsById[link.student_id]).filter(Boolean);
+
       const buildRound = (roundNumber) => {
         const records = evaluationRecords.filter((r) => r.submission_id === submission.id && r.round_number === roundNumber);
         const roundKey = roundNumber === 1 ? "round1" : "round2";
-        const state = { evaluator_ids: [], evaluator_names: [], evaluation_date: "", per_evaluator: {}, completed: records.length > 0 };
+        const state = {
+          evaluator_ids: [],
+          evaluator_names: [],
+          evaluation_date: "",
+          per_evaluator: {},
+          completed: records.length > 0
+        };
+
         records.forEach((record) => {
           if (!state.evaluator_ids.includes(record.evaluator_id)) {
             state.evaluator_ids.push(record.evaluator_id);
             state.evaluator_names.push(evaluatorNames[record.evaluator_id] || record.evaluator_id);
           }
           state.evaluation_date = record.evaluation_date || state.evaluation_date;
-          state.per_evaluator[record.evaluator_id] = { scores: record.scores_json || {}, comments: record.comments || "", completed: true };
+          state.per_evaluator[record.evaluator_id] = {
+            scores: record.scores_json || {},
+            comments: record.comments || "",
+            completed: true
+          };
         });
+
         state.aggregate = calculateAggregate(state, getRubric(submission.pathway, submission.sub_pathway, roundKey), evaluatorNames);
         return state;
       };
+
       const round1 = buildRound(1);
       const round2 = buildRound(2);
+
       const round1Effective = {
         totalScore: submission.management_round1_total_score ?? round1.aggregate.totalScore,
         grade: submission.management_round1_grade || round1.aggregate.grade || "",
         identityValue: round1.aggregate.identityValue,
         commentsSummary: submission.management_round1_comments || round1.aggregate.commentsSummary || ""
       };
+
       const round2Effective = {
         totalScore: submission.management_round2_total_score ?? round2.aggregate.totalScore,
         grade: submission.management_round2_grade || round2.aggregate.grade || "",
-        identityValue: submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined ? round2.aggregate.identityValue : (submission.management_round2_national_identity ? 100 : 0),
+        identityValue:
+          submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined
+            ? round2.aggregate.identityValue
+            : (submission.management_round2_national_identity ? 100 : 0),
         commentsSummary: submission.management_round2_comments || round2.aggregate.commentsSummary || ""
       };
+
       return {
         ...submission,
         school_name: school?.school_name || "",
@@ -457,10 +653,19 @@ export default function AppShell({ session }) {
         region: school?.region || "",
         students: linkedStudents,
         assigned_coordinator_name: submission.assigned_coordinator_id ? (usersById[submission.assigned_coordinator_id]?.username || "") : "",
-        round1: { ...round1, effective: round1Effective, autoAdvanced: round1.completed ? passesRound1(submission.pathway, round1Effective) : false },
-        round2: { ...round2, effective: round2Effective, finalSelected: round2.completed ? isFinalSelected(submission.pathway, round2Effective) : false }
+        round1: {
+          ...round1,
+          effective: round1Effective,
+          autoAdvanced: round1.completed ? passesRound1(submission.pathway, round1Effective) : false
+        },
+        round2: {
+          ...round2,
+          effective: round2Effective,
+          finalSelected: round2.completed ? isFinalSelected(submission.pathway, round2Effective) : false
+        }
       };
     });
+
     setSubmissions(derived);
     setSelectedSubmissionId((prev) => prev || derived[0]?.id || "");
   }, [loading, schools, students, users, evaluators, rawSubmissions, evaluationRecords, submissionStudents]);
@@ -474,21 +679,41 @@ export default function AppShell({ session }) {
   const gradeOptions = useMemo(() => Array.from(new Set(students.map((s) => s.grade).filter(Boolean))).sort(), [students]);
   const nationalityOptions = useMemo(() => Array.from(new Set(students.map((s) => s.nationality).filter(Boolean))).sort(), [students]);
 
-  const workspaceEvaluators = useMemo(() => sessionDraft.pathway ? evaluators.filter((e) => e.active && (e.pathways || []).includes(sessionDraft.pathway)) : [], [evaluators, sessionDraft.pathway]);
+  const workspaceEvaluators = useMemo(() => {
+    return sessionDraft.pathway ? evaluators.filter((e) => e.active && (e.pathways || []).includes(sessionDraft.pathway)) : [];
+  }, [evaluators, sessionDraft.pathway]);
 
   const workspaceQueue = useMemo(() => {
     if (!sessionState.loaded || !sessionState.pathway) return [];
+
     return submissions.filter((submission) => {
       const pathwayOk = submission.pathway === sessionState.pathway;
       const roleOk = currentUser.role === "admin" || submission.assigned_coordinator_id === currentUser.sub;
       const roundOk = sessionState.round === "round1" ? true : submission.round1.autoAdvanced;
-      const searchOk = !workspaceSearch || `${submission.artwork_name} ${submission.school_name} ${submission.students.map((s) => s.student_name).join(" ")} ${submission.sub_pathway || ""}`.toLowerCase().includes(workspaceSearch.toLowerCase());
-      return pathwayOk && roleOk && roundOk && searchOk;
+      const evaluatedCurrentRound = sessionState.round === "round1" ? submission.round1.completed : submission.round2.completed;
+      const evaluationFilterOk =
+        workspaceEvaluationFilter === "all"
+          ? true
+          : workspaceEvaluationFilter === "evaluated"
+            ? evaluatedCurrentRound
+            : !evaluatedCurrentRound;
+      const searchOk =
+        !workspaceSearch ||
+        `${submission.artwork_name} ${submission.school_name} ${submission.students.map((s) => s.student_name).join(" ")} ${submission.sub_pathway || ""}`
+          .toLowerCase()
+          .includes(workspaceSearch.toLowerCase());
+
+      return pathwayOk && roleOk && roundOk && evaluationFilterOk && searchOk;
     });
-  }, [sessionState, submissions, workspaceSearch, currentUser]);
+  }, [sessionState, submissions, workspaceSearch, currentUser, workspaceEvaluationFilter]);
 
   useEffect(() => {
-    if (workspaceQueue.length && !workspaceQueue.some((item) => item.id === selectedSubmissionId)) setSelectedSubmissionId(workspaceQueue[0].id);
+    if (workspaceQueue.length && !workspaceQueue.some((item) => item.id === selectedSubmissionId)) {
+      setSelectedSubmissionId(workspaceQueue[0].id);
+    }
+    if (!workspaceQueue.length) {
+      setSelectedSubmissionId("");
+    }
   }, [workspaceQueue, selectedSubmissionId]);
 
   const selectedSubmission = useMemo(() => submissions.find((item) => item.id === selectedSubmissionId) || null, [submissions, selectedSubmissionId]);
@@ -497,18 +722,41 @@ export default function AppShell({ session }) {
 
   useEffect(() => {
     if (!selectedSubmission || !sessionState.loaded) return;
+
     setDraftEvaluations((prev) => {
       const submissionDraft = prev[selectedSubmission.id] || {};
-      if (submissionDraft[currentRoundKey] && JSON.stringify(submissionDraft[currentRoundKey].evaluator_ids) === JSON.stringify(sessionState.evaluatorIds)) return prev;
+      if (submissionDraft[currentRoundKey] && JSON.stringify(submissionDraft[currentRoundKey].evaluator_ids) === JSON.stringify(sessionState.evaluatorIds)) {
+        return prev;
+      }
       const stored = currentRoundKey === "round1" ? selectedSubmission.round1 : selectedSubmission.round2;
       const per = {};
-      sessionState.evaluatorIds.forEach((id) => { per[id] = { scores: stored.per_evaluator?.[id]?.scores || {}, comments: stored.per_evaluator?.[id]?.comments || "" }; });
-      return { ...prev, [selectedSubmission.id]: { ...submissionDraft, [currentRoundKey]: { evaluator_ids: sessionState.evaluatorIds, evaluation_date: sessionState.evaluationDate, per_evaluator: per } } };
+      sessionState.evaluatorIds.forEach((id) => {
+        per[id] = {
+          scores: stored.per_evaluator?.[id]?.scores || {},
+          comments: stored.per_evaluator?.[id]?.comments || ""
+        };
+      });
+      return {
+        ...prev,
+        [selectedSubmission.id]: {
+          ...submissionDraft,
+          [currentRoundKey]: {
+            evaluator_ids: sessionState.evaluatorIds,
+            evaluation_date: sessionState.evaluationDate,
+            per_evaluator: per
+          }
+        }
+      };
     });
   }, [selectedSubmission, currentRoundKey, sessionState]);
 
   const selectedDraft = selectedSubmission ? draftEvaluations[selectedSubmission.id]?.[currentRoundKey] : null;
-  const draftAggregate = useMemo(() => selectedDraft ? calculateAggregate(selectedDraft, currentRubric, evaluatorNameMap) : { totalScore: 0, grade: "", identityValue: null, scoredBy: 0, commentsSummary: "" }, [selectedDraft, currentRubric, evaluatorNameMap]);
+
+  const draftAggregate = useMemo(() => {
+    return selectedDraft
+      ? calculateAggregate(selectedDraft, currentRubric, evaluatorNameMap)
+      : { totalScore: 0, grade: "", identityValue: null, scoredBy: 0, commentsSummary: "" };
+  }, [selectedDraft, currentRubric, evaluatorNameMap]);
 
   const stats = useMemo(() => ({
     total: submissions.length,
@@ -518,27 +766,41 @@ export default function AppShell({ session }) {
     finals: submissions.filter((s) => s.round2.finalSelected).length
   }), [submissions]);
 
-  const allSubmissions = useMemo(() => submissions.filter((submission) => {
-    const pathwayOk = allFilters.pathway === "all" || submission.pathway === allFilters.pathway;
-    const schoolOk = allFilters.schoolName === "all" || submission.school_name === allFilters.schoolName;
-    const schoolTypeOk = allFilters.schoolType === "all" || submission.school_type === allFilters.schoolType;
-    const regionOk = allFilters.region === "all" || submission.region === allFilters.region;
-    const coordinatorOk = allFilters.coordinator === "all" || submission.assigned_coordinator_id === allFilters.coordinator;
-    const statusOk = statusMatch(submission, allFilters.status);
-    const flagOk = boolFilter(submission.seen_reviewed, allFilters.seen_reviewed) && boolFilter(submission.need_fixing_school, allFilters.need_fixing_school) && boolFilter(submission.need_fixing_internal, allFilters.need_fixing_internal);
-    const searchOk = !allFilters.search || `${submission.submission_code || ""} ${submission.artwork_name} ${submission.school_name} ${submission.students.map((s) => s.student_name).join(" ")} ${submission.pathway} ${submission.sub_pathway || ""}`.toLowerCase().includes(allFilters.search.toLowerCase());
-    return pathwayOk && schoolOk && schoolTypeOk && regionOk && coordinatorOk && statusOk && flagOk && searchOk;
-  }), [submissions, allFilters]);
+  const allSubmissions = useMemo(() => {
+    return submissions.filter((submission) => {
+      const pathwayOk = allFilters.pathway === "all" || submission.pathway === allFilters.pathway;
+      const schoolOk = allFilters.schoolName === "all" || submission.school_name === allFilters.schoolName;
+      const schoolTypeOk = allFilters.schoolType === "all" || submission.school_type === allFilters.schoolType;
+      const regionOk = allFilters.region === "all" || submission.region === allFilters.region;
+      const coordinatorOk = allFilters.coordinator === "all" || submission.assigned_coordinator_id === allFilters.coordinator;
+      const statusOk = statusMatch(submission, allFilters.status);
+      const flagOk =
+        boolFilter(submission.seen_reviewed, allFilters.seen_reviewed) &&
+        boolFilter(submission.need_fixing_school, allFilters.need_fixing_school) &&
+        boolFilter(submission.need_fixing_internal, allFilters.need_fixing_internal);
+      const searchOk =
+        !allFilters.search ||
+        `${submission.submission_code || ""} ${submission.artwork_name} ${submission.school_name} ${submission.students.map((s) => s.student_name).join(" ")} ${submission.pathway} ${submission.sub_pathway || ""}`
+          .toLowerCase()
+          .includes(allFilters.search.toLowerCase());
 
-  const finalSelections = useMemo(() => submissions.filter((s) => s.round2.finalSelected && (finalFilter === "all" || s.pathway === finalFilter)), [submissions, finalFilter]);
+      return pathwayOk && schoolOk && schoolTypeOk && regionOk && coordinatorOk && statusOk && flagOk && searchOk;
+    });
+  }, [submissions, allFilters]);
 
-  const filteredForDashboard = useMemo(() => submissions.filter((submission) => {
-    const pathwayOk = dashboardFilterPathway === "all" || submission.pathway === dashboardFilterPathway;
-    const schoolTypeOk = dashboardFilterSchoolType === "all" || submission.school_type === dashboardFilterSchoolType;
-    const regionOk = dashboardFilterRegion === "all" || submission.region === dashboardFilterRegion;
-    const coordinatorOk = dashboardFilterCoordinator === "all" || submission.assigned_coordinator_id === dashboardFilterCoordinator;
-    return pathwayOk && schoolTypeOk && regionOk && coordinatorOk;
-  }), [submissions, dashboardFilterPathway, dashboardFilterSchoolType, dashboardFilterRegion, dashboardFilterCoordinator]);
+  const finalSelections = useMemo(() => {
+    return submissions.filter((s) => s.round2.finalSelected && (finalFilter === "all" || s.pathway === finalFilter));
+  }, [submissions, finalFilter]);
+
+  const filteredForDashboard = useMemo(() => {
+    return submissions.filter((submission) => {
+      const pathwayOk = dashboardFilterPathway === "all" || submission.pathway === dashboardFilterPathway;
+      const schoolTypeOk = dashboardFilterSchoolType === "all" || submission.school_type === dashboardFilterSchoolType;
+      const regionOk = dashboardFilterRegion === "all" || submission.region === dashboardFilterRegion;
+      const coordinatorOk = dashboardFilterCoordinator === "all" || submission.assigned_coordinator_id === dashboardFilterCoordinator;
+      return pathwayOk && schoolTypeOk && regionOk && coordinatorOk;
+    });
+  }, [submissions, dashboardFilterPathway, dashboardFilterSchoolType, dashboardFilterRegion, dashboardFilterCoordinator]);
 
   const dashboardMatched = useMemo(() => {
     if (dashboardStage === "all_submissions") return filteredForDashboard;
@@ -548,23 +810,68 @@ export default function AppShell({ session }) {
     return filteredForDashboard.filter((s) => s.round2.finalSelected);
   }, [filteredForDashboard, dashboardStage]);
 
-  const uniqueSchools = useMemo(() => Array.from(new Map(dashboardMatched.map((s) => [s.school_esis, { school_esis: s.school_esis, school_name: s.school_name }])).values()), [dashboardMatched]);
+  const uniqueSchools = useMemo(() => {
+    return Array.from(new Map(dashboardMatched.map((s) => [s.school_esis || s.school_name, { school_esis: s.school_esis, school_name: s.school_name }])).values());
+  }, [dashboardMatched]);
+
   const uniqueStudents = useMemo(() => {
     const map = new Map();
-    dashboardMatched.forEach((submission) => submission.students.forEach((student) => { if (!map.has(student.student_esis)) map.set(student.student_esis, student); }));
+    dashboardMatched.forEach((submission) => {
+      submission.students.forEach((student) => {
+        if (!map.has(student.student_esis)) map.set(student.student_esis, student);
+      });
+    });
     return Array.from(map.values());
   }, [dashboardMatched]);
-  const byGender = useMemo(() => Object.entries(uniqueStudents.reduce((acc, s) => { const key = s.gender || "Unspecified"; acc[key] = (acc[key] || 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })), [uniqueStudents]);
-  const byNationality = useMemo(() => Object.entries(uniqueStudents.reduce((acc, s) => { const key = s.nationality || "Unspecified"; acc[key] = (acc[key] || 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })), [uniqueStudents]);
-  const byPathway = useMemo(() => Object.entries(dashboardMatched.reduce((acc, s) => { acc[s.pathway] = (acc[s.pathway] || 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })), [dashboardMatched]);
-  const bySchoolType = useMemo(() => Object.entries(dashboardMatched.reduce((acc, s) => { const key = s.school_type || "Unspecified"; acc[key] = (acc[key] || 0) + 1; return acc; }, {})).map(([name, value]) => ({ name, value })), [dashboardMatched]);
-  const perPathwayAnalytics = useMemo(() => pathwayOptions.map((pathway) => {
-    const group = dashboardMatched.filter((s) => s.pathway === pathway);
-    const schoolsSet = new Set(group.map((s) => s.school_esis).filter(Boolean));
-    const studentsSet = new Set();
-    group.forEach((submission) => submission.students.forEach((student) => studentsSet.add(student.student_esis)));
-    return { pathway, schools: schoolsSet.size, students: studentsSet.size, submissions: group.length };
-  }), [dashboardMatched, pathwayOptions]);
+
+  const byGender = useMemo(() => {
+    return Object.entries(
+      uniqueStudents.reduce((acc, s) => {
+        const key = s.gender || "Unspecified";
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([name, value]) => ({ name, value }));
+  }, [uniqueStudents]);
+
+  const byNationality = useMemo(() => {
+    return Object.entries(
+      uniqueStudents.reduce((acc, s) => {
+        const key = s.nationality || "Unspecified";
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([name, value]) => ({ name, value }));
+  }, [uniqueStudents]);
+
+  const byPathway = useMemo(() => {
+    return Object.entries(
+      dashboardMatched.reduce((acc, s) => {
+        acc[s.pathway] = (acc[s.pathway] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([name, value]) => ({ name, value }));
+  }, [dashboardMatched]);
+
+  const bySchoolType = useMemo(() => {
+    return Object.entries(
+      dashboardMatched.reduce((acc, s) => {
+        const key = s.school_type || "Unspecified";
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {})
+    ).map(([name, value]) => ({ name, value }));
+  }, [dashboardMatched]);
+
+  const perPathwayAnalytics = useMemo(() => {
+    return pathwayOptions.map((pathway) => {
+      const group = dashboardMatched.filter((s) => s.pathway === pathway);
+      const schoolsSet = new Set(group.map((s) => s.school_esis).filter(Boolean));
+      const studentsSet = new Set();
+      group.forEach((submission) => submission.students.forEach((student) => studentsSet.add(student.student_esis)));
+      return { pathway, schools: schoolsSet.size, students: studentsSet.size, submissions: group.length };
+    });
+  }, [dashboardMatched, pathwayOptions]);
 
   const studentRows = useMemo(() => {
     const linksByStudent = {};
@@ -572,43 +879,66 @@ export default function AppShell({ session }) {
       if (!linksByStudent[link.student_id]) linksByStudent[link.student_id] = [];
       linksByStudent[link.student_id].push(link.submission_id);
     });
-    return students.filter((student) => {
-      const school = schools.find((s) => s.id === student.school_id);
-      const gradeOk = studentFilters.grade === "all" || student.grade === studentFilters.grade;
-      const schoolOk = studentFilters.school === "all" || school?.school_name === studentFilters.school;
-      const natOk = studentFilters.nationality === "all" || student.nationality === studentFilters.nationality;
-      const searchOk = !studentFilters.search || `${student.student_name} ${student.student_esis}`.toLowerCase().includes(studentFilters.search.toLowerCase());
-      return gradeOk && schoolOk && natOk && searchOk;
-    }).map((student) => {
-      const school = schools.find((s) => s.id === student.school_id);
-      const projectIds = linksByStudent[student.id] || [];
-      return { ...student, school_name: school?.school_name || "", projects: submissions.filter((s) => projectIds.includes(s.id)) };
-    });
+
+    return students
+      .filter((student) => {
+        const school = schools.find((s) => s.id === student.school_id);
+        const gradeOk = studentFilters.grade === "all" || student.grade === studentFilters.grade;
+        const schoolOk = studentFilters.school === "all" || school?.school_name === studentFilters.school;
+        const natOk = studentFilters.nationality === "all" || student.nationality === studentFilters.nationality;
+        const searchOk = !studentFilters.search || `${student.student_name} ${student.student_esis}`.toLowerCase().includes(studentFilters.search.toLowerCase());
+        return gradeOk && schoolOk && natOk && searchOk;
+      })
+      .map((student) => {
+        const school = schools.find((s) => s.id === student.school_id);
+        const projectIds = linksByStudent[student.id] || [];
+        return {
+          ...student,
+          school_name: school?.school_name || "",
+          school_esis: school?.school_esis || "",
+          school_type: school?.school_type || "Unspecified",
+          region: school?.region || "",
+          projects: submissions.filter((s) => projectIds.includes(s.id))
+        };
+      });
   }, [students, schools, submissionStudents, submissions, studentFilters]);
 
-  const schoolRows = useMemo(() => schools.filter((school) => {
-    const typeOk = schoolFilters.schoolType === "all" || (school.school_type || "Unspecified") === schoolFilters.schoolType;
-    const regionOk = schoolFilters.region === "all" || (school.region || "Unspecified") === schoolFilters.region;
-    const searchOk = !schoolFilters.search || `${school.school_name} ${school.school_esis}`.toLowerCase().includes(schoolFilters.search.toLowerCase());
-    return typeOk && regionOk && searchOk;
-  }).map((school) => ({ ...school, projects: submissions.filter((s) => s.school_id === school.id) })), [schools, submissions, schoolFilters]);
+  const schoolRows = useMemo(() => {
+    return schools
+      .filter((school) => {
+        const typeOk = schoolFilters.schoolType === "all" || (school.school_type || "Unspecified") === schoolFilters.schoolType;
+        const regionOk = schoolFilters.region === "all" || (school.region || "Unspecified") === schoolFilters.region;
+        const searchOk = !schoolFilters.search || `${school.school_name} ${school.school_esis}`.toLowerCase().includes(schoolFilters.search.toLowerCase());
+        return typeOk && regionOk && searchOk;
+      })
+      .map((school) => ({ ...school, projects: submissions.filter((s) => s.school_id === school.id) }));
+  }, [schools, submissions, schoolFilters]);
 
   const selectedStudent = useMemo(() => studentRows.find((s) => s.id === selectedStudentId) || studentRows[0] || null, [studentRows, selectedStudentId]);
   const selectedSchool = useMemo(() => schoolRows.find((s) => s.id === selectedSchoolId) || schoolRows[0] || null, [schoolRows, selectedSchoolId]);
-  useEffect(() => { if (studentRows.length && !studentRows.some((s) => s.id === selectedStudentId)) setSelectedStudentId(studentRows[0].id); }, [studentRows, selectedStudentId]);
-  useEffect(() => { if (schoolRows.length && !schoolRows.some((s) => s.id === selectedSchoolId)) setSelectedSchoolId(schoolRows[0].id); }, [schoolRows, selectedSchoolId]);
 
-  const coordinatorProgress = useMemo(() => coordinators.map((coordinator) => {
-    const assigned = submissions.filter((s) => s.assigned_coordinator_id === coordinator.id);
-    return {
-      ...coordinator,
-      assigned: assigned.length,
-      round1Completed: assigned.filter((s) => s.round1.completed).length,
-      shortlisted: assigned.filter((s) => s.round1.autoAdvanced).length,
-      round2Completed: assigned.filter((s) => s.round2.completed).length,
-      finalSelected: assigned.filter((s) => s.round2.finalSelected).length
-    };
-  }), [coordinators, submissions]);
+  useEffect(() => {
+    if (studentRows.length && !studentRows.some((s) => s.id === selectedStudentId)) setSelectedStudentId(studentRows[0].id);
+  }, [studentRows, selectedStudentId]);
+
+  useEffect(() => {
+    if (schoolRows.length && !schoolRows.some((s) => s.id === selectedSchoolId)) setSelectedSchoolId(schoolRows[0].id);
+  }, [schoolRows, selectedSchoolId]);
+
+  const coordinatorProgress = useMemo(() => {
+    return coordinators.map((coordinator) => {
+      const assigned = submissions.filter((s) => s.assigned_coordinator_id === coordinator.id);
+      return {
+        ...coordinator,
+        assigned: assigned.length,
+        round1Completed: assigned.filter((s) => s.round1.completed).length,
+        shortlisted: assigned.filter((s) => s.round1.autoAdvanced).length,
+        round2Completed: assigned.filter((s) => s.round2.completed).length,
+        finalSelected: assigned.filter((s) => s.round2.finalSelected).length
+      };
+    });
+  }, [coordinators, submissions]);
+
   const coordinatorTotals = useMemo(() => ({
     assigned: coordinatorProgress.reduce((sum, row) => sum + row.assigned, 0),
     round1Completed: coordinatorProgress.reduce((sum, row) => sum + row.round1Completed, 0),
@@ -664,7 +994,11 @@ export default function AppShell({ session }) {
   }
 
   function toggleSessionEvaluator(id) {
-    setSessionDraft((prev) => ({ ...prev, loaded: false, evaluatorIds: prev.evaluatorIds.includes(id) ? prev.evaluatorIds.filter((x) => x !== id) : [...prev.evaluatorIds, id] }));
+    setSessionDraft((prev) => ({
+      ...prev,
+      loaded: false,
+      evaluatorIds: prev.evaluatorIds.includes(id) ? prev.evaluatorIds.filter((x) => x !== id) : [...prev.evaluatorIds, id]
+    }));
   }
 
   function loadWorkspace() {
@@ -675,10 +1009,16 @@ export default function AppShell({ session }) {
 
   function updateScore(evaluatorId, criterionKey, value) {
     if (!selectedSubmission) return;
+
     setDraftEvaluations((prev) => {
       const submissionDraft = prev[selectedSubmission.id] || {};
-      const roundDraft = submissionDraft[currentRoundKey] || { evaluator_ids: sessionState.evaluatorIds, evaluation_date: sessionState.evaluationDate, per_evaluator: {} };
+      const roundDraft = submissionDraft[currentRoundKey] || {
+        evaluator_ids: sessionState.evaluatorIds,
+        evaluation_date: sessionState.evaluationDate,
+        per_evaluator: {}
+      };
       const evaluatorDraft = roundDraft.per_evaluator[evaluatorId] || { scores: {}, comments: "" };
+
       return {
         ...prev,
         [selectedSubmission.id]: {
@@ -689,7 +1029,10 @@ export default function AppShell({ session }) {
             evaluation_date: sessionState.evaluationDate,
             per_evaluator: {
               ...roundDraft.per_evaluator,
-              [evaluatorId]: { ...evaluatorDraft, scores: { ...evaluatorDraft.scores, [criterionKey]: value } }
+              [evaluatorId]: {
+                ...evaluatorDraft,
+                scores: { ...evaluatorDraft.scores, [criterionKey]: value }
+              }
             }
           }
         }
@@ -699,10 +1042,16 @@ export default function AppShell({ session }) {
 
   function updateComment(evaluatorId, value) {
     if (!selectedSubmission) return;
+
     setDraftEvaluations((prev) => {
       const submissionDraft = prev[selectedSubmission.id] || {};
-      const roundDraft = submissionDraft[currentRoundKey] || { evaluator_ids: sessionState.evaluatorIds, evaluation_date: sessionState.evaluationDate, per_evaluator: {} };
+      const roundDraft = submissionDraft[currentRoundKey] || {
+        evaluator_ids: sessionState.evaluatorIds,
+        evaluation_date: sessionState.evaluationDate,
+        per_evaluator: {}
+      };
       const evaluatorDraft = roundDraft.per_evaluator[evaluatorId] || { scores: {}, comments: "" };
+
       return {
         ...prev,
         [selectedSubmission.id]: {
@@ -723,6 +1072,7 @@ export default function AppShell({ session }) {
 
   async function saveCurrentEvaluation() {
     if (!selectedSubmission || !selectedDraft) return;
+
     const response = await fetch("/api/evaluations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -734,8 +1084,12 @@ export default function AppShell({ session }) {
         per_evaluator: selectedDraft.per_evaluator
       })
     });
+
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to save evaluation."); return; }
+    if (!response.ok) {
+      alert(data.error || "Failed to save evaluation.");
+      return;
+    }
     await bootstrap();
   }
 
@@ -751,8 +1105,12 @@ export default function AppShell({ session }) {
         management_round2_national_identity: draft.management_round2_national_identity === "" ? null : draft.management_round2_national_identity === "yes"
       })
     });
+
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to save submission details."); return; }
+    if (!response.ok) {
+      alert(data.error || "Failed to save submission details.");
+      return;
+    }
     setDetailSubmission(null);
     await bootstrap();
   }
@@ -760,47 +1118,97 @@ export default function AppShell({ session }) {
   async function saveUser(draft) {
     const url = editingUser ? `/api/users/${editingUser.id}` : "/api/users";
     const method = editingUser ? "PATCH" : "POST";
-    const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft)
+    });
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to save user."); return; }
-    setUserModalOpen(false); setEditingUser(null); await bootstrap();
+    if (!response.ok) {
+      alert(data.error || "Failed to save user.");
+      return;
+    }
+    setUserModalOpen(false);
+    setEditingUser(null);
+    await bootstrap();
   }
 
   async function deleteUser(id) {
     if (!confirm("Delete this user?")) return;
     const response = await fetch(`/api/users/${id}`, { method: "DELETE" });
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to delete user."); return; }
+    if (!response.ok) {
+      alert(data.error || "Failed to delete user.");
+      return;
+    }
     await bootstrap();
   }
 
   async function saveEvaluator(draft) {
     const url = editingEvaluator ? `/api/evaluators/${editingEvaluator.id}` : "/api/evaluators";
     const method = editingEvaluator ? "PATCH" : "POST";
-    const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(draft) });
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(draft)
+    });
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to save evaluator."); return; }
-    setEvaluatorModalOpen(false); setEditingEvaluator(null); await bootstrap();
+    if (!response.ok) {
+      alert(data.error || "Failed to save evaluator.");
+      return;
+    }
+    setEvaluatorModalOpen(false);
+    setEditingEvaluator(null);
+    await bootstrap();
   }
 
   async function deleteEvaluator(id) {
     if (!confirm("Delete this evaluator?")) return;
     const response = await fetch(`/api/evaluators/${id}`, { method: "DELETE" });
     const data = await response.json();
-    if (!response.ok) { alert(data.error || "Failed to delete evaluator."); return; }
+    if (!response.ok) {
+      alert(data.error || "Failed to delete evaluator.");
+      return;
+    }
     await bootstrap();
   }
 
   async function handleImport(file) {
-    const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: "array" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    const response = await fetch("/api/submissions/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rows }) });
-    const data = await response.json();
-    if (!response.ok) { alert(data.error || "Import failed."); return; }
-    alert(`Imported: ${data.importedCount}\nReuploaded: ${data.reuploadedCount}`);
-    await bootstrap();
+    try {
+      setImportModalOpen(true);
+      setImportProgress({ progress: 10, message: "Reading file..." });
+
+      const buffer = await file.arrayBuffer();
+
+      setImportProgress({ progress: 28, message: "Parsing workbook..." });
+      const workbook = XLSX.read(buffer, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      setImportProgress({ progress: 55, message: `Uploading ${rows.length} row(s)...` });
+      const response = await fetch("/api/submissions/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        setImportModalOpen(false);
+        alert(data.error || "Import failed.");
+        return;
+      }
+
+      setImportProgress({ progress: 82, message: "Refreshing platform data..." });
+      await bootstrap();
+
+      setImportProgress({ progress: 100, message: "Import completed." });
+      setTimeout(() => setImportModalOpen(false), 450);
+      alert(`Imported: ${data.importedCount}\nReuploaded: ${data.reuploadedCount}`);
+    } catch (error) {
+      setImportModalOpen(false);
+      alert(error.message || "Import failed.");
+    }
   }
 
   function exportEverything(type) {
@@ -830,6 +1238,7 @@ export default function AppShell({ session }) {
       SeenReviewed: submission.seen_reviewed ? "Yes" : "No",
       NeedFixingSchool: submission.need_fixing_school ? "Yes" : "No",
       NeedFixingInternal: submission.need_fixing_internal ? "Yes" : "No",
+      ArtworkCollected: submission.artwork_collected ? "Yes" : "No",
       ManagementComments: submission.management_comments || "",
       ManagementRound1Score: submission.management_round1_total_score ?? "",
       ManagementRound1Grade: submission.management_round1_grade || "",
@@ -842,7 +1251,10 @@ export default function AppShell({ session }) {
       Round1Selected: submission.round1.autoAdvanced ? "Yes" : "No",
       ManagementRound2Score: submission.management_round2_total_score ?? "",
       ManagementRound2Grade: submission.management_round2_grade || "",
-      ManagementRound2NationalIdentity: submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined ? "" : (submission.management_round2_national_identity ? "Yes" : "No"),
+      ManagementRound2NationalIdentity:
+        submission.management_round2_national_identity === null || submission.management_round2_national_identity === undefined
+          ? ""
+          : (submission.management_round2_national_identity ? "Yes" : "No"),
       ManagementRound2Comments: submission.management_round2_comments || "",
       Round2Evaluators: submission.round2.evaluator_names.join(", "),
       Round2Date: submission.round2.evaluation_date || "",
@@ -857,7 +1269,24 @@ export default function AppShell({ session }) {
       if (type === "final") return row.FinalSelected === "Yes";
       return true;
     });
+
     downloadJson(rows, type === "all" ? "nae-all-data" : `nae-${type}`, exportFormat);
+  }
+
+  function exportStudentsDirectory() {
+    const rows = studentRows.map((student) => ({
+      StudentESIS: student.student_esis || "",
+      StudentName: student.student_name || "",
+      Grade: student.grade || "",
+      Gender: student.gender || "",
+      Nationality: student.nationality || "",
+      SchoolName: student.school_name || "",
+      SchoolESIS: student.school_esis || "",
+      SchoolType: student.school_type || "",
+      Region: student.region || "",
+      NumberOfSubmissions: student.projects.length
+    }));
+    downloadJson(rows, "nae-students-directory", exportFormat);
   }
 
   function downloadTemplate() {
@@ -870,38 +1299,54 @@ export default function AppShell({ session }) {
     XLSX.writeFile(wb, "NAE-submission-import-template.xlsx");
   }
 
-  function exportAnalyticsReport() {
-    const reportRows = dashboardMatched.map((s) => ({
-      SubmissionCode: s.submission_code,
-      Pathway: s.pathway,
-      School: s.school_name,
-      SchoolType: s.school_type,
-      Region: s.region,
-      Coordinator: s.assigned_coordinator_name || "",
-      Students: s.students.map((st) => st.student_name).join("; "),
-      Round1Selected: s.round1.autoAdvanced ? "Yes" : "No",
-      FinalSelected: s.round2.finalSelected ? "Yes" : "No"
-    }));
-    const max = Math.max(1, ...bySchoolType.map((x) => x.value));
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>NAE Analytics</title><style>body{font-family:Arial,sans-serif;padding:24px;color:#1C3E3B}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid #D8E0DC;border-radius:16px;padding:14px}.bars{display:grid;gap:8px}.row{display:grid;grid-template-columns:180px 1fr 60px;gap:10px;align-items:center}.bar{height:18px;background:#B2C7C0;border-radius:999px;overflow:hidden}.fill{height:18px;background:#1C3E3B}table{width:100%;border-collapse:collapse;margin-top:12px}th,td{border:1px solid #D8E0DC;padding:8px;text-align:left}th{background:#EBE6DF}</style></head><body><h1>NAE Analytics Report</h1><p>Stage: ${dashboardStage}</p><div class="grid"><div class="card"><strong>Submissions</strong><div>${dashboardMatched.length}</div></div><div class="card"><strong>Schools</strong><div>${uniqueSchools.length}</div></div><div class="card"><strong>Students</strong><div>${uniqueStudents.length}</div></div><div class="card"><strong>Final Selected</strong><div>${dashboardMatched.filter((x)=>x.round2.finalSelected).length}</div></div></div><h2>Submissions by School Type</h2><div class="bars">${bySchoolType.map((x)=>`<div class="row"><div>${x.name}</div><div class="bar"><div class="fill" style="width:${(x.value/max)*100}%"></div></div><div>${x.value}</div></div>`).join("")}</div><h2>Gender</h2><ul>${byGender.map((x)=>`<li>${x.name}: ${x.value}</li>`).join("")}</ul><h2>Nationality</h2><ul>${byNationality.map((x)=>`<li>${x.name}: ${x.value}</li>`).join("")}</ul><h2>Per Pathway</h2><table><thead><tr><th>Pathway</th><th>Schools</th><th>Students</th><th>Submissions</th></tr></thead><tbody>${perPathwayAnalytics.map((x)=>`<tr><td>${x.pathway}</td><td>${x.schools}</td><td>${x.students}</td><td>${x.submissions}</td></tr>`).join("")}</tbody></table><h2>Records</h2><table><thead><tr><th>Submission Code</th><th>Pathway</th><th>School</th><th>School Type</th><th>Region</th><th>Coordinator</th><th>Students</th><th>Round 1 Selected</th><th>Final Selected</th></tr></thead><tbody>${reportRows.map((row)=>`<tr><td>${row.SubmissionCode}</td><td>${row.Pathway}</td><td>${row.School}</td><td>${row.SchoolType}</td><td>${row.Region}</td><td>${row.Coordinator}</td><td>${row.Students}</td><td>${row.Round1Selected}</td><td>${row.FinalSelected}</td></tr>`).join("")}</tbody></table></body></html>`;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "nae-analytics-report.html";
-    a.click();
-    URL.revokeObjectURL(url);
+  async function exportAnalyticsReport() {
+    if (!dashboardExportRef.current) return;
+
+    const canvas = await html2canvas(dashboardExportRef.current, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: "#ffffff",
+      windowWidth: dashboardExportRef.current.scrollWidth,
+      windowHeight: dashboardExportRef.current.scrollHeight
+    });
+
+    const imageData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const margin = 8;
+    const imageWidth = pageWidth - margin * 2;
+    const imageHeight = (canvas.height * imageWidth) / canvas.width;
+
+    let heightLeft = imageHeight;
+    let position = margin;
+
+    pdf.addImage(imageData, "PNG", margin, position, imageWidth, imageHeight);
+    heightLeft -= (pageHeight - margin * 2);
+
+    while (heightLeft > 0) {
+      position = heightLeft - imageHeight + margin;
+      pdf.addPage();
+      pdf.addImage(imageData, "PNG", margin, position, imageWidth, imageHeight);
+      heightLeft -= (pageHeight - margin * 2);
+    }
+
+    pdf.save("nae-dashboard-report.pdf");
   }
 
-  if (loading) return <div className="page"><div className="container"><div className="card">Loading platform…</div></div></div>;
+  if (loading) {
+    return <div className="page"><div className="container"><div className="card">Loading platform…</div></div></div>;
+  }
 
   return (
     <div className="page">
       <PreviewModal open={!!previewUrl} imageUrl={previewUrl} onClose={() => setPreviewUrl("")} />
+      <ImportProgressModal open={importModalOpen} state={importProgress} />
       <DetailModal open={!!detailSubmission} submission={detailSubmission} currentUser={currentUser} coordinators={coordinators} onClose={() => setDetailSubmission(null)} onSave={saveSubmissionDetails} onOpenPreview={setPreviewUrl} />
       <UserModal open={userModalOpen} user={editingUser} onClose={() => { setUserModalOpen(false); setEditingUser(null); }} onSave={saveUser} />
       <EvaluatorModal open={evaluatorModalOpen} evaluator={editingEvaluator} onClose={() => { setEvaluatorModalOpen(false); setEditingEvaluator(null); }} onSave={saveEvaluator} />
       <FiltersModal open={filtersOpen} onClose={() => setFiltersOpen(false)} tempFilters={tempFilters} setTempFilters={setTempFilters} pathwayOptions={pathwayOptions} schoolNames={schoolNames} schoolTypes={schoolTypes} regions={regions} coordinators={coordinators} onApply={() => { setAllFilters(tempFilters); setFiltersOpen(false); }} onClear={() => { setAllFilters(emptyFilterState); setTempFilters(emptyFilterState); }} />
+
       <div className="container">
         <div className="hero">
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
@@ -909,7 +1354,10 @@ export default function AppShell({ session }) {
               <div style={{ fontSize: 12, letterSpacing: 3, textTransform: "uppercase", opacity: 0.75 }}>National Art Expressions</div>
               <div style={{ fontSize: 34, fontWeight: 800, marginTop: 8 }}>NAE 2026 Artwork Evaluation & Selection</div>
             </div>
-            <div className="filters-row"><div className="small-card" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>{currentUser.username} · {currentUser.role}</div><button className="btn outline" onClick={logout}>Logout</button></div>
+            <div className="filters-row">
+              <div className="small-card" style={{ background: "rgba(255,255,255,0.12)", color: "white" }}>{currentUser.username} · {currentUser.role}</div>
+              <button className="btn outline" onClick={logout}>Logout</button>
+            </div>
           </div>
         </div>
 
@@ -931,7 +1379,11 @@ export default function AppShell({ session }) {
             ["dashboard", "Dashboard"],
             ["evaluators", "Evaluators"],
             ...(currentUser.role === "admin" ? [["users", "Users"], ["admin", "Import & Export"]] : [])
-          ].map(([key, label]) => <button key={key} className={`tab ${activeTab === key ? "active" : ""}`} onClick={() => setActiveTab(key)}>{label}</button>)}
+          ].map(([key, label]) => (
+            <button key={key} className={`tab ${activeTab === key ? "active" : ""}`} onClick={() => setActiveTab(key)}>
+              {label}
+            </button>
+          ))}
         </div>
 
         {activeTab === "workspace" && (
@@ -939,18 +1391,58 @@ export default function AppShell({ session }) {
             <div className="card">
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Evaluation Workflow</div>
               <div style={{ display: "grid", gap: 12 }}>
-                <select className="field" value={sessionDraft.pathway} onChange={(e) => setSessionDraft((prev) => ({ ...prev, pathway: e.target.value, evaluatorIds: [], loaded: false }))}><option value="">1. Select pathway</option>{pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                <select className="field" value={sessionDraft.pathway} onChange={(e) => setSessionDraft((prev) => ({ ...prev, pathway: e.target.value, evaluatorIds: [], loaded: false }))}>
+                  <option value="">1. Select pathway</option>
+                  {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+
                 <div style={{ display: "grid", gap: 8 }}>
                   <div style={{ fontSize: 13 }}>2. Select evaluators</div>
-                  {workspaceEvaluators.map((item) => <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}><input type="checkbox" checked={sessionDraft.evaluatorIds.includes(item.id)} onChange={() => toggleSessionEvaluator(item.id)} /> {item.name}</label>)}
+                  {workspaceEvaluators.map((item) => (
+                    <label key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}>
+                      <input type="checkbox" checked={sessionDraft.evaluatorIds.includes(item.id)} onChange={() => toggleSessionEvaluator(item.id)} /> {item.name}
+                    </label>
+                  ))}
                 </div>
-                <select className="field" value={sessionDraft.round} onChange={(e) => setSessionDraft((prev) => ({ ...prev, round: e.target.value, loaded: false }))}><option value="round1">3. Round 1</option><option value="round2">3. Round 2</option></select>
+
+                <select className="field" value={sessionDraft.round} onChange={(e) => setSessionDraft((prev) => ({ ...prev, round: e.target.value, loaded: false }))}>
+                  <option value="round1">3. Round 1</option>
+                  <option value="round2">3. Round 2</option>
+                </select>
+
+                <select className="field" value={workspaceEvaluationFilter} onChange={(e) => setWorkspaceEvaluationFilter(e.target.value)}>
+                  <option value="all">4. All</option>
+                  <option value="evaluated">4. Evaluated</option>
+                  <option value="not_evaluated">4. Not Evaluated</option>
+                </select>
+
                 <input className="field" type="date" value={sessionDraft.evaluationDate} onChange={(e) => setSessionDraft((prev) => ({ ...prev, evaluationDate: e.target.value, loaded: false }))} />
-                <button className="btn" onClick={loadWorkspace}>5. Load Artworks</button>
+
+                <button className="btn" onClick={loadWorkspace}>6. Load Artworks</button>
+
                 <div className="legend-note">Only evaluators appear here. Coordinators can only work on submissions assigned to them. Admin can view all submissions in all other pages.</div>
-                <input className="field" placeholder="Search loaded artworks" value={workspaceSearch} onChange={(e) => setWorkspaceSearch(e.target.value)} />
+
+                <div className="filters-row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <input className="field" placeholder="Search loaded artworks" value={workspaceSearch} onChange={(e) => setWorkspaceSearch(e.target.value)} style={{ flex: 1 }} />
+                  <div className="small-card" style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>{workspaceQueue.length} result(s)</div>
+                </div>
+
                 <div style={{ display: "grid", gap: 10, maxHeight: 520, overflow: "auto" }}>
-                  {workspaceQueue.map((submission) => <button key={submission.id} className="small-card" style={{ textAlign: "left", background: selectedSubmissionId === submission.id ? "var(--mist)" : "white", cursor: "pointer" }} onClick={() => setSelectedSubmissionId(submission.id)}><div style={{ fontWeight: 800 }}>{submission.artwork_name}</div><div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{submission.school_name} · {submission.students.map((s) => s.student_name).join(", ")}</div><div style={{ marginTop: 8 }}><span className="badge">{submission.pathway}</span>{submission.sub_pathway ? <span className="badge-outline">{submission.sub_pathway}</span> : null}</div></button>)}
+                  {workspaceQueue.map((submission) => (
+                    <button
+                      key={submission.id}
+                      className="small-card"
+                      style={{ textAlign: "left", background: selectedSubmissionId === submission.id ? "var(--mist)" : "white", cursor: "pointer" }}
+                      onClick={() => setSelectedSubmissionId(submission.id)}
+                    >
+                      <div style={{ fontWeight: 800 }}>{submission.artwork_name}</div>
+                      <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{submission.school_name} · {submission.students.map((s) => s.student_name).join(", ")}</div>
+                      <div style={{ marginTop: 8 }}>
+                        <span className="badge">{submission.pathway}</span>
+                        {submission.sub_pathway ? <span className="badge-outline">{submission.sub_pathway}</span> : null}
+                      </div>
+                    </button>
+                  ))}
                   {!workspaceQueue.length ? <div className="small-card">Load a valid session to see artworks here.</div> : null}
                 </div>
               </div>
@@ -961,23 +1453,61 @@ export default function AppShell({ session }) {
                 <div className="eval-layout">
                   <div style={{ display: "grid", gap: 16 }}>
                     <div className="card">
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><span className="badge">{selectedSubmission.pathway}</span>{selectedSubmission.sub_pathway ? <span className="badge-outline">{selectedSubmission.sub_pathway}</span> : null}<span className="badge-soft">{selectedSubmission.submission_code}</span></div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span className="badge">{selectedSubmission.pathway}</span>
+                        {selectedSubmission.sub_pathway ? <span className="badge-outline">{selectedSubmission.sub_pathway}</span> : null}
+                        <span className="badge-soft">{selectedSubmission.submission_code}</span>
+                        {roundStatusLabel(1, selectedSubmission) ? <span className={selectedSubmission.round1.autoAdvanced ? "badge-soft" : "badge-outline"}>{roundStatusLabel(1, selectedSubmission)}</span> : null}
+                        {roundStatusLabel(2, selectedSubmission) ? <span className={selectedSubmission.round2.finalSelected ? "badge" : "badge-outline"}>{roundStatusLabel(2, selectedSubmission)}</span> : null}
+                      </div>
+
                       <div style={{ fontSize: 28, fontWeight: 800, marginTop: 10 }}>{selectedSubmission.artwork_name}</div>
                       <div style={{ fontSize: 14, opacity: 0.75, marginTop: 4 }}>{selectedSubmission.school_name} · {selectedSubmission.region || "-"}</div>
+
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 16 }}>
-                        <div className="small-card" style={{ background: "var(--sand)" }}><strong>Students</strong><div style={{ marginTop: 8, lineHeight: 1.8 }}>{selectedSubmission.students.map((s) => <div key={s.student_esis}>{s.student_name} · {s.grade || "-"} · {s.gender || "-"} · {s.nationality || "-"}</div>)}</div></div>
-                        <div className="small-card" style={{ background: "var(--mist)" }}><strong>Session</strong><div style={{ marginTop: 8, lineHeight: 1.8 }}><div>Evaluators: {sessionState.evaluatorIds.map((id) => evaluatorNameMap[id]).join(", ") || "-"}</div><div>Round: {currentRoundKey === "round1" ? "Round 1" : "Round 2"}</div><div>Date: {sessionState.evaluationDate || "-"}</div><div>Scored By: {draftAggregate.scoredBy || 0}</div></div></div>
+                        <div className="small-card" style={{ background: "var(--sand)" }}>
+                          <strong>Students</strong>
+                          <div style={{ marginTop: 8, lineHeight: 1.8 }}>
+                            {selectedSubmission.students.map((s) => <div key={s.student_esis}>{s.student_name} · {s.grade || "-"} · {s.gender || "-"} · {s.nationality || "-"}</div>)}
+                          </div>
+                        </div>
+                        <div className="small-card" style={{ background: "var(--mist)" }}>
+                          <strong>Session</strong>
+                          <div style={{ marginTop: 8, lineHeight: 1.8 }}>
+                            <div>Evaluators: {sessionState.evaluatorIds.map((id) => evaluatorNameMap[id]).join(", ") || "-"}</div>
+                            <div>Round: {currentRoundKey === "round1" ? "Round 1" : "Round 2"}</div>
+                            <div>Date: {sessionState.evaluationDate || "-"}</div>
+                            <div>Scored By: {draftAggregate.scoredBy || 0}</div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="small-card" style={{ marginTop: 12 }}><strong>Description</strong><div style={{ marginTop: 8 }}>{selectedSubmission.description || "No description provided."}</div></div>
-                      {currentRoundKey === "round2" && selectedSubmission.round1.effective.commentsSummary ? <div className="small-card" style={{ marginTop: 12, background: "var(--sand)" }}><strong>Round 1 Comments</strong><pre style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{selectedSubmission.round1.effective.commentsSummary}</pre></div> : null}
+
+                      <div className="small-card" style={{ marginTop: 12 }}>
+                        <strong>Description</strong>
+                        <div style={{ marginTop: 8 }}>{selectedSubmission.description || "No description provided."}</div>
+                      </div>
+
+                      {currentRoundKey === "round2" && selectedSubmission.round1.effective.commentsSummary ? (
+                        <div className="small-card" style={{ marginTop: 12, background: "var(--sand)" }}>
+                          <strong>Round 1 Comments</strong>
+                          <pre style={{ whiteSpace: "pre-wrap", marginTop: 8 }}>{selectedSubmission.round1.effective.commentsSummary}</pre>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="card">
                       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14 }}>
                         <div style={{ fontSize: 22, fontWeight: 800 }}>{currentRoundKey === "round1" ? "Round 1 Evaluation" : "Round 2 Evaluation"}</div>
-                        <div><span className="badge-soft">Score: {draftAggregate.totalScore || 0}</span>{draftAggregate.grade ? <span className="badge-outline">Grade: {draftAggregate.grade}</span> : null}{currentRoundKey === "round1" && selectedSubmission.round1.autoAdvanced ? <span className="badge">Round 1 Selected</span> : null}{currentRoundKey === "round2" && selectedSubmission.round2.finalSelected ? <span className="badge">Final Selected</span> : null}</div>
+                        <div>
+                          <span className="badge-soft">Score: {draftAggregate.totalScore || 0}</span>
+                          {draftAggregate.grade ? <span className="badge-outline">Grade: {draftAggregate.grade}</span> : null}
+                          {currentRoundKey === "round1" && roundStatusLabel(1, selectedSubmission) ? <span className={selectedSubmission.round1.autoAdvanced ? "badge" : "badge-outline"}>{roundStatusLabel(1, selectedSubmission)}</span> : null}
+                          {currentRoundKey === "round2" && roundStatusLabel(2, selectedSubmission) ? <span className={selectedSubmission.round2.finalSelected ? "badge" : "badge-outline"}>{roundStatusLabel(2, selectedSubmission)}</span> : null}
+                        </div>
                       </div>
+
                       <div className="legend-note" style={{ marginBottom: 12 }}>Enter one criterion per row, then one evaluator score after the other across the columns.</div>
+
                       <div className="score-grid">
                         <table className="table">
                           <thead>
@@ -989,14 +1519,19 @@ export default function AppShell({ session }) {
                           <tbody>
                             {(currentRubric?.criteria || []).map((criterion) => (
                               <tr key={criterion.key}>
-                                <td><div style={{ fontWeight: 700 }}>{criterion.label}</div><div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>{criterion.binary ? "Yes / No" : `Weight ${Math.round(criterion.weight * 100)}%`}</div></td>
+                                <td>
+                                  <div style={{ fontWeight: 700 }}>{criterion.label}</div>
+                                  <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>{criterion.binary ? "Yes / No" : `Weight ${Math.round(criterion.weight * 100)}%`}</div>
+                                </td>
                                 {sessionState.evaluatorIds.map((id) => {
                                   const value = selectedDraft?.per_evaluator?.[id]?.scores?.[criterion.key];
                                   return (
                                     <td key={`${criterion.key}-${id}`}>
                                       {criterion.binary ? (
                                         <select className="field" value={value === 100 ? "yes" : value === 0 ? "no" : ""} onChange={(e) => updateScore(id, criterion.key, e.target.value === "yes" ? 100 : 0)}>
-                                          <option value="">Not set</option><option value="yes">Yes</option><option value="no">No</option>
+                                          <option value="">Not set</option>
+                                          <option value="yes">Yes</option>
+                                          <option value="no">No</option>
                                         </select>
                                       ) : (
                                         <input className="field" type="number" min="0" max={criterion.max} value={value ?? ""} onChange={(e) => updateScore(id, criterion.key, Math.max(0, Math.min(criterion.max, Number(e.target.value || 0))))} />
@@ -1009,16 +1544,28 @@ export default function AppShell({ session }) {
                           </tbody>
                         </table>
                       </div>
+
                       <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.max(1, sessionState.evaluatorIds.length)}, 1fr)`, gap: 12, marginTop: 16 }}>
-                        {sessionState.evaluatorIds.map((id) => <div key={id} className="small-card"><div style={{ fontWeight: 700, marginBottom: 8 }}>{evaluatorNameMap[id]} comments</div><textarea className="textarea" value={selectedDraft?.per_evaluator?.[id]?.comments || ""} onChange={(e) => updateComment(id, e.target.value)} /></div>)}
+                        {sessionState.evaluatorIds.map((id) => (
+                          <div key={id} className="small-card">
+                            <div style={{ fontWeight: 700, marginBottom: 8 }}>{evaluatorNameMap[id]} comments</div>
+                            <textarea className="textarea" value={selectedDraft?.per_evaluator?.[id]?.comments || ""} onChange={(e) => updateComment(id, e.target.value)} />
+                          </div>
+                        ))}
                       </div>
-                      <div className="filters-row" style={{ marginTop: 16 }}><button className="btn" onClick={saveCurrentEvaluation}>Save Evaluation</button></div>
+
+                      <div className="filters-row" style={{ marginTop: 16 }}>
+                        <button className="btn" onClick={saveCurrentEvaluation}>Save Evaluation</button>
+                      </div>
                     </div>
                   </div>
+
                   <div className="sticky-preview">
                     <div className="card">
                       <div style={{ fontWeight: 700, marginBottom: 10 }}>Floating Preview</div>
-                      <div style={{ borderRadius: 16, overflow: "hidden", background: "var(--sand)", minHeight: 220 }}>{selectedSubmission.preview_url ? <img src={selectedSubmission.preview_url} alt={selectedSubmission.artwork_name} style={{ width: "100%", display: "block" }} /> : <div style={{ padding: 40, textAlign: "center" }}>No preview</div>}</div>
+                      <div style={{ borderRadius: 16, overflow: "hidden", background: "var(--sand)", minHeight: 220 }}>
+                        {selectedSubmission.preview_url ? <img src={selectedSubmission.preview_url} alt={selectedSubmission.artwork_name} style={{ width: "100%", display: "block" }} /> : <div style={{ padding: 40, textAlign: "center" }}>No preview</div>}
+                      </div>
                       <div className="filters-row" style={{ marginTop: 12 }}>
                         {selectedSubmission.preview_url ? <button className="btn soft" onClick={() => setPreviewUrl(selectedSubmission.preview_url)}>Open Preview</button> : null}
                         {selectedSubmission.source_file_url ? <a className="btn" href={selectedSubmission.source_file_url} target="_blank" rel="noreferrer">Open Source File</a> : null}
@@ -1036,7 +1583,10 @@ export default function AppShell({ session }) {
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>All Submissions</div>
-              <div className="filters-row"><button className="btn outline" onClick={() => { setTempFilters(allFilters); setFiltersOpen(true); }}>Open Filters</button><div className="small-card" style={{ padding: "10px 14px" }}>{allSubmissions.length} result(s)</div></div>
+              <div className="filters-row">
+                <button className="btn outline" onClick={() => { setTempFilters(allFilters); setFiltersOpen(true); }}>Open Filters</button>
+                <div className="small-card" style={{ padding: "10px 14px" }}>{allSubmissions.length} result(s)</div>
+              </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
               {allSubmissions.map((submission) => <SubmissionCard key={submission.id} submission={submission} onOpenDetails={setDetailSubmission} onOpenPreview={setPreviewUrl} />)}
@@ -1048,23 +1598,47 @@ export default function AppShell({ session }) {
         {activeTab === "students" && (
           <div className="two-col">
             <div className="card">
-              <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Students</div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>Students</div>
+                <div className="small-card" style={{ padding: "10px 14px" }}>{studentRows.length} result(s)</div>
+              </div>
               <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-                <select className="field" value={studentFilters.grade} onChange={(e) => setStudentFilters((prev) => ({ ...prev, grade: e.target.value }))}><option value="all">All grades</option>{gradeOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                <select className="field" value={studentFilters.school} onChange={(e) => setStudentFilters((prev) => ({ ...prev, school: e.target.value }))}><option value="all">All schools</option>{schoolNames.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                <select className="field" value={studentFilters.nationality} onChange={(e) => setStudentFilters((prev) => ({ ...prev, nationality: e.target.value }))}><option value="all">All nationalities</option>{nationalityOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                <select className="field" value={studentFilters.grade} onChange={(e) => setStudentFilters((prev) => ({ ...prev, grade: e.target.value }))}>
+                  <option value="all">All grades</option>
+                  {gradeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select className="field" value={studentFilters.school} onChange={(e) => setStudentFilters((prev) => ({ ...prev, school: e.target.value }))}>
+                  <option value="all">All schools</option>
+                  {schoolNames.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select className="field" value={studentFilters.nationality} onChange={(e) => setStudentFilters((prev) => ({ ...prev, nationality: e.target.value }))}>
+                  <option value="all">All nationalities</option>
+                  {nationalityOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
                 <input className="field" placeholder="Search student" value={studentFilters.search} onChange={(e) => setStudentFilters((prev) => ({ ...prev, search: e.target.value }))} />
               </div>
               <div style={{ display: "grid", gap: 10, maxHeight: 620, overflow: "auto" }}>
-                {studentRows.map((student) => <button key={student.id} className="small-card" style={{ textAlign: "left", background: selectedStudent?.id === student.id ? "var(--mist)" : "white", cursor: "pointer" }} onClick={() => setSelectedStudentId(student.id)}><div style={{ fontWeight: 800 }}>{student.student_name}</div><div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{student.student_esis}</div><div style={{ fontSize: 13, opacity: 0.75 }}>{student.school_name} · {student.grade || "-"} · {student.nationality || "-"}</div><div style={{ marginTop: 8 }}><span className="badge-soft">{student.projects.length} project(s)</span></div></button>)}
+                {studentRows.map((student) => (
+                  <button key={student.id} className="small-card" style={{ textAlign: "left", background: selectedStudent?.id === student.id ? "var(--mist)" : "white", cursor: "pointer" }} onClick={() => setSelectedStudentId(student.id)}>
+                    <div style={{ fontWeight: 800 }}>{student.student_name}</div>
+                    <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{student.student_esis}</div>
+                    <div style={{ fontSize: 13, opacity: 0.75 }}>{student.school_name} · {student.grade || "-"} · {student.nationality || "-"}</div>
+                    <div style={{ marginTop: 8 }}><span className="badge-soft">{student.projects.length} project(s)</span></div>
+                  </button>
+                ))}
               </div>
             </div>
+
             <div className="card">
               {selectedStudent ? (
                 <>
                   <div style={{ fontSize: 22, fontWeight: 800 }}>{selectedStudent.student_name}</div>
                   <div style={{ opacity: 0.75, marginTop: 4 }}>{selectedStudent.student_esis} · {selectedStudent.school_name}</div>
-                  <div style={{ marginTop: 10 }}><span className="badge-outline">{selectedStudent.grade || "No grade"}</span><span className="badge-outline">{selectedStudent.gender || "No gender"}</span><span className="badge-outline">{selectedStudent.nationality || "No nationality"}</span></div>
+                  <div style={{ marginTop: 10 }}>
+                    <span className="badge-outline">{selectedStudent.grade || "No grade"}</span>
+                    <span className="badge-outline">{selectedStudent.gender || "No gender"}</span>
+                    <span className="badge-outline">{selectedStudent.nationality || "No nationality"}</span>
+                  </div>
                   <div style={{ fontWeight: 700, marginTop: 18, marginBottom: 10 }}>Projects</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
                     {selectedStudent.projects.map((submission) => <SubmissionCard key={submission.id} submission={submission} onOpenDetails={setDetailSubmission} onOpenPreview={setPreviewUrl} />)}
@@ -1080,20 +1654,37 @@ export default function AppShell({ session }) {
             <div className="card">
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Schools</div>
               <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
-                <select className="field" value={schoolFilters.schoolType} onChange={(e) => setSchoolFilters((prev) => ({ ...prev, schoolType: e.target.value }))}><option value="all">All school types</option>{schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                <select className="field" value={schoolFilters.region} onChange={(e) => setSchoolFilters((prev) => ({ ...prev, region: e.target.value }))}><option value="all">All regions</option>{regions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
+                <select className="field" value={schoolFilters.schoolType} onChange={(e) => setSchoolFilters((prev) => ({ ...prev, schoolType: e.target.value }))}>
+                  <option value="all">All school types</option>
+                  {schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <select className="field" value={schoolFilters.region} onChange={(e) => setSchoolFilters((prev) => ({ ...prev, region: e.target.value }))}>
+                  <option value="all">All regions</option>
+                  {regions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
                 <input className="field" placeholder="Search school" value={schoolFilters.search} onChange={(e) => setSchoolFilters((prev) => ({ ...prev, search: e.target.value }))} />
               </div>
               <div style={{ display: "grid", gap: 10, maxHeight: 620, overflow: "auto" }}>
-                {schoolRows.map((school) => <button key={school.id} className="small-card" style={{ textAlign: "left", background: selectedSchool?.id === school.id ? "var(--mist)" : "white", cursor: "pointer" }} onClick={() => setSelectedSchoolId(school.id)}><div style={{ fontWeight: 800 }}>{school.school_name}</div><div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{school.school_esis}</div><div style={{ fontSize: 13, opacity: 0.75 }}>{school.school_type || "Unspecified"} · {school.region || "-"}</div><div style={{ marginTop: 8 }}><span className="badge-soft">{school.projects.length} project(s)</span></div></button>)}
+                {schoolRows.map((school) => (
+                  <button key={school.id} className="small-card" style={{ textAlign: "left", background: selectedSchool?.id === school.id ? "var(--mist)" : "white", cursor: "pointer" }} onClick={() => setSelectedSchoolId(school.id)}>
+                    <div style={{ fontWeight: 800 }}>{school.school_name}</div>
+                    <div style={{ fontSize: 13, opacity: 0.75, marginTop: 6 }}>{school.school_esis}</div>
+                    <div style={{ fontSize: 13, opacity: 0.75 }}>{school.school_type || "Unspecified"} · {school.region || "-"}</div>
+                    <div style={{ marginTop: 8 }}><span className="badge-soft">{school.projects.length} project(s)</span></div>
+                  </button>
+                ))}
               </div>
             </div>
+
             <div className="card">
               {selectedSchool ? (
                 <>
                   <div style={{ fontSize: 22, fontWeight: 800 }}>{selectedSchool.school_name}</div>
                   <div style={{ opacity: 0.75, marginTop: 4 }}>{selectedSchool.school_esis}</div>
-                  <div style={{ marginTop: 10 }}><span className="badge-outline">{selectedSchool.school_type || "Unspecified"}</span><span className="badge-outline">{selectedSchool.region || "-"}</span></div>
+                  <div style={{ marginTop: 10 }}>
+                    <span className="badge-outline">{selectedSchool.school_type || "Unspecified"}</span>
+                    <span className="badge-outline">{selectedSchool.region || "-"}</span>
+                  </div>
                   <div style={{ fontWeight: 700, marginTop: 18, marginBottom: 10 }}>Projects</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
                     {selectedSchool.projects.map((submission) => <SubmissionCard key={submission.id} submission={submission} onOpenDetails={setDetailSubmission} onOpenPreview={setPreviewUrl} />)}
@@ -1108,7 +1699,13 @@ export default function AppShell({ session }) {
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>Final Selected</div>
-              <div className="filters-row"><select className="field" value={finalFilter} onChange={(e) => setFinalFilter(e.target.value)}><option value="all">All pathways</option>{pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select><button className="btn" onClick={() => exportEverything("final")}>Export Final</button></div>
+              <div className="filters-row">
+                <select className="field" value={finalFilter} onChange={(e) => setFinalFilter(e.target.value)}>
+                  <option value="all">All pathways</option>
+                  {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+                <button className="btn" onClick={() => exportEverything("final")}>Export Final</button>
+              </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 14 }}>
               {finalSelections.map((submission) => <SubmissionCard key={submission.id} submission={submission} onOpenDetails={setDetailSubmission} onOpenPreview={setPreviewUrl} />)}
@@ -1117,19 +1714,38 @@ export default function AppShell({ session }) {
         )}
 
         {activeTab === "dashboard" && (
-          <div style={{ display: "grid", gap: 16 }}>
+          <div ref={dashboardExportRef} style={{ display: "grid", gap: 16, background: "#fff" }}>
             <div className="card">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
                 <div style={{ fontSize: 22, fontWeight: 800 }}>Dashboard</div>
                 <div className="filters-row">
-                  <select className="field" value={dashboardStage} onChange={(e) => setDashboardStage(e.target.value)}><option value="all_submissions">All Submissions</option><option value="round1_completed">Round 1 Completed</option><option value="selected_round2">Selected Round 2</option><option value="round2_completed">Round 2 Completed</option><option value="final_selected">Final Selected</option></select>
-                  <select className="field" value={dashboardFilterPathway} onChange={(e) => setDashboardFilterPathway(e.target.value)}><option value="all">All pathways</option>{pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                  <select className="field" value={dashboardFilterSchoolType} onChange={(e) => setDashboardFilterSchoolType(e.target.value)}><option value="all">All school types</option>{schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                  <select className="field" value={dashboardFilterRegion} onChange={(e) => setDashboardFilterRegion(e.target.value)}><option value="all">All regions</option>{regions.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                  <select className="field" value={dashboardFilterCoordinator} onChange={(e) => setDashboardFilterCoordinator(e.target.value)}><option value="all">All coordinators</option>{coordinators.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}</select>
+                  <select className="field" value={dashboardStage} onChange={(e) => setDashboardStage(e.target.value)}>
+                    <option value="all_submissions">All Submissions</option>
+                    <option value="round1_completed">Round 1 Completed</option>
+                    <option value="selected_round2">Selected Round 2</option>
+                    <option value="round2_completed">Round 2 Completed</option>
+                    <option value="final_selected">Final Selected</option>
+                  </select>
+                  <select className="field" value={dashboardFilterPathway} onChange={(e) => setDashboardFilterPathway(e.target.value)}>
+                    <option value="all">All pathways</option>
+                    {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select className="field" value={dashboardFilterSchoolType} onChange={(e) => setDashboardFilterSchoolType(e.target.value)}>
+                    <option value="all">All school types</option>
+                    {schoolTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select className="field" value={dashboardFilterRegion} onChange={(e) => setDashboardFilterRegion(e.target.value)}>
+                    <option value="all">All regions</option>
+                    {regions.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select className="field" value={dashboardFilterCoordinator} onChange={(e) => setDashboardFilterCoordinator(e.target.value)}>
+                    <option value="all">All coordinators</option>
+                    {coordinators.map((item) => <option key={item.id} value={item.id}>{item.username}</option>)}
+                  </select>
                   <button className="btn outline" onClick={exportAnalyticsReport}>Export Analytics Report</button>
                 </div>
               </div>
+
               <div className="grid-5">
                 <div className="small-card"><div style={{ fontSize: 13, opacity: 0.75 }}>Submissions</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>{dashboardMatched.length}</div></div>
                 <div className="small-card"><div style={{ fontSize: 13, opacity: 0.75 }}>Total Number of Schools</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>{uniqueSchools.length}</div></div>
@@ -1137,13 +1753,14 @@ export default function AppShell({ session }) {
                 <div className="small-card"><div style={{ fontSize: 13, opacity: 0.75 }}>Pathways</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>{new Set(dashboardMatched.map((x) => x.pathway)).size}</div></div>
                 <div className="small-card"><div style={{ fontSize: 13, opacity: 0.75 }}>Final Selected</div><div style={{ fontSize: 30, fontWeight: 800, marginTop: 6 }}>{dashboardMatched.filter((x) => x.round2.finalSelected).length}</div></div>
               </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
                 <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
                   <div style={{ fontWeight: 700, marginBottom: 10 }}>By Pathway</div>
                   <div style={{ width: "100%", height: 340 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
-                        <Pie data={byPathway} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                        <Pie data={byPathway} dataKey="value" nameKey="name" outerRadius={82} cx="50%" cy="44%" label>
                           {byPathway.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
                         <Tooltip />
@@ -1152,12 +1769,13 @@ export default function AppShell({ session }) {
                     </ResponsiveContainer>
                   </div>
                 </div>
+
                 <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
                   <div style={{ fontWeight: 700, marginBottom: 10 }}>Gender</div>
                   <div style={{ width: "100%", height: 340 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
-                        <Pie data={byGender} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                        <Pie data={byGender} dataKey="value" nameKey="name" outerRadius={82} cx="50%" cy="44%" label>
                           {byGender.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
                         <Tooltip />
@@ -1166,12 +1784,13 @@ export default function AppShell({ session }) {
                     </ResponsiveContainer>
                   </div>
                 </div>
+
                 <div className="small-card" style={{ minHeight: 420, paddingBottom: 16 }}>
                   <div style={{ fontWeight: 700, marginBottom: 10 }}>Nationality</div>
                   <div style={{ width: "100%", height: 340 }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart margin={{ top: 10, right: 20, bottom: 70, left: 20 }}>
-                        <Pie data={byNationality} dataKey="value" nameKey="name" outerRadius={82} cy="42%" label>
+                        <Pie data={byNationality} dataKey="value" nameKey="name" outerRadius={82} cx="50%" cy="44%" label>
                           {byNationality.map((entry, index) => <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />)}
                         </Pie>
                         <Tooltip />
@@ -1181,6 +1800,7 @@ export default function AppShell({ session }) {
                   </div>
                 </div>
               </div>
+
               <div className="small-card" style={{ marginTop: 16 }}>
                 <div style={{ fontWeight: 700, marginBottom: 10 }}>Submissions by School Type</div>
                 <div style={{ width: "100%", height: 320 }}>
@@ -1196,10 +1816,20 @@ export default function AppShell({ session }) {
                 </div>
               </div>
             </div>
+
             <div className="card">
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Separate Analytics Per Pathway</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 14 }}>
-                {perPathwayAnalytics.map((item) => <div key={item.pathway} className="small-card"><div style={{ fontWeight: 700, marginBottom: 10 }}>{item.pathway}</div><div style={{ lineHeight: 1.8 }}><div>Total Number of Schools: <strong>{item.schools}</strong></div><div>Number of Students: <strong>{item.students}</strong></div><div>Number of Submissions: <strong>{item.submissions}</strong></div></div></div>)}
+                {perPathwayAnalytics.map((item) => (
+                  <div key={item.pathway} className="small-card">
+                    <div style={{ fontWeight: 700, marginBottom: 10 }}>{item.pathway}</div>
+                    <div style={{ lineHeight: 1.8 }}>
+                      <div>Total Number of Schools: <strong>{item.schools}</strong></div>
+                      <div>Number of Students: <strong>{item.students}</strong></div>
+                      <div>Number of Submissions: <strong>{item.submissions}</strong></div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -1210,11 +1840,7 @@ export default function AppShell({ session }) {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>Evaluators</div>
               <div className="filters-row">
-                <select
-                  className="field"
-                  value={evaluatorFilterPathway}
-                  onChange={(e) => setEvaluatorFilterPathway(e.target.value)}
-                >
+                <select className="field" value={evaluatorFilterPathway} onChange={(e) => setEvaluatorFilterPathway(e.target.value)}>
                   <option value="all">All pathways</option>
                   {pathwayOptions.map((item) => <option key={item} value={item}>{item}</option>)}
                 </select>
@@ -1223,12 +1849,14 @@ export default function AppShell({ session }) {
                 </button>
               </div>
             </div>
+
             <div className="legend-note" style={{ marginBottom: 14 }}>
               Evaluators are separate from platform users. Both admin and coordinators can access this page. Only admin can delete evaluators.
             </div>
+
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14 }}>
               {filteredEvaluators.map((item) => {
-                const stats = evaluatorStats[item.id] || {
+                const statsItem = evaluatorStats[item.id] || {
                   round1Evaluated: 0,
                   round1Selected: 0,
                   round2Evaluated: 0,
@@ -1243,38 +1871,51 @@ export default function AppShell({ session }) {
                         <div style={{ fontSize: 13, opacity: 0.75 }}>{item.active ? "Active" : "Inactive"}</div>
                       </div>
                       <div className="filters-row">
-                        <button className="btn outline" onClick={() => { setEditingEvaluator(item); setEvaluatorModalOpen(true); }}>
-                          Edit
-                        </button>
-                        {currentUser.role === "admin" ? (
-                          <button className="btn outline" onClick={() => deleteEvaluator(item.id)}>
-                            Delete
-                          </button>
-                        ) : null}
+                        <button className="btn outline" onClick={() => { setEditingEvaluator(item); setEvaluatorModalOpen(true); }}>Edit</button>
+                        {currentUser.role === "admin" ? <button className="btn outline" onClick={() => deleteEvaluator(item.id)}>Delete</button> : null}
                       </div>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
                       <div className="small-card" style={{ background: "var(--sand)" }}>
                         <div style={{ fontSize: 12, opacity: 0.75 }}>Round 1 Evaluated</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round1Evaluated}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{statsItem.round1Evaluated}</div>
                       </div>
                       <div className="small-card" style={{ background: "var(--mist)" }}>
                         <div style={{ fontSize: 12, opacity: 0.75 }}>Round 1 Selected</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round1Selected}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{statsItem.round1Selected}</div>
                       </div>
                       <div className="small-card" style={{ background: "var(--sand)" }}>
                         <div style={{ fontSize: 12, opacity: 0.75 }}>Round 2 Evaluated</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round2Evaluated}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{statsItem.round2Evaluated}</div>
                       </div>
                       <div className="small-card" style={{ background: "var(--mist)" }}>
                         <div style={{ fontSize: 12, opacity: 0.75 }}>Round 2 Selected</div>
-                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{stats.round2Selected}</div>
+                        <div style={{ fontSize: 24, fontWeight: 800, marginTop: 4 }}>{statsItem.round2Selected}</div>
                       </div>
                     </div>
 
                     <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
-                      {pathwayOptions.map((pathway) => <label key={pathway} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}><input type="checkbox" checked={(item.pathways || []).includes(pathway)} onChange={async () => { const next = (item.pathways || []).includes(pathway) ? item.pathways.filter((x) => x !== pathway) : [...(item.pathways || []), pathway]; await fetch(`/api/evaluators/${item.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pathways: next }) }); await bootstrap(); }} /> {pathway}</label>)}
+                      {pathwayOptions.map((pathway) => (
+                        <label key={pathway} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)", borderRadius: 14, padding: 10 }}>
+                          <input
+                            type="checkbox"
+                            checked={(item.pathways || []).includes(pathway)}
+                            onChange={async () => {
+                              const next = (item.pathways || []).includes(pathway)
+                                ? item.pathways.filter((x) => x !== pathway)
+                                : [...(item.pathways || []), pathway];
+                              await fetch(`/api/evaluators/${item.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ pathways: next })
+                              });
+                              await bootstrap();
+                            }}
+                          />
+                          {pathway}
+                        </label>
+                      ))}
                     </div>
                   </div>
                 );
@@ -1286,12 +1927,75 @@ export default function AppShell({ session }) {
         {activeTab === "users" && currentUser.role === "admin" && (
           <div style={{ display: "grid", gap: 16 }}>
             <div className="card">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontSize: 22, fontWeight: 800 }}>Users</div><button className="btn" onClick={() => { setEditingUser(null); setUserModalOpen(true); }}>Add User</button></div>
-              <table className="table"><thead><tr><th>Username</th><th>Display Name</th><th>Role</th><th>Active</th><th>Pathways</th><th></th></tr></thead><tbody>{users.map((user) => <tr key={user.id}><td>{user.username}</td><td>{user.display_name || "-"}</td><td>{user.role}</td><td>{user.active ? "Yes" : "No"}</td><td>{(user.pathways || []).join(", ") || "-"}</td><td><div className="filters-row"><button className="btn outline" onClick={() => { setEditingUser(user); setUserModalOpen(true); }}>Edit</button>{user.username !== "Admin" ? <button className="btn outline" onClick={() => deleteUser(user.id)}>Delete</button> : null}</div></td></tr>)}</tbody></table>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>Users</div>
+                <button className="btn" onClick={() => { setEditingUser(null); setUserModalOpen(true); }}>Add User</button>
+              </div>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Display Name</th>
+                    <th>Role</th>
+                    <th>Active</th>
+                    <th>Pathways</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.username}</td>
+                      <td>{user.display_name || "-"}</td>
+                      <td>{user.role}</td>
+                      <td>{user.active ? "Yes" : "No"}</td>
+                      <td>{(user.pathways || []).join(", ") || "-"}</td>
+                      <td>
+                        <div className="filters-row">
+                          <button className="btn outline" onClick={() => { setEditingUser(user); setUserModalOpen(true); }}>Edit</button>
+                          {user.username !== "Admin" ? <button className="btn outline" onClick={() => deleteUser(user.id)}>Delete</button> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
             <div className="card">
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Coordinator Progress</div>
-              <table className="table"><thead><tr><th>Coordinator</th><th>Assigned Artworks</th><th>Round 1 Completed</th><th>Shortlisted</th><th>Round 2 Completed</th><th>Final Selected</th></tr></thead><tbody>{coordinatorProgress.map((row) => <tr key={row.id}><td>{row.username}</td><td>{row.assigned}</td><td>{row.round1Completed}</td><td>{row.shortlisted}</td><td>{row.round2Completed}</td><td>{row.finalSelected}</td></tr>)}<tr style={{ fontWeight: 800, background: "var(--sand)" }}><td>Total</td><td>{coordinatorTotals.assigned}</td><td>{coordinatorTotals.round1Completed}</td><td>{coordinatorTotals.shortlisted}</td><td>{coordinatorTotals.round2Completed}</td><td>{coordinatorTotals.finalSelected}</td></tr></tbody></table>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Coordinator</th>
+                    <th>Assigned Artworks</th>
+                    <th>Round 1 Completed</th>
+                    <th>Shortlisted</th>
+                    <th>Round 2 Completed</th>
+                    <th>Final Selected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {coordinatorProgress.map((row) => (
+                    <tr key={row.id}>
+                      <td>{row.username}</td>
+                      <td>{row.assigned}</td>
+                      <td>{row.round1Completed}</td>
+                      <td>{row.shortlisted}</td>
+                      <td>{row.round2Completed}</td>
+                      <td>{row.finalSelected}</td>
+                    </tr>
+                  ))}
+                  <tr style={{ fontWeight: 800, background: "var(--sand)" }}>
+                    <td>Total</td>
+                    <td>{coordinatorTotals.assigned}</td>
+                    <td>{coordinatorTotals.round1Completed}</td>
+                    <td>{coordinatorTotals.shortlisted}</td>
+                    <td>{coordinatorTotals.round2Completed}</td>
+                    <td>{coordinatorTotals.finalSelected}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1302,13 +2006,30 @@ export default function AppShell({ session }) {
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Import Submissions</div>
               <div className="legend-note" style={{ marginBottom: 14 }}>The template includes Coordinator Username, School eSIS, and Student eSIS.</div>
               <input type="file" accept=".xlsx,.xls,.csv" onChange={(e) => e.target.files?.[0] && handleImport(e.target.files[0])} />
-              <div className="filters-row" style={{ marginTop: 14 }}><button className="btn outline" onClick={downloadTemplate}>Download Template</button></div>
+              <div className="filters-row" style={{ marginTop: 14 }}>
+                <button className="btn outline" onClick={downloadTemplate}>Download Template</button>
+              </div>
             </div>
+
             <div className="card">
               <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>Export Data</div>
-              <div style={{ marginBottom: 12 }}><div style={{ fontSize: 13, marginBottom: 6 }}>Export Format</div><select className="field" value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}><option value="xlsx">Excel (.xlsx)</option><option value="csv">CSV (.csv)</option></select></div>
-              <div className="filters-row"><button className="btn" onClick={() => exportEverything("round1")}>Export Round 1</button><button className="btn" onClick={() => exportEverything("round2")}>Export Round 2</button><button className="btn" onClick={() => exportEverything("final")}>Export Final Selected</button><button className="btn outline" onClick={() => exportEverything("all")}>Export Everything</button></div>
-              <div className="legend-note" style={{ marginTop: 14 }}>Exports include all submission fields, student-level data, flags, management comments, round 1 and round 2 results, national identity, and evaluator comments.</div>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 13, marginBottom: 6 }}>Export Format</div>
+                <select className="field" value={exportFormat} onChange={(e) => setExportFormat(e.target.value)}>
+                  <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="csv">CSV (.csv)</option>
+                </select>
+              </div>
+              <div className="filters-row" style={{ flexWrap: "wrap" }}>
+                <button className="btn" onClick={() => exportEverything("round1")}>Export Round 1</button>
+                <button className="btn" onClick={() => exportEverything("round2")}>Export Round 2</button>
+                <button className="btn" onClick={() => exportEverything("final")}>Export Final Selected</button>
+                <button className="btn" onClick={exportStudentsDirectory}>Export Students</button>
+                <button className="btn outline" onClick={() => exportEverything("all")}>Export Everything</button>
+              </div>
+              <div className="legend-note" style={{ marginTop: 14 }}>
+                Exports include all submission fields, student-level data, flags, artwork collected, management comments, round 1 and round 2 results, national identity, and evaluator comments.
+              </div>
             </div>
           </div>
         )}
