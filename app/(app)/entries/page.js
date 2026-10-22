@@ -13,7 +13,7 @@ export default function Entries() {
   const [q, setQ] = useState(p.q || ""); useEffect(() => { setQ(p.q || ""); }, [p.q]);
   useEffect(() => { const t = setTimeout(() => { if ((q || "") !== (p.q || "")) set("q", q.trim()); }, 350); return () => clearTimeout(t); }, [q]); // eslint-disable-line
   const d = useApi(`/api/entries?${sp.toString()}`);
-  const me = meta?.data?.me; const pws = (meta?.data?.pathways || []).filter(x => x.entries > 0 || x.track === "Expressions");
+  const me = meta?.data?.me; const pws = (meta?.data?.pathways || []);
   const pw = pws.find(x => x.code === p.pathway);
   const chips = useMemo(() => { const c = d.data?.counts || []; const out = [["", "All", c.reduce((a, x) => a + x.n, 0)]]; [1, 2].forEach(r => STATUS_ORDER.forEach(([s, l]) => { const n = c.filter(x => x.current_round === r && x.status === s).reduce((a, x) => a + x.n, 0); if (n) out.push([`${r}:${s}`, `R${r} · ${l}`, n]); })); return out; }, [d.data]);
   const res = e => { const r = (e.results || []).sort((a, b) => b.round_no - a.round_no)[0]; if (!r || r.team == null) return <span className="faint small">{r ? `${r.scored} of ${r.needed} scored` : ""}</span>; return <Two a={<span className="num">{r.final ?? r.team} · {r.grade}</span>} b={`Round ${r.round_no}${r.passed === true ? " · through" : r.passed === false ? " · not through" : ""}`} />; };

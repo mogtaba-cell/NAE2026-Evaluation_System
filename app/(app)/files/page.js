@@ -31,7 +31,7 @@ export default function Files() {
     {last && <p className="x-note">Last index {when(last.started_at)}{last.finished_at ? `, finished ${when(last.finished_at)}` : ""}.</p>}
     <Modal open={!!link} title="Link folder to an entry" sub={link?.path} onClose={() => setLink(null)} footer={<><Btn onClick={() => setLink(null)}>Cancel</Btn><Btn v="primary" disabled={!code.trim()} onClick={() => doLink({ path_key: link.path_key, code })}>Link</Btn></>}>
       {err && <Banner tone="bad" title={err} />}
-      <Field label="Entry code" help="For example VE-PD-0042"><input className="input code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} autoFocus /></Field>
+      <Field label="Entry code" help="For example VA-PD-0042"><input className="input code" value={code} onChange={e => setCode(e.target.value.toUpperCase())} autoFocus /></Field>
     </Modal>
   </>;
 }

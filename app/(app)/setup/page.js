@@ -12,7 +12,7 @@ export default function Setup() {
       <div className="ac"><span className="small faint">{ok} of {p.check.length} ready</span><Btn v={ok === p.check.length ? "secondary" : "primary"} href={`/setup/${p.code}`}>Set up</Btn></div></div>; })}</div>;
   return <>
     <PageHead title="Program setup" sub="Each pathway needs entries, a published rubric for every subpathway in use, round dates, evaluators and coordinators before Round 1 can open." actions={<><Btn href="/import">Import entries</Btn><Btn href="/rubrics">Rubric library</Btn></>} />
-    <Track t="Expressions" sub="NAE 2026 submissions, in scoring now." />
-    <Track t="Arts" sub="Visual, Digital, Literary and Performing Arts. Submitted separately; set up when its intake opens." />
+    {[...new Set(pws.map(p => p.track))].map(t => <Track key={t} t={t} sub={`${pws.filter(p => p.track === t).map(p => p.name).join(", ")}.`} />)}
+    {!pws.length && <p className="muted">No pathways yet.</p>}
   </>;
 }

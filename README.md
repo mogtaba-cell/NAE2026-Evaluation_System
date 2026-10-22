@@ -16,13 +16,13 @@ Built with Next.js 15 (App Router) and Supabase (Postgres), and hosted on Vercel
 
 ## How an entry moves
 
-1. **Import.** Admin uploads the submissions export. Rows are sorted by submission date and get short codes such as `VE-PD-0042`. Re-importing only updates details; scores and history are never touched.
+1. **Import.** Admin uploads the submissions export. Rows are sorted by submission date and get short codes such as `VA-PD-0042`. Re-importing only updates details; scores and history are never touched.
 2. **Allocate.** Each school goes to one coordinator.
 3. **Round 1 opens.** Each entry is assigned to two evaluators who have logins. Assignment is balanced by workload.
 4. **Scoring.** Evaluators score each criterion from 0 to 100. The total is the weighted sum, rounded up. The team result is the average of the evaluators' totals, rounded up.
 5. **Automatic move-on.** When the scores are in, the entry goes through, does not go through, or goes to management review. It is flagged for review when it is within 3 points of the pass mark or the evaluators are more than 15 points apart.
 6. **Management review.** A review is due within 48 hours. The manager confirms the result, or overrides it with a reason.
-7. **Round 2.** Online subpathways are assigned to evaluators again. Physical subpathways (Painting & Drawing, Traditional Crafts, Calligraphy) follow this path instead:
+7. **Round 2.** Online subpathways are assigned to evaluators again. Subpathways marked Physical in Program setup follow this path instead:
    - The storage team collects them, checks them in and shelves them.
    - The coordinator creates a session, and the storage team gets a pull list sorted by shelf.
    - Scores are entered in the room.
@@ -48,7 +48,7 @@ Every change is written to the audit log.
 
 ## Setup
 
-1. **Database.** In Supabase, run `supabase/v2_schema.sql` and then `supabase/v2_seed.sql`.
+1. **Database.** In Supabase, run `supabase/v2_schema.sql` and then `supabase/v2_seed.sql` (the Arts track: Visual, Digital, Literary and Performing Arts). `supabase/v2_arts_only.sql` removed the old Expressions track from the first install.
    - Both are safe to re-run.
    - Every table is prefixed `nae_` and is locked to the server (service role) only.
 2. **Environment variables.** Set these in Vercel; see `.env.example`.

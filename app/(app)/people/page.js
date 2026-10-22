@@ -13,7 +13,7 @@ export default function People() {
   const d = useApi("/api/people"); const meta = useMeta(); const toast = useToast();
   const [tab, setTab] = useState("accounts"); const [form, setForm] = useState(null); const [pw, setPw] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
   if (!d.data) return <Loading error={d.error} />;
-  const pws = (meta?.data?.pathways || []).filter(p => p.track === "Expressions" || p.entries);
+  const pws = (meta?.data?.pathways || []);
   const pwName = c => pws.find(p => p.code === c)?.code || c;
   async function submit() {
     setBusy(true); setErr(null);

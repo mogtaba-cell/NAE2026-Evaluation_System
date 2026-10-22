@@ -33,7 +33,7 @@ function Top({ session, onMenu }) {
     <button type="button" className="btn secondary icon menu-btn" title="Menu" aria-label="Menu" onClick={onMenu}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
     <span className="strong">{meta?.data?.program?.name || "NAE 2026"}</span>
-    <span className="ctx hide-s">Expressions track</span>
+    <span className="ctx hide-s">{[...new Set((meta?.data?.pathways || []).map(p => p.track))].map(t => `${t} track`).join(" · ")}</span>
     <span className="sp" />
     {canSearch && <form className="hide-s search" style={{ width: 300 }} onSubmit={e => { e.preventDefault(); if (q.trim()) router.push(`/entries?q=${encodeURIComponent(q.trim())}`); }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="faint"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>

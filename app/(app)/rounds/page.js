@@ -8,7 +8,7 @@ export default function Rounds() {
   const meta = useMeta(); const toast = useToast();
   const [act, setAct] = useState(null); const [reason, setReason] = useState(""); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
   if (!meta?.data) return <Loading error={meta?.error} />;
-  const pws = meta.data.pathways.filter(p => p.entries || p.track === "Expressions");
+  const pws = meta.data.pathways;
   async function go() { setBusy(true); setErr(null); try { const r = await api(`/api/rounds/${act.r.id}`, { body: { action: act.action, reason } }); toast(r.note); setAct(null); setReason(""); meta.reload(); } catch (e) { setErr(e.message); } setBusy(false); }
   return <>
     <PageHead title="Rounds and results" sub="Opening a round assigns every waiting entry to evaluators. When an entry's scores are in, it moves on automatically: through to Round 2, not through, or to management review when it is close to the pass mark or evaluators disagree." />

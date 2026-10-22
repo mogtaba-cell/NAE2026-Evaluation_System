@@ -7,7 +7,7 @@ const today = () => new Date().toLocaleDateString("en-GB", { weekday: "long", da
 
 function Pathways({ d }) {
   const router = useRouter();
-  return <Card title="Pathways" sub="Expressions track. Arts is submitted separately." flush right={<Btn sm v="ghost" href="/rounds">Rounds</Btn>}>
+  return <Card title="Pathways" flush right={<Btn sm v="ghost" href="/rounds">Rounds</Btn>}>
     <Table cols={["Pathway", "Stage", { h: "Scoring", cls: "r" }]} onRow={i => router.push(`/entries?pathway=${d.pathways[i].code}`)}
       rows={d.pathways.map(p => [<Two key="a" a={p.name} b={`${fmt(p.entries)} entries`} />, <Two key="b" a={p.round ? `Round ${p.round} open` : p.roundStatus === "between" ? "Between rounds" : "Setup"} b={p.closes_on ? `Closes ${dshort(p.closes_on)}` : ""} />, p.round ? <Prog key="c" pct={p.assigned ? p.submitted / p.assigned * 100 : 0} label={`${p.submitted}/${p.assigned}`} /> : <span key="c" className="small faint">Not scoring</span>])} />
   </Card>;
@@ -29,7 +29,7 @@ export default function Dashboard() {
   if (role === "admin") {
     const a = x.attention; const un = Object.entries(a.unallocated || {});
     const todo = [
-      ...meta?.data?.pathways?.filter(p => p.track === "Expressions" && p.entries && p.check.some(c => !c.ok && c.key === "rubrics")).map(p => [`${p.name}: rubrics missing`, p.check.find(c => c.key === "rubrics").text + " have a published rubric", <Btn key="r" sm href="/rubrics">Rubrics</Btn>]) || [],
+      ...meta?.data?.pathways?.filter(p => p.entries && p.check.some(c => !c.ok && c.key === "rubrics")).map(p => [`${p.name}: rubrics missing`, p.check.find(c => c.key === "rubrics").text + " have a published rubric", <Btn key="r" sm href="/rubrics">Rubrics</Btn>]) || [],
       ...(x.reviews.overdue ? [[`${x.reviews.overdue} reviews overdue`, `${x.reviews.open} open in total`, <Btn key="v" sm href="/reviews">View</Btn>]] : []),
       ...un.map(([p, n]) => [`${n} ${p} entries not allocated`, "Allocate so coordinators can follow up with schools", <Btn key="al" sm href={`/allocation?pathway=${p}`}>Allocate</Btn>]),
       ...(a.unmatched ? [[`${a.unmatched} Drive folders not matched`, "Link them to entries or ignore them", <Btn key="u" sm href="/files">Open</Btn>]] : []),

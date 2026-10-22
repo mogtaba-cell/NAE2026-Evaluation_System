@@ -9,7 +9,7 @@ export const GET = route("*", async ({ session }) => {
   const total = counts.reduce((a, x) => a + x.n, 0), students = counts.reduce((a, x) => a + (x.students || 0), 0);
   const { count: schools } = await qc(db().from("nae_schools").select("id", { count: "exact", head: true }));
   const prog = await q(db().rpc("nae_scoring_progress"));
-  const pathways = S.pathways.filter(p => p.track === "Expressions" || counts.some(c => c.pathway_code === p.code)).map(p => {
+  const pathways = S.pathways.map(p => {
     const c = counts.filter(x => x.pathway_code === p.code); const n = c.reduce((a, x) => a + x.n, 0);
     const openR = Object.values(S.P[p.code].rounds).filter(r => r.status === "open").sort((a, b) => b.round_no - a.round_no)[0];
     const pr = openR ? prog.find(x => x.round_id === openR.id) : null;
