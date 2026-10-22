@@ -48,7 +48,7 @@ export const GET = route("*", async ({ session, params, url }) => {
     entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code]?.name, sub: sub?.name, is_physical: !!sub?.is_physical, coordinator: accName(e.coordinator_id) },
     students: session.role === "evaluator" ? students.map(s => ({ position: s.position, grade: s.grade, gender: s.gender, nationality: s.nationality })) : students,
     files: files.map(fileView), rounds, logistics, sessions: links.map(l => l.session).filter(Boolean), history,
-    can: { editScore: can(session, "editScore"), flag: can(session, "flag"), allocate: can(session, "allocate"), download: session.role === "admin" }
+    can: { editScore: can(session, "editScore"), flag: can(session, "flag"), allocate: can(session, "allocate"), download: true }
   };
 });
 
