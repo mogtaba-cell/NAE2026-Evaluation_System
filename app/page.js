@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/auth";
-import AppShell from "@/components/AppShell";
+import { HOME } from "@/components/nav";
 
-export default async function HomePage() {
-  const session = await getServerSession();
-  if (!session) redirect("/login");
-  return <AppShell session={session} />;
+export default async function Home() {
+  const s = await getServerSession();
+  if (!s) redirect("/login");
+  redirect(HOME[s.role] || "/dashboard");
 }
