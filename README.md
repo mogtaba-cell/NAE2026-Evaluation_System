@@ -41,9 +41,10 @@ Every change is written to the audit log.
   - **Submission files → Run index now** matches every folder at once and lists folders it can't match. Admins can link those folders or ignore them.
 - **Viewing**
   - Images first load a fast Drive-generated preview (this also works for HEIC). **Full size** loads the original.
-  - Videos and audio stream in 8 MB pieces, so playback starts at once. Speed control and full screen are available.
+  - Videos and audio stream in 4 MB pieces (Vercel's response limit is 4.5 MB), so playback starts at once. Speed control and full screen are available.
+  - If a video's picture is in a format browsers can't show (for example an old MPEG-4 Part 2 MP4), the viewer says so; `nae-previews.ps1` checks small MP4s with ffprobe and converts those.
   - PDFs and converted previews open inline.
-  - **Source ↗** opens the original. Only admins can download originals.
+  - **Source ↗** opens the original. **Download** saves it, in pieces. Everyone who can open an entry can download its files; downloads are written to the audit log.
   - While an evaluator scores one entry, the next entry's files are looked up in the background.
 
 ## Setup
