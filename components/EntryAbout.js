@@ -1,31 +1,17 @@
 "use client";
+import { useLang as useSharedLang, LangToggle, AR_FONT } from "@/components/lang";
 // "About the entry": title, description and the student's reflections, in English, Arabic or both side by side.
-import { useEffect, useState } from "react";
 
 const Q = [["influence", "Did anyone or anything influence your idea?"], ["enjoy", "What was the most enjoyable part of creating your work?"], ["focus", "What elements did you focus on, and why?"]];
-const KEY = "nae.lang";
-
-export function useLang(e) {
-  const [lang, setLang] = useState("en");
-  useEffect(() => {
-    let saved = null; try { saved = localStorage.getItem(KEY); } catch {}
-    const hasEn = !!(e?.description_en || e?.title_en), hasAr = !!(e?.description_ar || e?.title_ar);
-    setLang(saved && (saved !== "en" || hasEn) && (saved !== "ar" || hasAr) ? saved : hasEn ? "en" : "ar");
-  }, [e?.id]); // eslint-disable-line
-  const set = l => { setLang(l); try { localStorage.setItem(KEY, l); } catch {} };
-  return [lang, set];
-}
-
-export function LangToggle({ lang, onChange }) {
-  return <div className="x-lang" role="group" aria-label="Language">{[["en", "English"], ["ar", "العربية"], ["both", "Both"]].map(([k, l]) => <button key={k} type="button" className={lang === k ? "on" : ""} aria-pressed={lang === k} onClick={() => onChange(k)} lang={k === "ar" ? "ar" : undefined}>{l}</button>)}</div>;
-}
+// Language switching lives in components/lang.js so the scoring form follows the same choice.
+export const useLang = e => useSharedLang(e?.id, !!(e?.description_en || e?.title_en), !!(e?.description_ar || e?.title_ar));
 
 const Missing = ({ ar }) => <p className="faint small" style={ar ? { direction: "rtl", textAlign: "right" } : undefined}>{ar ? "لا يوجد وصف بالعربية" : "No English text was submitted."}</p>;
 
 function Block({ en, ar, lang, big, stack }) {
   const style = big ? { fontSize: 16, lineHeight: "24px", fontWeight: 600 } : undefined;
   const EN = en ? <p style={style} dir="auto">{en}</p> : <Missing />;
-  const AR = ar ? <p className="rtl" lang="ar" style={{ ...style, fontFamily: '"IBM Plex Sans Arabic", var(--sans)' }}>{ar}</p> : <Missing ar />;
+  const AR = ar ? <p className="rtl" lang="ar" style={{ ...style, fontFamily: AR_FONT }}>{ar}</p> : <Missing ar />;
   if (lang === "both") return stack ? <div className="stack" style={{ gap: 10 }}>{EN}<div style={{ borderTop: "1px dashed var(--rule)", paddingTop: 10 }}>{AR}</div></div> : <div className="x-grid2" style={{ gap: 16 }}><div>{EN}</div><div>{AR}</div></div>;
   return lang === "ar" ? AR : EN;
 }

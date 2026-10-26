@@ -16,7 +16,7 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
   const pub = versions.filter(v => v.status === "published").pop();
   if (!draft) draft = await q(db().from("nae_rubric_versions").insert({ rubric_id: params.id, version: Math.max(0, ...versions.map(v => v.version)) + 1, status: "draft", criteria: pub?.criteria || [], identity_required: pub?.identity_required || false, grade_bands: pub?.grade_bands }).select("*").single());
   const patch = {};
-  if (Array.isArray(b.criteria)) patch.criteria = b.criteria.map((c, i) => ({ key: c.key || String(c.label || "c" + i).toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30) || "c" + i, label: String(c.label || "").trim(), weight: Number(c.weight) || 0, description: c.description || "" }));
+  if (Array.isArray(b.criteria)) patch.criteria = b.criteria.map((c, i) => ({ key: c.key || String(c.label || "c" + i).toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 30) || "c" + i, label: String(c.label || "").trim(), label_ar: String(c.label_ar || "").trim(), weight: Number(c.weight) || 0, description: String(c.description || "").trim(), description_ar: String(c.description_ar || "").trim() }));
   if (b.identity_required !== undefined) patch.identity_required = !!b.identity_required;
   if (b.grade_bands) patch.grade_bands = b.grade_bands;
   if (b.name) await q(db().from("nae_rubrics").update({ name: b.name }).eq("id", params.id));

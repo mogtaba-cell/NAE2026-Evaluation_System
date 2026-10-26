@@ -5,6 +5,7 @@ import { api, useApi, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loa
 import FileViewer from "@/components/FileViewer";
 import EntryAbout from "@/components/EntryAbout";
 import { total, gradeFor } from "@/components/ScoreForm";
+import { useLang, LangToggle } from "@/components/lang";
 
 export default function Session({ params }) {
   const { id } = use(params); const sp = useSearchParams(); const router = useRouter(); const toast = useToast(); const meta = useMeta();
@@ -12,6 +13,7 @@ export default function Session({ params }) {
   const d = useApi(`/api/sessions/${id}${cur ? `?entry=${encodeURIComponent(cur)}` : ""}`);
   const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
   const e = d.data?.entries.find(x => x.code === d.data.current);
+  const [lang, setLang] = useLang(id);
   useEffect(() => { if (!e) return; const mm = {}, ii = {}; d.data.team.forEach(t => { const s = e.scores.find(x => x.evaluator_id === t.id); mm[t.id] = { ...(s?.scores || {}) }; ii[t.id] = s?.national_identity ?? null; }); setM(mm); setIdn(ii); }, [e?.code, d.data]);
   useEffect(() => { setErr(null); }, [e?.code]); // eslint-disable-line
   if (!d.data) return <Loading error={d.error} />;
@@ -42,10 +44,10 @@ export default function Session({ params }) {
         <EntryAbout e={{ ...e, id: e.code, pathway: s.pathway }} compact />
       </div> : <Loading />}
       {e && <section className="card">
-        <div className="card-h"><div className="tt"><h3>Scores</h3><span className="sub">Rubric {e.rubric?.code} v{e.rubric?.version} · each criterion 0 to 100</span></div></div>
+        <div className="card-h"><div className="tt"><h3>Scores</h3><span className="sub">Rubric {e.rubric?.code} v{e.rubric?.version} · each criterion 0 to 100</span></div><LangToggle lang={lang} onChange={setLang} /></div>
         {err && <Banner tone="bad" title={err} />}
         {!e.rubric ? <Banner tone="warn" title="No published Round 2 rubric" /> : <div className="tw"><table className="x-cmp"><thead><tr><th>Criterion</th>{team.map(t => <th key={t.id}>{t.name.split(" ")[0]}</th>)}</tr></thead><tbody>
-          {crit.map(c => <tr key={c.key}><td>{c.label} <span className="faint small">{c.weight}%</span></td>{team.map(t => <td key={t.id}><input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || !!sub(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setM({ ...m, [t.id]: { ...m[t.id], [c.key]: x.target.value.replace(/\D/g, "").slice(0, 3) } })} /></td>)}</tr>)}
+          {crit.map(c => <tr key={c.key}><td>{lang !== "ar" && <>{c.label} <span className="faint small">{c.weight}%</span></>}{lang !== "en" && <div className="crit-ar" lang="ar" dir="rtl">{c.label_ar || (lang === "ar" ? c.label : "")}{lang === "ar" && <span className="faint small"> {c.weight}%</span>}</div>}</td>{team.map(t => <td key={t.id}><input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || !!sub(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setM({ ...m, [t.id]: { ...m[t.id], [c.key]: x.target.value.replace(/\D/g, "").slice(0, 3) } })} /></td>)}</tr>)}
           {e.rubric.identity_required && <tr><td>National identity</td>{team.map(t => <td key={t.id}><span className="f3-yn"><button type="button" disabled={!editable || !!sub(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: true })}>Y</button><button type="button" disabled={!editable || !!sub(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: false })}>N</button></span></td>)}</tr>}
           <tr className="tot"><td>Total</td>{team.map(t => <td key={t.id}>{sub(t.id) ? sub(t.id).total : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
           <tr><td></td>{team.map(t => <td key={t.id}>{sub(t.id) ? <Badge tone="ok">Saved</Badge> : editable && <Btn sm disabled={!filled(t.id) || !!busy} onClick={() => submit([t.id])}>Save</Btn>}</td>)}</tr>

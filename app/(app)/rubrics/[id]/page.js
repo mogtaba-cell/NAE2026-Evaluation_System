@@ -19,13 +19,22 @@ export default function RubricBuilder({ params }) {
       sub={`${d.data.rubric.name} · used by ${d.data.subs.map(s => s.name).join(", ") || "no subpathway yet"} · ${d.data.scored} scores saved`} />
     {err && <Banner tone="bad" title={err} />}
     {d.data.scored > 0 && <Banner title="Scores already use this rubric">Editing creates a new draft version. Scores already saved keep the version they were scored with; new scores use the newly published version.</Banner>}
-    <Card title="Criteria" sub="Each criterion is scored 0 to 100. The total is the weighted sum, rounded up." right={<span className={`badge ${tot === 100 ? "ok" : "warn"}`}>Total {tot}%</span>}>
-      {crit.map((c, i) => <div key={i} className="grid" style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1.6fr) 90px auto", gap: 8, alignItems: "end" }}>
-        <Field label={i === 0 ? "Criterion" : ""}><input className="input" value={c.label} disabled={!admin} onChange={e => upd(i, "label", e.target.value)} /></Field>
-        <Field label={i === 0 ? "What evaluators look for" : ""}><input className="input" value={c.description || ""} disabled={!admin} onChange={e => upd(i, "description", e.target.value)} /></Field>
-        <Field label={i === 0 ? "Weight %" : ""}><input className="input num" inputMode="numeric" value={c.weight} disabled={!admin} onChange={e => upd(i, "weight", e.target.value.replace(/\D/g, ""))} /></Field>
-        {admin && <Btn v="ghost" title="Remove" onClick={() => setCrit(crit.filter((_, j) => j !== i))}>×</Btn>}</div>)}
-      {admin && <div><Btn sm onClick={() => setCrit([...crit, { label: "", weight: 0, description: "" }])}>Add criterion</Btn></div>}
+    <Card title="Criteria" sub="Each criterion is scored 0 to 100. The total is the weighted sum, rounded up. Add Arabic so evaluators can switch language while scoring." right={<span className={`badge ${tot === 100 ? "ok" : "warn"}`}>Total {tot}%</span>}>
+      {crit.map((c, i) => <div key={i} className="rb-crit">
+        <div className="rb-row">
+          <Field label={`Criterion ${i + 1} (English)`}><input className="input" value={c.label} disabled={!admin} onChange={e => upd(i, "label", e.target.value)} /></Field>
+          <Field label="What evaluators look for (English)"><input className="input" value={c.description || ""} disabled={!admin} onChange={e => upd(i, "description", e.target.value)} /></Field>
+          <Field label="Weight %"><input className="input num" inputMode="numeric" value={c.weight} disabled={!admin} onChange={e => upd(i, "weight", e.target.value.replace(/\D/g, ""))} /></Field>
+          {admin ? <Btn v="ghost" title="Remove criterion" onClick={() => setCrit(crit.filter((_, j) => j !== i))}>×</Btn> : <span />}
+        </div>
+        <div className="rb-row ar">
+          <Field label="Criterion name (Arabic)"><input className="input" lang="ar" dir="rtl" value={c.label_ar || ""} disabled={!admin} placeholder="اسم المعيار" onChange={e => upd(i, "label_ar", e.target.value)} /></Field>
+          <Field label="What evaluators look for (Arabic)"><input className="input" lang="ar" dir="rtl" value={c.description_ar || ""} disabled={!admin} placeholder="ما يبحث عنه المقيّم" onChange={e => upd(i, "description_ar", e.target.value)} /></Field>
+          <span />
+        </div>
+      </div>)}
+      {crit.length > 0 && crit.some(c => c.label && !c.label_ar) && <p className="small" style={{ color: "var(--warn)" }}>{crit.filter(c => c.label && !c.label_ar).length} of {crit.length} criteria have no Arabic name. Evaluators who choose Arabic will see English for those.</p>}
+      {admin && <div><Btn sm onClick={() => setCrit([...crit, { label: "", label_ar: "", weight: 0, description: "", description_ar: "" }])}>Add criterion</Btn></div>}
       <Switch checked={idn} onChange={v => admin && setIdn(v)} label="Also ask evaluators: does the work express national identity? (yes/no)" />
       <div className="meter"><div className="grow stack s4"><span className="strong">Total {tot}%</span><span className="small" style={{ color: tot === 100 ? "var(--ok)" : "var(--warn)" }}>{tot === 100 ? "Ready to publish" : tot < 100 ? `${100 - tot} points left to assign` : `${tot - 100} points over`}</span></div>
         {admin && <><Btn busy={busy === "save"} onClick={save}>Save draft</Btn><Btn v="primary" busy={busy === "pub"} disabled={tot !== 100 || crit.some(c => !c.label)} onClick={publish}>Publish</Btn></>}</div>

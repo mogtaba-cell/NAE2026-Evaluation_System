@@ -101,7 +101,17 @@ export function Pager({ page, per, count, onPage }) {
 }
 export function Modal({ open, title, sub, onClose, children, footer, wide }) {
   const ref = useRef(null);
-  useEffect(() => { if (!open) return; const k = e => { if (e.key === "Escape") onClose(); }; document.addEventListener("keydown", k); ref.current?.focus(); return () => document.removeEventListener("keydown", k); }, [open, onClose]);
+  // Keep the latest onClose without re-running the effect: pages pass a new function on every render,
+  // and re-running it on each keystroke used to pull the cursor out of the field being typed in.
+  const closeRef = useRef(onClose); closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const k = e => { if (e.key === "Escape") closeRef.current?.(); };
+    document.addEventListener("keydown", k);
+    // Focus the dialog once when it opens, unless a field inside it already has the cursor (autoFocus).
+    if (ref.current && !ref.current.contains(document.activeElement)) ref.current.focus();
+    return () => document.removeEventListener("keydown", k);
+  }, [open]);
   if (!open) return null;
   return <div className="scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className={`modal ${wide ? "w720" : ""}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref} style={{ outline: "none" }}>
     <div className="mh"><div className="tt"><h2>{title}</h2>{sub && <p className="sub">{sub}</p>}</div><Btn v="ghost" title="Close" onClick={onClose}>×</Btn></div>

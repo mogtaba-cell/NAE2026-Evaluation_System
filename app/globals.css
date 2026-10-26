@@ -691,3 +691,14 @@ table.t{width:100%;border-collapse:collapse;min-width:640px}
 @media (max-width:1320px){.f3-queue .qb{max-height:340px;overflow-y:auto}}
 .fv-tools{flex:0 1 auto;min-width:0;flex-wrap:wrap}
 .fv-stage:fullscreen{aspect-ratio:auto;height:100vh;border-radius:0;border:0}
+/* Arabic rubric criteria (scoring form, session sheet, rubric builder) */
+.crit-ar{direction:rtl;text-align:right;font-family:"IBM Plex Sans Arabic",var(--sans);unicode-bidi:plaintext}
+.f3-crit .lab .crit-ar{margin-top:6px}
+.f3-crit .lab .crit-ar:first-child{margin-top:0}
+.f3-crit .lab .crit-ar b{font-size:15px;line-height:22px}
+.f3-crit .lab .crit-ar span{font-size:13px;line-height:20px}
+.rb-crit{border:1px solid var(--rule);border-radius:var(--r);padding:var(--s3);display:grid;gap:var(--s2)}
+.rb-crit .rb-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 90px 32px;gap:8px;align-items:end}
+.rb-crit .rb-row.ar{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 130px}
+.rb-crit .rb-row.ar input{direction:rtl;font-family:"IBM Plex Sans Arabic",var(--sans)}
+@media (max-width:640px){.rb-crit .rb-row,.rb-crit .rb-row.ar{grid-template-columns:1fr}}
