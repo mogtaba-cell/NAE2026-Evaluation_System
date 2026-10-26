@@ -22,8 +22,9 @@ export function useLang(depKey, hasEn = true, hasAr = true) {
   return [lang, set];
 }
 
-export function LangToggle({ lang, onChange }) {
-  return <div className="x-lang" role="group" aria-label="Language">{[["en", "English"], ["ar", "العربية"], ["both", "Both"]].map(([k, l]) => <button key={k} type="button" className={lang === k ? "on" : ""} aria-pressed={lang === k} onClick={() => onChange(k)} lang={k === "ar" ? "ar" : undefined}>{l}</button>)}</div>;
+// both=false: scoring screens offer English or Arabic only (side by side doesn't fit criteria with guidance).
+export function LangToggle({ lang, onChange, both = true }) {
+  return <div className="x-lang" role="group" aria-label="Language">{[["en", "English"], ["ar", "العربية"], ...(both ? [["both", "Both"]] : [])].map(([k, l]) => <button key={k} type="button" className={lang === k ? "on" : ""} aria-pressed={lang === k} onClick={() => onChange(k)} lang={k === "ar" ? "ar" : undefined}>{l}</button>)}</div>;
 }
 
 export const hasArabic = criteria => (criteria || []).some(c => c.label_ar || c.description_ar);
@@ -44,3 +45,18 @@ export function CritText({ c, lang, weight = true }) {
 
 // Short name only (tables, confirmation dialog).
 export const critName = (c, lang) => lang === "ar" ? (c.label_ar || c.label) : lang === "both" && c.label_ar ? `${c.label} / ${c.label_ar}` : c.label;
+
+// Scoring screens: one language at a time ("Both" chosen elsewhere shows English here), Arabic right to left.
+export const scoreLang = l => (l === "ar" ? "ar" : "en");
+export const SL = {
+  en: { scores: "Scores", yourScore: "Your score", criterion: "Criterion", total: "Total", identity: "National identity", identityQ: "Does the work clearly express UAE national identity?", identityReq: " Required to go through.", yes: "Yes", no: "No", y: "Y", n: "N",
+    framing: "Framing for the showcase", framingQ: "If this artwork is selected, does it need framing?", needs: "Needs framing", glass: "Protective glass", comment: "Comment (optional)", commentPh: "Anything the team should know",
+    wtotal: "Weighted total", grade: "Grade", teamResult: "Team result", of: (a, b) => `${a} of ${b} criteria`, saveDraft: "Save draft", submit: "Submit score", each: "each criterion 0 to 100", rubric: "Rubric", round: "Round",
+    absent: "Absent", save: "Save", saved: "Saved", undoAbsent: "Undo absent", saveAll: n => `Save all ${n}`, next: "Next artwork ›", noAr: null },
+  ar: { scores: "الدرجات", yourScore: "درجتك", criterion: "المعيار", total: "المجموع", identity: "الهوية الوطنية", identityQ: "هل يعبّر العمل بوضوح عن الهوية الوطنية الإماراتية؟", identityReq: " مطلوب للتأهل.", yes: "نعم", no: "لا", y: "نعم", n: "لا",
+    framing: "التأطير للمعرض", framingQ: "إذا اختير هذا العمل، هل يحتاج إلى تأطير؟", needs: "يحتاج إلى تأطير", glass: "زجاج واقٍ", comment: "ملاحظة (اختياري)", commentPh: "أي شيء يحتاج الفريق إلى معرفته",
+    wtotal: "المجموع الموزون", grade: "التقدير", teamResult: "نتيجة الفريق", of: (a, b) => `${a} من ${b} معايير`, saveDraft: "حفظ كمسودة", submit: "إرسال الدرجة", each: "كل معيار من 0 إلى 100", rubric: "المعيار المعتمد", round: "الجولة",
+    absent: "غائب", save: "حفظ", saved: "محفوظ", undoAbsent: "إلغاء الغياب", saveAll: n => `حفظ الكل (${n})`, next: "العمل التالي ‹", noAr: "لا توجد ترجمة عربية لهذا المعيار" }
+};
+// Name and guidance of a criterion in one language (Arabic falls back to English text).
+export const critIn = (c, sl) => sl === "ar" ? { label: c.label_ar || c.label, desc: c.description_ar || c.description || "", missing: !c.label_ar } : { label: c.label, desc: c.description || "", missing: false };

@@ -5,7 +5,7 @@ import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, 
 import FileViewer from "@/components/FileViewer";
 import EntryAbout from "@/components/EntryAbout";
 import { total, gradeFor } from "@/components/ScoreForm";
-import { useLang, LangToggle } from "@/components/lang";
+import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/components/lang";
 
 const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identity && idn !== true) return false; return true; };
 
@@ -20,7 +20,8 @@ export default function Session({ params }) {
   const [finishAsk, setFinishAsk] = useState(null);
   const [edit, setEdit] = useState(null);
   const e = d.data?.entries.find(x => x.code === d.data.current);
-  const [lang, setLang] = useLang(id);
+  const [lang0, setLang] = useLang(id);
+  const lang = scoreLang(lang0), ar = lang === "ar", T = SL[lang];
   const admin = meta?.data?.me?.role === "admin";
   useEffect(() => { if (!e) return; const mm = {}, ii = {}; d.data.team.forEach(t => { const s = e.scores.find(x => x.evaluator_id === t.id); mm[t.id] = { ...(s?.scores || {}) }; ii[t.id] = s?.national_identity ?? null; }); setM(mm); setIdn(ii); }, [e?.code, d.data]); // eslint-disable-line
   useEffect(() => { setErr(null); }, [e?.code]); // eslint-disable-line
@@ -94,7 +95,7 @@ export default function Session({ params }) {
     <p className="small faint" style={{ marginTop: -8 }}>Team: {team.map(t => t.name).join(", ")}</p>
     {s.status === "planned" && <Banner title="Start the session when the team is in the room">Scores can be entered once the session has started. You can still edit the team and the artworks, or cancel the session.</Banner>}
     {s.status === "done" && <Banner title="This session is finished">Entries that weren't fully scored can go into another session (physical artworks are back in storage).{admin ? " As an admin you can still correct scores here." : ""}</Banner>}
-    <div className="f3-sc">
+    <div className="f3-sc f3-sess">
       <section className="card f3-queue"><div className="qh"><b>{entries.length} artworks</b><span className="small faint">{entries.filter(x => x.result?.complete).length} fully scored</span></div>
         <div className="qb">{entries.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => open(x.code)} onKeyDown={k => k.key === "Enter" && open(x.code)}><div className="t"><b>{x.code}</b><span dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</span></div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status === "submitted").length}/${team.length}`}</span></div>)}</div></section>
       {e ? <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
@@ -102,20 +103,20 @@ export default function Session({ params }) {
         <FileViewer files={e.files || []} tall title="Photos for reference; judge the artwork in the room" />
       </div> : <Loading />}
       {e && <div className="stack" style={{ gap: 16, minWidth: 0 }}>
-        <section className="card">
-          <div className="card-h"><div className="tt"><h3>Scores</h3><span className="sub">Rubric {e.rubric?.code} v{e.rubric?.version} · each criterion 0 to 100</span></div><LangToggle lang={lang} onChange={setLang} /></div>
+        <section className={`card score-card${ar ? " is-ar" : ""}`} dir={ar ? "rtl" : "ltr"} lang={ar ? "ar" : "en"} style={ar ? { fontFamily: AR_FONT } : undefined}>
+          <div className="card-h"><div className="tt"><h3>{T.scores}</h3><span className="sub">{T.rubric} <span dir="ltr">{e.rubric?.code} v{e.rubric?.version}</span> · {T.each}</span></div><LangToggle lang={lang} onChange={setLang} both={false} /></div>
           {err && <Banner tone="bad" title={err} />}
-          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>Criterion</th>{team.map(t => <th key={t.id} title={t.name}>{t.name}</th>)}</tr></thead><tbody>
-            {crit.map(c => <tr key={c.key}><td>{lang !== "ar" && <>{c.label} <span className="faint small">{c.weight}%</span></>}{lang !== "en" && <div className="crit-ar" lang="ar" dir="rtl">{c.label_ar || (lang === "ar" ? c.label : "")}{lang === "ar" && <span className="faint small"> {c.weight}%</span>}</div>}</td>
-              {team.map(t => <td key={t.id}>{absent(t.id) ? <span className="faint small">Absent</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setM({ ...m, [t.id]: { ...m[t.id], [c.key]: x.target.value.replace(/\D/g, "").slice(0, 3) } })} />}</td>)}</tr>)}
-            {e.rubric.identity_required && <tr><td>National identity</td>{team.map(t => <td key={t.id}>{absent(t.id) ? "" : <span className="f3-yn"><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: true })}>Y</button><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: false })}>N</button></span>}</td>)}</tr>}
-            <tr className="tot"><td>Total</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
-            <tr><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">Saved</Badge> : absent(t.id) ? (editable ? <Btn sm v="ghost" busy={busy === "abs"} onClick={() => markAbsent(t.id, true)}>Undo absent</Btn> : <Badge>Absent</Badge>) : editable && <div className="stack s4" style={{ alignItems: "flex-end" }}><Btn sm disabled={!filled(t.id) || !!busy} onClick={() => setConfirm({ evs: [t.id] })}>Save</Btn><Btn sm v="ghost" disabled={!!busy} onClick={() => setAbsentAsk(t)}>Absent</Btn></div>}</td>)}</tr>
+          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>{T.criterion}</th>{team.map(t => <th key={t.id} title={t.name}>{t.name}</th>)}</tr></thead><tbody>
+            {crit.map(c => { const ct = critIn(c, lang); return <tr key={c.key}><td><div className="cl"><b>{ct.label} <span className="w">{c.weight}%</span></b>{ct.desc && <span className="d">{ct.desc}</span>}{ct.missing && ar && <span className="d">{T.noAr}</span>}</div></td>
+              {team.map(t => <td key={t.id}>{absent(t.id) ? <span className="faint small">{T.absent}</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setM({ ...m, [t.id]: { ...m[t.id], [c.key]: x.target.value.replace(/\D/g, "").slice(0, 3) } })} />}</td>)}</tr>; })}
+            {e.rubric.identity_required && <tr><td><div className="cl"><b>{T.identity}</b></div></td>{team.map(t => <td key={t.id}>{absent(t.id) ? "" : <span className="f3-yn"><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: true })}>{T.y}</button><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: false })}>{T.n}</button></span>}</td>)}</tr>}
+            <tr className="tot"><td>{T.total}</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
+            {(editable || team.some(t => saved(t.id) || absent(t.id))) && <tr className="act"><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? (editable ? <Btn sm v="ghost" busy={busy === "abs"} onClick={() => markAbsent(t.id, true)}>{T.undoAbsent}</Btn> : <Badge>{T.absent}</Badge>) : editable && <div className="stack s4" style={{ alignItems: "center" }}><Btn sm disabled={!filled(t.id) || !!busy} onClick={() => setConfirm({ evs: [t.id] })}>{T.save}</Btn><Btn sm v="ghost" disabled={!!busy} onClick={() => setAbsentAsk(t)}>{T.absent}</Btn></div>}</td>)}</tr>}
           </tbody></table></div>}
-          {res && <div className="x-tot"><div className="stack s4"><span className="s">Team result</span><span className="v">{res.team != null ? res.final ?? res.team : "–"}</span></div><div className="stack s4"><span className="s">Grade</span><span style={{ fontSize: 18, fontWeight: 600 }}>{res.team != null ? res.grade || gradeFor(res.team, bands) : "–"}</span></div><span className="s" style={{ marginLeft: "auto", textAlign: "right" }}>{resultText}</span></div>}
-          {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>Framing for the showcase</b><span>If this artwork is selected, does it need framing?</span></div>
-            <div className="stack s4"><Check label="Needs framing" disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label="Protective glass" disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
-          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>{pending.length > 1 && <Btn v="primary" disabled={!!busy} onClick={() => setConfirm({ evs: pending })}>Save all {pending.length}</Btn>}{idx < entries.length - 1 && <Btn onClick={() => open(entries[idx + 1].code)}>Next artwork ›</Btn>}</div>
+          {res && <div className="x-tot"><div className="stack s4"><span className="s">{T.teamResult}</span><span className="v">{res.team != null ? res.final ?? res.team : "–"}</span></div><div className="stack s4"><span className="s">{T.grade}</span><span style={{ fontSize: 18, fontWeight: 600 }}>{res.team != null ? res.grade || gradeFor(res.team, bands) : "–"}</span></div><span className="s" dir="ltr" style={{ marginInlineStart: "auto", textAlign: "end" }}>{resultText}</span></div>}
+          {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
+            <div className="stack s4"><Check label={T.needs} disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label={T.glass} disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
+          <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>{pending.length > 1 && <Btn v="primary" disabled={!!busy} onClick={() => setConfirm({ evs: pending })}>{T.saveAll(pending.length)}</Btn>}{idx < entries.length - 1 && <Btn onClick={() => open(entries[idx + 1].code)}>{T.next}</Btn>}</div>
         </section>
         <EntryAbout e={{ ...e, id: e.code, pathway: s.pathway }} compact />
       </div>}

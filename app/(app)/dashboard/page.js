@@ -1,6 +1,7 @@
 "use client";
 import { useApi, useMeta, PageHead, Kpis, Card, Table, Btn, Badge, Prog, Two, Loading, when, dshort, dueTxt, fmt, Empty } from "@/components/ui";
 import { useRouter } from "next/navigation";
+import Insights from "@/components/Insights";
 
 const hello = n => { const h = +new Date().toLocaleString("en-GB", { hour: "numeric", hour12: false, timeZone: "Asia/Dubai" }); return `${h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"}, ${String(n || "").split(" ")[0]}`; };
 const today = () => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Dubai" });
@@ -73,18 +74,15 @@ export default function Dashboard() {
   if (role === "management") {
     const m = x.mine;
     return <>
-      <PageHead title={hello(me?.name)} sub={today()} actions={<Btn v="primary" href="/reviews?mine=1">My reviews</Btn>} />
+      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews?mine=1">My reviews</Btn></>} />
       <Kpis items={[["My open reviews", m.open.length, `${m.open.filter(r => Date.parse(r.due_at) < Date.now()).length} overdue`, m.open.some(r => Date.parse(r.due_at) < Date.now()) ? "warn" : ""], ["Decided", m.decided, `${m.overridden} overridden`], ["All open reviews", x.reviews.open, `${x.reviews.overdue} overdue`], ["Entries", fmt(x.total), `${fmt(x.schools)} schools`]]} />
       <Card title="Waiting for your decision" flush>{m.open.length ? <Table cols={["Entry", "Reason", { h: "Due", cls: "r" }]} rows={m.open.map(r => { const [t, tone] = dueTxt(r.due_at); return [<Two key="a" a={<span className="code">{r.entry?.code}</span>} b={r.entry?.title_en} />, r.reason, <Badge key="c" tone={tone}>{t}</Badge>]; })} onRow={i => location.assign(`/reviews/${m.open[i].id}`)} /> : <div style={{ padding: 20 }}><Empty title="No reviews waiting">Flagged entries assigned to you appear here.</Empty></div>}</Card>
       <Pathways d={x} />
     </>;
   }
-  // leadership
-  const by = dim => (x.students_stats || []).concat(x.school_stats || []).filter(r => r.dim === dim);
+  // HQ (higher management): the insights view is the home page
   return <>
     <PageHead title={hello(me?.name)} sub={`${today()} · NAE 2026 at a glance`} actions={<><Btn href="/reports">Reports</Btn><Btn v="primary" href="/final-results">Final results</Btn></>} />
-    <Kpis items={[["Entries", fmt(x.total)], ["Students", fmt(x.students)], ["Schools", fmt(x.schools)], ["Reviews open", x.reviews.open, `${x.reviews.overdue} overdue`]]} />
-    <Pathways d={x} />
-    <div className="g grid g2" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}><Bars title="Entries by region" rows={by("region")} /><Bars title="Entries by school type" rows={by("type")} /><Bars title="Students by gender" rows={by("gender")} /><Bars title="Students by nationality" rows={by("nationality")} /></div>
+    <Insights />
   </>;
 }
