@@ -30,6 +30,7 @@ export default function Dashboard() {
     const a = x.attention; const un = Object.entries(a.unallocated || {});
     const todo = [
       ...meta?.data?.pathways?.filter(p => p.entries && p.check.some(c => !c.ok && c.key === "rubrics")).map(p => [`${p.name}: rubrics missing`, p.check.find(c => c.key === "rubrics").text + " have a published rubric", <Btn key="r" sm href="/rubrics">Rubrics</Btn>]) || [],
+      ...(x.lateRounds || []).map(r => [`${r.pathway} Round ${r.round_no} is past its closing date`, `It was planned to close on ${r.closes_on}. Close it when scoring is finished.`, <Btn key={"lr" + r.id} sm href="/rounds">Rounds</Btn>]),
       ...(x.reviews.overdue ? [[`${x.reviews.overdue} reviews overdue`, `${x.reviews.open} open in total`, <Btn key="v" sm href="/reviews">View</Btn>]] : []),
       ...un.map(([p, n]) => [`${n} ${p} entries not allocated`, "Allocate so coordinators can follow up with schools", <Btn key="al" sm href={`/allocation?pathway=${p}`}>Allocate</Btn>]),
       ...(a.unmatched ? [[`${a.unmatched} Drive folders not matched`, "Link them to entries or ignore them", <Btn key="u" sm href="/files">Open</Btn>]] : []),
@@ -48,7 +49,7 @@ export default function Dashboard() {
     const mySessions = x.sessions.filter(s => s.mine && s.status !== "done");
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/entries?mine=1">My entries</Btn><Btn v="primary" href="/sessions">Scoring sessions</Btn></>} />
-      <Kpis items={[["My entries", m.entries, `${m.schools} schools`], ["To score", sum("to_score") + sum("in_progress"), "in open rounds", "brand"], ["Needs review", sum("review"), "with management", sum("review") ? "warn" : ""], ["Through", sum("through") + sum("final"), "so far", "ok"]]} />
+      <Kpis items={[["My entries", m.entries, `${m.schools} schools`], ["To score", sum("to_score") + sum("in_progress"), "in open rounds", "brand"], ["Needs review", sum("review"), "with management", sum("review") ? "warn" : ""], ["Through to Round 2", Object.entries(st).filter(([k]) => k.startsWith("2:")).reduce((a, [, n]) => a + n, 0), "so far", "ok"], ["Passed Round 2", m.r2passed || 0, "", "ok"]]} />
       <div className="x-side">
         <Card title="My scoring sessions" right={<Btn sm v="ghost" href="/sessions">All sessions</Btn>}>{mySessions.length ? <div className="x-todo">{mySessions.map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} {s.time_text || ""} · {s.venue || ""} · {s.count} entries</span></div><Btn sm v={s.status === "live" ? "primary" : "secondary"} href={`/sessions/${s.id}`}>{s.status === "live" ? "Continue" : "Open"}</Btn></div>)}</div> : <p className="muted">No sessions planned. Physical Round 2 entries are scored in sessions you create.</p>}</Card>
         <Card title="Follow up with schools">{m.nofiles.length || lg?.mineMissing?.length || m.collections.length ? <div className="x-todo">
@@ -62,7 +63,7 @@ export default function Dashboard() {
   if (role === "storage") {
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/collections">Collections</Btn><Btn v="primary" href="/pull-list">Pull lists</Btn></>} />
-      <Kpis items={[["Physical entries", lg.total, "Round 2"], ["To collect", lg.to_collect, `${lg.unbatched} not scheduled`], ["In storage", lg.storage, "Room B", "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"]]} />
+      <Kpis items={[["Physical entries", lg.total, "Round 2"], ["To collect", lg.to_collect, `${lg.unbatched} not scheduled`], ["In storage", lg.storage, "", "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"], ["Framing", lg.framing || 0, `${lg.framer || 0} at the framer`]]} />
       <div className="x-side">
         <Card title="Upcoming sessions" sub="Pull lists are made from these">{x.sessions.filter(s => s.status !== "done").length ? <div className="x-todo">{x.sessions.filter(s => s.status !== "done").map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} · {s.venue || ""} · {s.count} entries</span></div><Btn sm href={`/pull-list?session=${s.id}`}>Pull list</Btn></div>)}</div> : <p className="muted">No sessions planned.</p>}</Card>
         <Bars title="Shelves" rows={Object.entries(lg.shelves).map(([label, n]) => ({ label, n }))} />

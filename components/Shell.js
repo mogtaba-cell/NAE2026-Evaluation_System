@@ -11,6 +11,7 @@ function isOn(href, path, sp) {
   const [p, qs] = href.split("?");
   if (qs) return path === p && sp.toString().includes(qs);
   if (p === "/dashboard") return path === p;
+  if (path === p && sp.get("scope")) return false;
   return path === p || path.startsWith(p + "/");
 }
 
@@ -43,8 +44,10 @@ function Top({ session, onMenu }) {
 
 export default function Shell({ session, children }) {
   const [open, setOpen] = useState(false);
-  const path = usePathname();
+  const path = usePathname(); const router = useRouter();
   useEffect(() => { setOpen(false); }, [path]);
+  // a temporary password must be changed before using the system
+  useEffect(() => { if (session.mcp && path !== "/account") router.replace("/account"); }, [session.mcp, path]); // eslint-disable-line
   return <MetaProvider><ToastProvider>
     <div className={`app${open ? " nav-open" : ""}`} onClick={e => { if (open && e.target.classList?.contains("app")) setOpen(false); }}>
       <Side session={session} open={open} onNav={() => setOpen(false)} />

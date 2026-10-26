@@ -1,16 +1,17 @@
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q, all, inChunks } from "@/lib/db";
 import { createReview } from "@/lib/scoring";
-import { canSeeEntry, can } from "@/lib/perms";
+import { canWorkOnEntry, can, mySessionEntryIds } from "@/lib/perms";
 import { loadStructure, roundOf } from "@/lib/structure";
 
 export const GET = route(["admin", "management", "coordinator", "leadership"], async ({ session, url }) => {
   const scope = url.searchParams.get("scope") || (session.role === "management" ? "mine" : "all");
   const status = url.searchParams.get("status") || "open";
-  let qy = db().from("nae_reviews").select("*, entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, school:nae_schools(name))").order(status === "open" ? "due_at" : "decided_at", { ascending: status === "open" });
+  let qy = db().from("nae_reviews").select("*, entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, coordinator_id, school:nae_schools(name))").order(status === "open" ? "due_at" : "decided_at", { ascending: status === "open" });
   qy = status === "open" ? qy.eq("status", "open") : qy.neq("status", "open");
   if (scope === "mine") qy = qy.eq("manager_id", session.sub);
-  const rows = await all(() => qy);
+  let rows = await all(() => qy);
+  if (session.role === "coordinator") { const mine = new Set(await mySessionEntryIds(session)); rows = rows.filter(r => r.entry && (r.entry.coordinator_id === session.sub || mine.has(r.entry_id))); }
   const S = await loadStructure();
   const scores = await inChunks(rows.map(r => r.entry_id), ids => q(db().from("nae_scores").select("entry_id, round_id, total, status").in("entry_id", ids).eq("status", "submitted")));
   const accs = await q(db().from("nae_accounts").select("id, display_name, role"));
@@ -27,7 +28,7 @@ export const GET = route(["admin", "management", "coordinator", "leadership"], a
 export const POST = route(["admin", "coordinator", "management"], async ({ session, request }) => {
   const b = await body(request);
   const e = await q(db().from("nae_entries").select("*").eq("code", b.entry_code).maybeSingle()); if (!e) throw bad("Entry not found.");
-  if (!(await canSeeEntry(session, e))) throw forbidden();
+  if (!(await canWorkOnEntry(session, e))) throw forbidden();
   if (!String(b.reason || "").trim()) throw bad("Pick a reason.");
   const S = await loadStructure(); const r = roundOf(S, e.pathway_code, Number(b.round_no || e.current_round));
   const res = await q(db().from("nae_results").select("team").eq("entry_id", e.id).eq("round_no", r.round_no).maybeSingle());

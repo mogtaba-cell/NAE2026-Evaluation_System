@@ -2,7 +2,7 @@ import { route } from "@/lib/api";
 import { db, qc } from "@/lib/db";
 export const GET = route(["admin"], async ({ url }) => {
   const role = url.searchParams.get("role"); const page = Math.max(0, parseInt(url.searchParams.get("page")) || 0); const per = 30;
-  const term = String(url.searchParams.get("q") || "").replace(/[%,()]/g, " ").trim();
+  const term = String(url.searchParams.get("q") || "").replace(/[%,()."\\*:]/g, " ").trim();
   let qy = db().from("nae_audit").select("*", { count: "exact" }).order("at", { ascending: false });
   if (role) qy = qy.eq("actor_role", role);
   if (term) qy = qy.or(`action.ilike.%${term}%,detail.ilike.%${term}%,actor_name.ilike.%${term}%`);

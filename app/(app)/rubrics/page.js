@@ -19,7 +19,7 @@ export default function Rubrics() {
       <span key="d" className="row" style={{ gap: 4 }}>{r.published ? <Badge tone="ok">v{r.published.version}</Badge> : null}{r.draft ? <Badge tone="warn">Draft v{r.draft.version}</Badge> : null}</span>])} /></Card>
     <Modal open={!!nw} title="New rubric" onClose={() => setNw(null)} footer={<><Btn onClick={() => setNw(null)}>Cancel</Btn><Btn v="primary" busy={busy} onClick={create}>Create draft</Btn></>}>
       {err && <Banner tone="bad" title={err} />}
-      {nw && <><Field label="Code" help="Short, e.g. PE_ANTHEM_R1"><input className="input" value={nw.code} onChange={e => setNw({ ...nw, code: e.target.value.toUpperCase() })} /></Field>
+      {nw && <><Field label="Code" help="Short, e.g. VA_PAINTING_R1"><input className="input" value={nw.code} onChange={e => setNw({ ...nw, code: e.target.value.toUpperCase() })} /></Field>
         <Field label="Name"><input className="input" value={nw.name} onChange={e => setNw({ ...nw, name: e.target.value })} /></Field>
         <Field label="Pathway"><select className="select" value={nw.pathway_code} onChange={e => setNw({ ...nw, pathway_code: e.target.value })}><option value="">Any</option>{meta?.data?.pathways.map(p => <option key={p.code} value={p.code}>{p.name}</option>)}</select></Field>
         <Field label="Start from"><select className="select" value={nw.copyFrom} onChange={e => setNw({ ...nw, copyFrom: e.target.value })}><option value="">Blank</option>{list.filter(r => r.published).map(r => <option key={r.id} value={r.id}>Copy of {r.code}</option>)}</select></Field></>}

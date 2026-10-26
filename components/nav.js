@@ -8,7 +8,7 @@ export const NAV = {
     ["Insights", [["/reports", "Reports and exports"], ["/final-results", "Final results"], ["/audit", "Audit log"]]]
   ],
   coordinator: [
-    ["Work", [["/dashboard", "My dashboard"], ["/sessions", "Scoring sessions"], ["/entries", "My entries"]]],
+    ["Work", [["/dashboard", "My dashboard"], ["/sessions", "Scoring sessions"], ["/entries", "My entries"], ["/entries?scope=all", "All entries"]]],
     ["Artwork", [["/collections", "Collections"], ["/logistics", "Artwork logistics"]]]
   ],
   evaluator: [["Scoring", [["/queue", "My queue", "queue"]]]],

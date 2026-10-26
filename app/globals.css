@@ -1,8 +1,7 @@
 /* NAE Evaluation System v2: design system carried over from the approved prototype */
 
-/* Modern, calm workspace: light sidebar + clean content panels. One light theme by design.
-   Rules: no gradients, no glass, no left-border accents, icons only where they do a job,
-   one accent (Gulf teal), ink-black primary actions, IBM Plex Sans + Plex Mono for codes, 4px spacing grid. */
+/* Look: the V6 system's palette and shapes (deep green, mist, sand; soft rounded cards; pill tabs and badges),
+   applied by the "V6 look" block at the end of this file. Inter for text, Plex Mono for codes, Plex Sans Arabic. */
 :root{
   --paper:#F3F3F0; --sheet:#FFFFFF; --wash:#EEEFEB; --wash2:#F7F7F5;
   --rule:#DCDDD7; --rule2:#C2C4BC;
@@ -702,3 +701,94 @@ table.t{width:100%;border-collapse:collapse;min-width:640px}
 .rb-crit .rb-row.ar{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 130px}
 .rb-crit .rb-row.ar input{direction:rtl;font-family:"IBM Plex Sans Arabic",var(--sans)}
 @media (max-width:640px){.rb-crit .rb-row,.rb-crit .rb-row.ar{grid-template-columns:1fr}}
+
+
+/* ===================== V6 look =====================
+   Deep green #1C3E3B, mist #B2C7C0, sand #EBE6DF, border #D8E0DC. Rounded cards (24px), soft shadows,
+   pill tabs on a mist strip, rounded buttons and fields, sand table headers, a deep green header strip. */
+:root{
+  --deep:#1C3E3B; --deep2:#15302D; --mist:#B2C7C0; --mist2:#DCE7E3; --sand:#EBE6DF; --sand2:#F5F2EE;
+  --paper:#F4F1EC; --sheet:#FFFFFF; --wash:#EEF2F0; --wash2:#F6F8F7;
+  --rule:#D8E0DC; --rule2:#C3D0CB;
+  --ink:#1C3E3B; --ink2:#3F5A56; --ink3:#647A76; --ink4:#98A8A4;
+  --accent:#1C3E3B; --accent-ink:#15302D; --accent-wash:#E4EDEA;
+  --r:14px; --r2:24px; --sh:0 4px 14px rgba(0,0,0,.06); --sh2:0 2px 8px rgba(0,0,0,.07);
+  --sans:Inter,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+body{background:linear-gradient(180deg,#EBE6DF 0%,#FFFFFF 50%,#EBE6DF 100%) fixed;color:var(--ink)}
+h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
+/* shell */
+.side{background:var(--deep);border-right:0;color:#fff}
+.logo b{color:#fff;font-weight:800} .logo span{color:var(--mist)}
+.nav-group .gl{color:var(--mist);opacity:.85}
+.side .nav a{color:#E8EFEC;border-radius:12px}
+.side .nav a:hover{background:rgba(255,255,255,.08);color:#fff}
+.side .nav a.on{background:var(--mist);color:var(--deep);font-weight:700}
+.nav a .cnt{color:var(--mist)} .nav a.on .cnt{color:var(--deep)}
+.me{border-top-color:rgba(255,255,255,.14)} .me b{color:#fff} .me span,.me a{color:var(--mist)}
+.top{background:rgba(255,255,255,.86);backdrop-filter:saturate(1.2) blur(6px);border-bottom:1px solid var(--rule)}
+/* page header = V6 hero strip */
+.ph{background:var(--deep);color:#fff;border-radius:28px;padding:var(--s6) 28px;box-shadow:0 8px 24px rgba(0,0,0,.08);align-items:center}
+.ph h1,.ph .t h1{color:#fff}
+.ph .t .sub,.ph .sub{color:#D7E3DF}
+.ph .back,.ph a.back,.ph .crumb{color:var(--mist)}
+.ph .btn.secondary{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.35);color:#fff}
+.ph .btn.secondary:hover{background:rgba(255,255,255,.18)}
+.ph .btn.primary{background:#fff;color:var(--deep)}
+.ph .btn.primary:hover{background:var(--sand)}
+.ph .btn.ghost{color:var(--mist)}
+.ph .code{color:#fff}
+.ph .badge{background:rgba(255,255,255,.14);color:#fff}
+.ph .badge.ok{background:#CFE5D2;color:#1D4A27} .ph .badge.warn{background:#F6E2B8;color:#6B4300} .ph .badge.info{background:var(--mist);color:var(--deep)} .ph .badge.bad{background:#F3D3CE;color:#7D1D14}
+/* cards and panels */
+.card{border-radius:var(--r2);border:1px solid var(--rule);box-shadow:var(--sh)}
+.x-pwc,.x-col,.f3-queue{border-radius:20px}
+.x-kc{border-radius:14px}
+/* buttons and fields */
+.btn{border-radius:14px;font-weight:700}
+.btn.primary{background:var(--deep);color:#fff} .btn.primary:hover{background:var(--deep2)}
+.btn.secondary{background:#fff;border-color:var(--rule);color:var(--deep)} .btn.secondary:hover{background:var(--sand2);border-color:var(--rule2)}
+.btn.ghost{color:var(--deep)} .btn.ghost:hover{background:var(--mist2)}
+.btn.sm{border-radius:12px}
+.input,.select,.textarea{border-radius:14px;border-color:var(--rule)}
+.input:focus,.select:focus,.textarea:focus{border-color:var(--deep);box-shadow:0 0 0 3px var(--mist2)}
+/* tabs: pill tabs on a mist strip */
+.tabs{background:var(--mist);border-radius:18px;padding:8px;gap:8px;border-bottom:0;width:fit-content;max-width:100%}
+.tabs button{padding:8px 14px;border-radius:14px;border-bottom:0;margin:0;color:var(--deep);font-weight:700}
+.tabs button.on{background:#fff;color:var(--deep);border-bottom:0}
+.tabs button .n{color:var(--ink3)}
+.seg{background:var(--mist2);border-radius:14px}
+.seg button{border-radius:10px;color:var(--deep);font-weight:600}
+.seg button.on{background:#fff}
+/* badges */
+.badge{height:24px;padding:0 10px;background:var(--sand);color:var(--deep)}
+.badge.solid{background:var(--deep)} .badge.brand{background:var(--mist2);color:var(--deep)}
+/* tables */
+.tbl th,table.tbl th,.table th,.x-cmp th{background:var(--sand)}
+.x-cmp th{padding-top:6px;padding-bottom:6px}
+.x-tot{background:var(--deep);border-radius:16px}
+/* scoring screens: the files stay on screen while you scroll (as in V6) */
+@media (min-width:1001px){
+  .sticky-view{position:sticky;top:76px;align-self:start}
+  .sticky-view .fv.tall .fv-stage{height:min(calc(100vh - 210px),760px)}
+}
+.f3-sc{grid-template-columns:232px minmax(0,1.15fr) minmax(360px,1fr)}
+@media (max-width:1320px){.f3-sc{grid-template-columns:minmax(0,1fr) minmax(340px,440px)}}
+@media (max-width:1000px){.f3-sc{grid-template-columns:minmax(0,1fr)}}
+.x-rec{grid-template-columns:minmax(0,1.2fr) minmax(340px,1fr)}
+/* readiness checklist */
+.x-ck{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+.x-ck>div{border-radius:14px}
+.x-ck b{display:flex;align-items:center;gap:6px;justify-content:space-between}
+.x-ck .tag{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:#fff;color:var(--warn)}
+.x-ck>div.hard{background:var(--bad-wash);border-color:var(--bad-line)} .x-ck>div.hard .tag{color:var(--bad)}
+.x-ck .fix{font-size:12px;font-weight:600;color:var(--deep);text-decoration:underline;text-underline-offset:2px;margin-top:2px}
+/* logistics board with six columns */
+.x-board.x-board6{grid-template-columns:repeat(6,minmax(220px,1fr));overflow-x:auto}
+/* session score sheet: full evaluator names */
+.sess-mx th{white-space:normal;max-width:120px;line-height:16px}
+.mgmt-row{background:#fff;border:1px solid var(--rule);border-radius:16px;padding:8px 14px;width:fit-content}
+.modal{border-radius:24px}
+.x-board6 .x-kc .row.between{flex-wrap:wrap;gap:4px}
+.x-kc .code{white-space:nowrap}
+.x-board.x-board6{grid-template-columns:repeat(6,minmax(232px,1fr))}

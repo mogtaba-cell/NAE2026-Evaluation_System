@@ -17,17 +17,16 @@ Built with Next.js 15 (App Router) and Supabase (Postgres), and hosted on Vercel
 ## How an entry moves
 
 1. **Import.** Admin uploads the submissions export. Rows are sorted by submission date and get short codes such as `VA-PD-0042`. Re-importing only updates details; scores and history are never touched.
-2. **Allocate.** Each school goes to one coordinator.
-3. **Round 1 opens.** Each entry is assigned to two evaluators who have logins. Assignment is balanced by workload.
-4. **Scoring.** Evaluators score each criterion from 0 to 100. The total is the weighted sum, rounded up. The team result is the average of the evaluators' totals, rounded up.
-5. **Automatic move-on.** When the scores are in, the entry goes through, does not go through, or goes to management review. It is flagged for review when it is within 3 points of the pass mark or the evaluators are more than 15 points apart.
-6. **Management review.** A review is due within 48 hours. The manager confirms the result, or overrides it with a reason.
-7. **Round 2.** Online subpathways are assigned to evaluators again. Subpathways marked Physical in Program setup follow this path instead:
-   - The storage team collects them, checks them in and shelves them.
-   - The coordinator creates a session, and the storage team gets a pull list sorted by shelf.
-   - Scores are entered in the room.
+2. **Allocate.** Each school goes to one coordinator. Coordinators see their own entries, plus an **All entries** view (files and details only) for reference.
+3. **Open a round.** The readiness checks must be green: "Must fix" items block opening, "Check" items can be overridden by an admin with a reason. Each round has its own **evaluator panel** (chosen per round, or everyone with a login in the pathway). Round 2 avoids giving an entry to its Round 1 evaluators where possible.
+4. **Scoring.** Evaluators score each criterion from 0 to 100 (criteria can be shown in English, Arabic or both). The total is the weighted sum, rounded up. Grades come from the rubric's grade lines (default A 80, B 50), which admins set per rubric. Every score on an entry uses the same rubric version: the one of the first score saved for it.
+5. **Automatic move-on.** When the scores are in, the team result (average of totals, rounded up) decides: through, not through, or management review. Each round can switch on or off: close to the pass mark or the grade A line (3 points by default; Round 2 uses the A line), evaluators more than 15 apart, and disagreement on national identity.
+6. **Management review.** Due within the round's review time. The manager confirms, or overrides the outcome (goes through or not, optionally with an adjusted result) with a reason. If the scores change after a decision, the entry comes back for review.
+7. **Round 2.** Online subpathways are assigned to evaluators again. Subpathways switched to Physical in Program setup are collected, checked in and stored (room and shelf chosen per batch), and scored in sessions. Several sessions can run at once; coordinators pick the schools. An evaluator can be marked absent for one artwork (at least 2 scores, and half the team, are needed). The team ticks **Needs framing** and **Protective glass** per artwork for the showcase.
+8. **Closing a round** is possible once every entry is scored, reassigned or marked "not scored". Closing locks the results: they are final. An admin can unlock one result or the whole round with a reason.
+9. **Final results.** The shortlist is every Round 2 entry with grade A that passed Round 2.
 
-Every change is written to the audit log.
+Every change is written to the audit log. Management opening an entry is recorded as "viewed by management"; anyone else can tick it on the entry page, and the entries list can filter on it.
 
 ## Submission files and previews
 
@@ -49,7 +48,7 @@ Every change is written to the audit log.
 
 ## Setup
 
-1. **Database.** In Supabase, run `supabase/v2_schema.sql` and then `supabase/v2_seed.sql` (the Arts track: Visual, Digital, Literary and Performing Arts). `supabase/v2_arts_only.sql` removed the old Expressions track from the first install.
+1. **Database.** In Supabase, run `supabase/v2_schema.sql`, then `supabase/v2_seed.sql` (the Arts track: Visual, Digital, Literary and Performing Arts), then `supabase/v3_upgrade.sql` (round panels and flags, storage locations, framing, absences, score history, "viewed by management"). `supabase/v2_arts_only.sql` removed the old Expressions track from the first install.
    - Both are safe to re-run.
    - Every table is prefixed `nae_` and is locked to the server (service role) only.
 2. **Environment variables.** Set these in Vercel; see `.env.example`.

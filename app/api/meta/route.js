@@ -1,6 +1,7 @@
 import { route } from "@/lib/api";
 import { db, q, all } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
+import { roundReadiness } from "@/lib/readiness";
 import { driveConfigured, driveMock } from "@/lib/drive";
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -21,20 +22,12 @@ export const GET = route("*", async ({ session }) => {
     const entries = c.reduce((a, x) => a + x.n, 0), students = c.reduce((a, x) => a + (x.students || 0), 0);
     const subs = S.P[p.code].subs.map(s => ({ ...s, entries: c.filter(x => x.sub_code === s.code).reduce((a, x) => a + x.n, 0) }));
     const rounds = Object.values(S.P[p.code].rounds).sort((a, b) => a.round_no - b.round_no);
-    const r1 = S.P[p.code].rounds[1];
-    const used = subs;
-    const rubricsOk = used.filter(s => s.rubric_r1 && S.rubrics[s.rubric_r1]?.published).length;
-    const evCount = evaluators.filter(e => e.active && (e.pathways || []).includes(p.code)).length;
-    const unallocated = unalloc.filter(x => x.pathway_code === p.code).length;
+    const evCount = evaluators.filter(e => e.active && e.account_id && (e.pathways || []).includes(p.code)).length;
     const byStatus = {}; c.forEach(x => { const k = `${x.current_round}:${x.status}`; byStatus[k] = (byStatus[k] || 0) + x.n; });
-    const check = [
-      { key: "entries", label: "Entries imported", ok: entries > 0, text: `${entries} entries` },
-      { key: "rubrics", label: "Rubrics", ok: used.length > 0 && rubricsOk === used.length, text: `${rubricsOk} of ${used.length} subpathways` },
-      { key: "rounds", label: "Rounds", ok: !!(r1 && r1.opens_on && r1.closes_on), text: r1 && r1.opens_on ? `${d(r1.opens_on)} to ${r1.closes_on ? d(r1.closes_on) : "?"} · ${r1.mode}` : "Dates not set" },
-      { key: "evaluators", label: "Evaluators", ok: evCount > 0, text: `${evCount} on the panel` },
-      { key: "allocation", label: "Allocation", ok: entries > 0 && unallocated === 0, text: !entries ? "No entries yet" : unallocated ? `${unallocated} not allocated` : "Every entry allocated" }
-    ];
-    return { ...p, subs, rounds, entries, students, byStatus, check, evaluators: evCount };
+    const data = { evaluators, counts, unalloc };
+    const ready = Object.fromEntries(rounds.map(r => [r.round_no, roundReadiness(S, r, data)]));
+    const check = ready[1]?.checks || [];
+    return { ...p, subs, rounds: rounds.map(r => ({ ...r, readiness: ready[r.round_no] })), entries, students, byStatus, check, evaluators: evCount };
   });
   return {
     me: session,

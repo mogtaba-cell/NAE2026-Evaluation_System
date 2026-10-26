@@ -135,14 +135,16 @@ export function dshort(dateStr) { if (!dateStr) return ""; const [Y, M, D] = Str
 export function dueTxt(due) { const h = Math.round((Date.parse(due) - Date.now()) / 36e5); return h < 0 ? [`Overdue by ${-h} h`, "bad"] : h < 12 ? [`Due in ${h} h`, "warn"] : [`Due in ${h} h`, ""]; }
 export const STATUS = {
   not_open: ["Round not open", ""], to_score: ["To score", ""], in_progress: ["In progress", "info"], review: ["Needs review", "warn"],
-  through: ["Through", "ok"], not_through: ["Not through", ""], final: ["Final", "ok"]
+  through: ["Through", "ok"], not_through: ["Not through", ""], final: ["Round 2 done", "ok"], withdrawn: ["Withdrawn", "bad"], not_scored: ["Not scored", "bad"]
 };
 export function statusBadge(e) {
   if (e.current_round === 2 && e.status === "not_open") return <Badge tone="ok">Through · Round 2 not open</Badge>;
+  if (e.status === "final") { const r2 = (e.results || []).find(r => r.round_no === 2); if (r2 && r2.passed != null) return <Badge tone={r2.passed ? "ok" : ""}>{r2.passed ? (r2.grade === "A" ? "Passed Round 2 · grade A" : "Passed Round 2") : "Did not pass Round 2"}</Badge>; }
   const s = STATUS[e.status] || [e.status, ""];
-  return <Badge tone={s[1]}>{e.current_round === 2 && !["final"].includes(e.status) ? `Round 2 · ${s[0].toLowerCase()}` : s[0]}</Badge>;
+  return <Badge tone={s[1]}>{e.current_round === 2 && !["final", "withdrawn", "not_scored"].includes(e.status) ? `Round 2 · ${s[0].toLowerCase()}` : s[0]}</Badge>;
 }
-export const gradeOf = t => t >= 80 ? "A" : t >= 50 ? "B" : "C";
+// grade from the rubric's grade lines (default A 80, B 50)
+export const gradeOf = (t, bands) => { const b = [...(bands || [{ grade: "A", min: 80 }, { grade: "B", min: 50 }, { grade: "C", min: 0 }])].sort((x, y) => y.min - x.min).find(x => t >= x.min); return b ? b.grade : ""; };
 export function Art({ seed = 0, w = 40, h = 40 }) { return <div className={`art a${Math.abs(seed) % 6}`} style={{ width: w, height: h, maxWidth: "100%" }} role="img" aria-label="Entry" />; }
 export const seedOf = s => [...String(s || "")].reduce((a, c) => a + c.charCodeAt(0), 0);
 export function EntryCell({ e, sub }) {

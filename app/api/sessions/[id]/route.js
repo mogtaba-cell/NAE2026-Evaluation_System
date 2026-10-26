@@ -1,42 +1,131 @@
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
-import { loadStructure, rubricFor } from "@/lib/structure";
+import { loadStructure } from "@/lib/structure";
+import { pinnedVersion, scorePlan, recompute, ruleText, flagLine, passThreshold, DEFAULT_BANDS } from "@/lib/scoring";
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
+import { sessionPool } from "@/lib/sessions";
 
-export const GET = route(["admin", "coordinator", "storage"], async ({ session, params, url }) => {
+async function loadSession(id, session) {
+  const s = await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name)").eq("id", id).maybeSingle());
+  if (!s) throw bad("Session not found.");
+  if (session.role === "coordinator" && s.coordinator_id !== session.sub) throw forbidden("This session is run by another coordinator.");
+  return s;
+}
+
+// The session's score sheet: only its coordinator and admins (the storage team uses the pull list).
+export const GET = route(["admin", "coordinator"], async ({ session, params, url }) => {
   const S = await loadStructure();
-  const s = await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name)").eq("id", params.id).single());
+  const s = await loadSession(params.id, session);
   const r = S.roundById[s.round_id];
-  const links = await q(db().from("nae_session_entries").select("position, entry:nae_entries(*, school:nae_schools(name, esis))").eq("session_id", s.id).order("position"));
+  const links = await q(db().from("nae_session_entries").select("position, pulled, entry:nae_entries(*, school:nae_schools(name, esis))").eq("session_id", s.id).order("position"));
   const ids = links.map(l => l.entry.id);
-  const [scores, results, logistics, evs] = await Promise.all([
-    q(db().from("nae_scores").select("*").eq("round_id", r.id).in("entry_id", ids)),
-    q(db().from("nae_results").select("*").eq("round_no", 2).in("entry_id", ids)),
-    q(db().from("nae_logistics").select("*").in("entry_id", ids)),
-    q(db().from("nae_evaluators").select("id, name, account_id").in("id", s.evaluator_ids || []))
+  const [scores, results, logistics, evs, reviews] = await Promise.all([
+    ids.length ? q(db().from("nae_scores").select("*").eq("round_id", r.id).in("entry_id", ids)) : [],
+    ids.length ? q(db().from("nae_results").select("*").in("entry_id", ids)) : [],
+    ids.length ? q(db().from("nae_logistics").select("*, loc:nae_locations(room, shelf)").in("entry_id", ids)) : [],
+    q(db().from("nae_evaluators").select("id, name, account_id").in("id", s.evaluator_ids || [])),
+    ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", 2).in("entry_id", ids)) : []
   ]);
   const cur = url.searchParams.get("entry") || null;
   const entries = [];
   for (const l of links) {
-    const e = l.entry; const rub = rubricFor(S, e.pathway_code, e.sub_code, 2);
-    const r1 = await q(db().from("nae_results").select("final, team, grade").eq("entry_id", e.id).eq("round_no", 1).maybeSingle());
-    const full = cur ? cur === e.code : entries.length === 0;
-    entries.push({ code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, r1, rubric: rub?.published ? { version_id: rub.published.id, code: rub.code, version: rub.published.version, criteria: rub.published.criteria, identity_required: rub.published.identity_required } : null, scores: scores.filter(x => x.entry_id === e.id), result: results.find(x => x.entry_id === e.id) || null, logistics: logistics.find(x => x.entry_id === e.id) || null, files: null });
+    const e = l.entry;
+    const ver = await pinnedVersion(S, e, 2);
+    const plan = await scorePlan(S, e, r);
+    const rv = reviews.filter(x => x.entry_id === e.id);
+    const lg = logistics.find(x => x.entry_id === e.id) || null;
+    entries.push({
+      code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
+      r1: results.find(x => x.entry_id === e.id && x.round_no === 1) || null,
+      rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
+      scores: scores.filter(x => x.entry_id === e.id),
+      result: results.find(x => x.entry_id === e.id && x.round_no === 2) || null,
+      review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
+      logistics: lg ? { state: lg.state, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
+      files: null
+    });
   }
   const target = entries.find(x => x.code === cur) || entries.find(x => !x.result?.complete) || entries[0];
   if (target) { const e = links.find(l => l.entry.code === target.code).entry; target.files = (await entryFiles(e)).map(fileView); }
-  return { session: { ...s, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code].name, round_no: r.round_no, round_status: r.status, threshold: 80 }, team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean), entries, current: target?.code || null, rules: { flag_margin: r.flag_margin, spread_limit: r.spread_limit, pass_rule: r.pass_rule } };
+  const bandsFor = x => x.rubric?.grade_bands || DEFAULT_BANDS;
+  return {
+    session: { ...s, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code].name, round_no: r.round_no, round_status: r.status, mine: s.coordinator_id === session.sub },
+    team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean),
+    entries: entries.map(x => ({ ...x, flagLine: flagLine(r, bandsFor(x)), passMark: passThreshold(r.pass_rule, bandsFor(x)) })),
+    current: target?.code || null,
+    rules: { pass_rule: r.pass_rule, pass_text: ruleText(r.pass_rule), flag_near: r.flag_near !== false, flag_margin: r.flag_margin, flag_line: r.flag_line, flag_spread: r.flag_spread !== false, spread_limit: r.spread_limit, flag_identity: r.flag_identity !== false }
+  };
 });
+
+// start | finish | reopen (admin) | cancel (planned only) | edit (planned: details, team, entries)
 export const PATCH = route(["admin", "coordinator"], async ({ session, params, request }) => {
   const b = await body(request);
-  const s = await q(db().from("nae_sessions").select("*").eq("id", params.id).single());
-  if (session.role === "coordinator" && s.coordinator_id !== session.sub) throw forbidden("Only the session's coordinator can change it.");
-  if (!["planned", "live", "done"].includes(b.status)) throw bad("Unknown status.");
-  await q(db().from("nae_sessions").update({ status: b.status }).eq("id", s.id));
+  const s = await loadSession(params.id, session);
+  const S = await loadStructure(); const r = S.roundById[s.round_id];
   const ids = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
-  if (ids.length) await q(db().from("nae_logistics").update({ state: b.status === "live" ? "coordinator" : "storage", updated_at: new Date().toISOString() }).in("entry_id", ids).in("state", b.status === "live" ? ["storage"] : ["coordinator"]));
-  await audit(session, `${s.title}: ${b.status === "live" ? "started" : b.status === "done" ? "finished, entries back to storage" : "planned"}`, "session", s.id);
-  return { ok: true };
+  const setState = async (from, to) => { if (ids.length) await q(db().from("nae_logistics").update({ state: to, updated_at: new Date().toISOString() }).in("entry_id", ids).in("state", from)); };
+  const action = b.action || ({ live: "start", done: "finish", planned: "edit" })[b.status];
+
+  if (action === "start") {
+    if (s.status !== "planned") throw bad("Only a planned session can be started.");
+    await q(db().from("nae_sessions").update({ status: "live" }).eq("id", s.id));
+    await setState(["storage"], "coordinator");
+    await audit(session, `${s.title}: started`, "session", s.id);
+    return { ok: true };
+  }
+  if (action === "finish") {
+    if (s.status !== "live") throw bad("Only a live session can be finished.");
+    const res = ids.length ? await q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [];
+    const open = ids.filter(id => !res.find(x => x.entry_id === id && x.complete));
+    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} entr${open.length === 1 ? "y is" : "ies are"} not fully scored. They will go back to storage and can be put in another session.` };
+    await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
+    await setState(["coordinator"], "storage");
+    for (const id of open) await recompute(id, 2, { S, quiet: true });
+    await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored` : "");
+    return { ok: true };
+  }
+  if (action === "reopen") {
+    if (session.role !== "admin") throw forbidden("Only an admin can reopen a finished session.");
+    if (s.status !== "done") throw bad("Only a finished session can be reopened.");
+    await q(db().from("nae_sessions").update({ status: "live" }).eq("id", s.id));
+    await audit(session, `${s.title}: reopened`, "session", s.id, b.reason || "");
+    return { ok: true };
+  }
+  if (action === "cancel") {
+    if (s.status !== "planned") throw bad("Only a planned session can be cancelled.");
+    await q(db().from("nae_sessions").update({ status: "cancelled" }).eq("id", s.id));
+    for (const id of ids) await recompute(id, 2, { S, quiet: true });
+    await audit(session, `${s.title}: cancelled`, "session", s.id, b.reason || "");
+    return { ok: true };
+  }
+  if (action === "edit") {
+    if (s.status !== "planned") throw bad("Only a planned session can be edited.");
+    const patch = {};
+    ["title", "session_date", "time_text", "venue"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
+    if (patch.title === null) delete patch.title;
+    if (Array.isArray(b.evaluator_ids)) {
+      const team = [...new Set(b.evaluator_ids)]; if (!team.length) throw bad("Pick at least one evaluator.");
+      const evs = await q(db().from("nae_evaluators").select("id, active").in("id", team));
+      if (evs.length !== team.length || evs.some(e => !e.active)) throw bad("Pick active evaluators only.");
+      patch.evaluator_ids = team;
+    }
+    if (session.role === "admin" && b.coordinator_id) patch.coordinator_id = b.coordinator_id;
+    if (Object.keys(patch).length) await q(db().from("nae_sessions").update(patch).eq("id", s.id));
+    if (Array.isArray(b.remove) && b.remove.length) {
+      const rm = await q(db().from("nae_entries").select("id").in("code", b.remove));
+      if (rm.length) await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", rm.map(x => x.id)));
+    }
+    if (Array.isArray(b.add_schools) && b.add_schools.length) {
+      const pool = await sessionPool(S, r); const sch = new Set(b.add_schools);
+      const add = pool.filter(x => sch.has(x.entry.school_id || "none"));
+      if (add.length) await q(db().from("nae_session_entries").insert(add.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: 1000 + i }))));
+    }
+    const now = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
+    for (const id of new Set([...ids, ...now])) await recompute(id, 2, { S, quiet: true });
+    await audit(session, `${s.title}: edited`, "session", s.id, JSON.stringify({ ...patch, removed: b.remove?.length || 0, added_schools: b.add_schools?.length || 0 }));
+    return { ok: true };
+  }
+  throw bad("Unknown action.");
 });
