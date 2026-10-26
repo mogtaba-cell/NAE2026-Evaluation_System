@@ -36,7 +36,6 @@ export const POST = route(["evaluator", "coordinator", "admin"], async ({ sessio
       const inS = await q(db().from("nae_session_entries").select("entry_id").eq("session_id", sess.id).eq("entry_id", e.id));
       if (!inS.length) throw bad("This entry is not in this session.");
       if (!(sess.evaluator_ids || []).includes(evaluatorId)) throw bad("That evaluator is not in this session's team.");
-      if (!physical) throw bad("This entry is scored online, not in a session.");
     } else {
       if (session.role !== "admin") throw forbidden("Scores can only be entered inside a scoring session you run.");
       const a = await q(db().from("nae_assignments").select("id").eq("round_id", round.id).eq("entry_id", e.id).eq("evaluator_id", evaluatorId));

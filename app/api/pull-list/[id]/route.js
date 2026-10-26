@@ -6,12 +6,13 @@ async function load(id, session) {
   if (session.role === "coordinator" && s.coordinator_id !== session.sub) throw forbidden("This session is run by another coordinator.");
   return s;
 }
-// The pull list for storage: the session's artworks sorted by where they are. Ticks are saved.
+// The pull list for storage: the session's physical artworks sorted by where they are (online entries have
+// nothing to pull). Ticks are saved.
 export const GET = route(["admin", "coordinator", "storage"], async ({ session, params }) => {
   const s = await load(params.id, session);
   const links = await q(db().from("nae_session_entries").select("pulled, entry:nae_entries(id, code, title_en, size_text, school:nae_schools(name))").eq("session_id", s.id));
   const lg = links.length ? await q(db().from("nae_logistics").select("entry_id, state, location, damaged, condition, loc:nae_locations(room, shelf, sort)").in("entry_id", links.map(l => l.entry.id))) : [];
-  const rows = links.map(l => { const x = lg.find(y => y.entry_id === l.entry.id) || {}; return { ...l.entry, pulled: l.pulled, state: x.state, damaged: x.damaged, condition: x.condition, where: x.loc ? `${x.loc.room} · ${x.loc.shelf}` : x.location || null, sort: x.loc?.sort ?? 9999 }; })
+  const rows = links.filter(l => lg.some(y => y.entry_id === l.entry.id)).map(l => { const x = lg.find(y => y.entry_id === l.entry.id) || {}; return { ...l.entry, pulled: l.pulled, state: x.state, damaged: x.damaged, condition: x.condition, where: x.loc ? `${x.loc.room} · ${x.loc.shelf}` : x.location || null, sort: x.loc?.sort ?? 9999 }; })
     .sort((a, b) => a.sort - b.sort || String(a.where || "").localeCompare(String(b.where || ""), undefined, { numeric: true }) || a.code.localeCompare(b.code));
   return { session: s, rows };
 });

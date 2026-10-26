@@ -8,7 +8,7 @@ Built with Next.js 15 (App Router) and Supabase (Postgres), and hosted on Vercel
 | Role | What they do |
 | --- | --- |
 | Admin | Sets up the program (pathways, rubrics, rounds), imports entries, manages people, allocates schools, opens and closes rounds, corrects scores, runs reports |
-| Coordinator | Follows up with their schools and runs physical scoring sessions, entering each evaluator's scores |
+| Coordinator | Follows up with their schools and runs scoring sessions for evaluators without a login (online entries from their files in any round, physical artworks in the room), entering each evaluator's scores |
 | Evaluator | Scores entries in their queue. Sees the files and the entry's title, description and reflections in English, Arabic or both |
 | Management | Decides flagged reviews (confirm, override with a reason, or delegate) |
 | Storage team | Collections, check-in, shelves, pull lists, exceptions |
@@ -25,6 +25,10 @@ Built with Next.js 15 (App Router) and Supabase (Postgres), and hosted on Vercel
 7. **Round 2.** Online subpathways are assigned to evaluators again. Subpathways switched to Physical in Program setup are collected, checked in and stored (room and shelf chosen per batch), and scored in sessions. Several sessions can run at once; coordinators pick the schools. An evaluator can be marked absent for one artwork (at least 2 scores, and half the team, are needed). The team ticks **Needs framing** and **Protective glass** per artwork for the showcase.
 8. **Closing a round** is possible once every entry is scored, reassigned or marked "not scored". Closing locks the results: they are final. An admin can unlock one result or the whole round with a reason.
 9. **Final results.** The shortlist is every Round 2 entry with grade A that passed Round 2.
+
+**Evaluators without a login** are scored through coordinator sessions in any round: the coordinator picks schools, the team, and types each evaluator's scores. Entries already given to evaluators with a login stay in those evaluators' queues. A round's panel smaller than the evaluators each entry needs gets no assignments, so its entries wait for sessions instead.
+
+**View as.** An admin can pick any active account (grouped by role) from **View as…** in the top bar and see the platform exactly as that person does. It is read only, shown with a banner, recorded in the audit log, and ends with **Back to my account** (or after 4 hours).
 
 Every change is written to the audit log. Management opening an entry is recorded as "viewed by management"; anyone else can tick it on the entry page, and the entries list can filter on it.
 
@@ -72,6 +76,7 @@ npm run dev
 
 ## Going live (after testing the preview)
 
+0. If the demo data is still in the database, run `supabase/demo_reset.sql` first (it removes the demo accounts, scores, sessions, collections, demo rubrics and the audit log, and keeps the setup and imported entries).
 1. Promote the tested deployment in Vercel, or push to `main`.
 2. The old tables (`users`, `evaluators`, `schools`, `students`, `submissions`, `submission_students`, `evaluation_records`) are no longer used. Drop them once you are happy:
    ```sql

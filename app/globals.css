@@ -792,3 +792,7 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 .x-board6 .x-kc .row.between{flex-wrap:wrap;gap:4px}
 .x-kc .code{white-space:nowrap}
 .x-board.x-board6{grid-template-columns:repeat(6,minmax(232px,1fr))}
+.va-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--rule);background:#fff;border-radius:12px;padding:8px 12px;cursor:pointer;font:inherit;color:var(--deep)}
+.va-row:hover{background:var(--sand2);border-color:var(--rule2)}
+.va-row span{color:var(--ink3);font-size:12px}
+.va-bar{background:#F6E2B8;color:#5B3A00;border:1px solid var(--warn-line);border-radius:16px;padding:10px 16px;font-size:14px}

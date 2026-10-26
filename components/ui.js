@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useCallback, useRef, createContext, useContext } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 
 // ---------- data ----------
 export async function api(url, opts = {}) {
@@ -113,9 +114,11 @@ export function Modal({ open, title, sub, onClose, children, footer, wide }) {
     return () => document.removeEventListener("keydown", k);
   }, [open]);
   if (!open) return null;
-  return <div className="scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className={`modal ${wide ? "w720" : ""}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref} style={{ outline: "none" }}>
+  // Rendered on <body> so a sticky or blurred parent (like the top bar) can't trap the fixed-position overlay.
+  const node = <div className="scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className={`modal ${wide ? "w720" : ""}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref} style={{ outline: "none" }}>
     <div className="mh"><div className="tt"><h2>{title}</h2>{sub && <p className="sub">{sub}</p>}</div><Btn v="ghost" title="Close" onClick={onClose}>×</Btn></div>
     <div className="mb">{children}</div>{footer && <div className="mf">{footer}</div>}</div></div>;
+  return typeof document === "undefined" ? node : createPortal(node, document.body);
 }
 export const Search = ({ value, onChange, placeholder, onEnter, autoFocus }) => <div className="search" style={{ flex: 1, minWidth: 220 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="faint"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg><input className="input" value={value} placeholder={placeholder} aria-label={placeholder} autoFocus={autoFocus} onChange={e => onChange(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && onEnter) onEnter(e.target.value); }} /></div>;
 

@@ -26,22 +26,22 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
     ids.length ? q(db().from("nae_results").select("*").in("entry_id", ids)) : [],
     ids.length ? q(db().from("nae_logistics").select("*, loc:nae_locations(room, shelf)").in("entry_id", ids)) : [],
     q(db().from("nae_evaluators").select("id, name, account_id").in("id", s.evaluator_ids || [])),
-    ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", 2).in("entry_id", ids)) : []
+    ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", r.round_no).in("entry_id", ids)) : []
   ]);
   const cur = url.searchParams.get("entry") || null;
   const entries = [];
   for (const l of links) {
     const e = l.entry;
-    const ver = await pinnedVersion(S, e, 2);
+    const ver = await pinnedVersion(S, e, r.round_no);
     const plan = await scorePlan(S, e, r);
     const rv = reviews.filter(x => x.entry_id === e.id);
     const lg = logistics.find(x => x.entry_id === e.id) || null;
     entries.push({
       code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
-      r1: results.find(x => x.entry_id === e.id && x.round_no === 1) || null,
+      r1: r.round_no === 2 ? results.find(x => x.entry_id === e.id && x.round_no === 1) || null : null,
       rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
       scores: scores.filter(x => x.entry_id === e.id),
-      result: results.find(x => x.entry_id === e.id && x.round_no === 2) || null,
+      result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
       logistics: lg ? { state: lg.state, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
       files: null
@@ -65,6 +65,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   const s = await loadSession(params.id, session);
   const S = await loadStructure(); const r = S.roundById[s.round_id];
   const ids = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
+  if (r.status === "closed" && ["start", "edit", "reopen"].includes(b.action || "")) throw bad("This round is closed.");
   const setState = async (from, to) => { if (ids.length) await q(db().from("nae_logistics").update({ state: to, updated_at: new Date().toISOString() }).in("entry_id", ids).in("state", from)); };
   const action = b.action || ({ live: "start", done: "finish", planned: "edit" })[b.status];
 
@@ -82,7 +83,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} entr${open.length === 1 ? "y is" : "ies are"} not fully scored. They will go back to storage and can be put in another session.` };
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
     await setState(["coordinator"], "storage");
-    for (const id of open) await recompute(id, 2, { S, quiet: true });
+    for (const id of open) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored` : "");
     return { ok: true };
   }
@@ -96,7 +97,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   if (action === "cancel") {
     if (s.status !== "planned") throw bad("Only a planned session can be cancelled.");
     await q(db().from("nae_sessions").update({ status: "cancelled" }).eq("id", s.id));
-    for (const id of ids) await recompute(id, 2, { S, quiet: true });
+    for (const id of ids) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: cancelled`, "session", s.id, b.reason || "");
     return { ok: true };
   }
@@ -123,7 +124,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
       if (add.length) await q(db().from("nae_session_entries").insert(add.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: 1000 + i }))));
     }
     const now = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
-    for (const id of new Set([...ids, ...now])) await recompute(id, 2, { S, quiet: true });
+    for (const id of new Set([...ids, ...now])) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: edited`, "session", s.id, JSON.stringify({ ...patch, removed: b.remove?.length || 0, added_schools: b.add_schools?.length || 0 }));
     return { ok: true };
   }

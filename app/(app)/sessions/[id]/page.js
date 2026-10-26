@@ -55,12 +55,12 @@ export default function Session({ params }) {
   }
   async function submit(evs) {
     setBusy("go"); setErr(null);
-    try { for (const ev of evs) await api("/api/scores", { body: { entry_code: e.code, round_no: 2, evaluator_id: ev, session_id: s.id, scores: m[ev], national_identity: idn[ev], submit: true } }); toast(`Saved ${evs.length} score${evs.length > 1 ? "s" : ""} for ${e.code}`); setConfirm(null); d.reload(); }
+    try { for (const ev of evs) await api("/api/scores", { body: { entry_code: e.code, round_no: s.round_no, evaluator_id: ev, session_id: s.id, scores: m[ev], national_identity: idn[ev], submit: true } }); toast(`Saved ${evs.length} score${evs.length > 1 ? "s" : ""} for ${e.code}`); setConfirm(null); d.reload(); }
     catch (x) { setErr(x.message); setConfirm(null); } setBusy(null);
   }
   async function markAbsent(ev, undo) {
     setBusy("abs"); setErr(null);
-    try { await api("/api/scores", { body: { entry_code: e.code, round_no: 2, evaluator_id: ev, session_id: s.id, ...(undo ? { clear_absent: true } : { absent: true }) } }); setAbsentAsk(null); d.reload(); }
+    try { await api("/api/scores", { body: { entry_code: e.code, round_no: s.round_no, evaluator_id: ev, session_id: s.id, ...(undo ? { clear_absent: true } : { absent: true }) } }); setAbsentAsk(null); d.reload(); }
     catch (x) { setErr(x.message); setAbsentAsk(null); } setBusy(null);
   }
   async function framing(needs, glass) { try { await api("/api/logistics", { body: { action: "framing", entry_code: e.code, needs, glass: needs && glass } }); d.reload(); } catch (x) { toast(x.message, "err"); } }
@@ -70,7 +70,7 @@ export default function Session({ params }) {
       const r = await api(`/api/sessions/${id}`, { method: "PATCH", body: { action, ...extra } });
       if (r.ok === false && r.incomplete) { setFinishAsk(r); setBusy(null); return; }
       setFinishAsk(null); setEdit(null);
-      toast({ start: "Session started. The artworks are marked as with you.", finish: "Session finished. The artworks go back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
+      toast({ start: "Session started. The artworks are marked as with you.", finish: "Session finished. Physical artworks go back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
       if (action === "cancel") router.push("/sessions"); else d.reload();
     } catch (x) { toast(x.message, "err"); } setBusy(null);
   }
@@ -80,7 +80,7 @@ export default function Session({ params }) {
   const idx = entries.findIndex(x => x.code === e?.code);
   const pv = confirm ? preview(confirm.evs) : null;
   const res = e?.result;
-  const resultText = !res ? null : e.review?.status === "open" ? `With management: ${e.review.reason}` : res.complete ? (e.review ? `Decided by management (${e.review.status})` : res.passed ? "Complete · passes Round 2" : "Complete · does not pass Round 2") : `Provisional: ${res.scored} of ${res.needed} scores${e.min ? ` (needs at least ${e.min})` : ""}`;
+  const resultText = !res ? null : e.review?.status === "open" ? `With management: ${e.review.reason}` : res.complete ? (e.review ? `Decided by management (${e.review.status})` : res.passed ? `Complete · passes Round ${s.round_no}` : `Complete · does not pass Round ${s.round_no}`) : `Provisional: ${res.scored} of ${res.needed} scores${e.min ? ` (needs at least ${e.min})` : ""}`;
   const statusLabel = { live: "In progress", done: "Done", planned: "Planned", cancelled: "Cancelled" }[s.status];
   return <>
     <PageHead back={["Scoring sessions", "/sessions"]} title={s.title} sub={[s.session_date ? dshort(s.session_date) : null, s.time_text, s.venue, s.coordinator ? `coordinator ${s.coordinator}` : null].filter(Boolean).join(" · ")}
@@ -90,10 +90,10 @@ export default function Session({ params }) {
         {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", time_text: s.time_text || "", venue: s.venue || "", evaluator_ids: team.map(t => t.id), remove: [] })}>Edit</Btn>}
         {s.status === "live" && <Btn busy={busy === "finish"} onClick={() => act("finish")}>Finish session</Btn>}
         {s.status === "done" && admin && <Btn busy={busy === "reopen"} onClick={() => act("reopen")}>Reopen</Btn>}
-        <Btn href={`/pull-list?session=${id}`}>Pull list</Btn></>} />
+        {entries.some(x => x.logistics) && <Btn href={`/pull-list?session=${id}`}>Pull list</Btn>}</>} />
     <p className="small faint" style={{ marginTop: -8 }}>Team: {team.map(t => t.name).join(", ")}</p>
-    {s.status === "planned" && <Banner title="Start the session when the artworks are in the room">Scores can be entered once the session has started. You can still edit the team and the artworks, or cancel the session.</Banner>}
-    {s.status === "done" && <Banner title="This session is finished">Entries that weren't fully scored are back in storage and can go into another session.{admin ? " As an admin you can still correct scores here." : ""}</Banner>}
+    {s.status === "planned" && <Banner title="Start the session when the team is in the room">Scores can be entered once the session has started. You can still edit the team and the artworks, or cancel the session.</Banner>}
+    {s.status === "done" && <Banner title="This session is finished">Entries that weren't fully scored can go into another session (physical artworks are back in storage).{admin ? " As an admin you can still correct scores here." : ""}</Banner>}
     <div className="f3-sc">
       <section className="card f3-queue"><div className="qh"><b>{entries.length} artworks</b><span className="small faint">{entries.filter(x => x.result?.complete).length} fully scored</span></div>
         <div className="qb">{entries.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => open(x.code)} onKeyDown={k => k.key === "Enter" && open(x.code)}><div className="t"><b>{x.code}</b><span dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</span></div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status === "submitted").length}/${team.length}`}</span></div>)}</div></section>
@@ -105,7 +105,7 @@ export default function Session({ params }) {
         <section className="card">
           <div className="card-h"><div className="tt"><h3>Scores</h3><span className="sub">Rubric {e.rubric?.code} v{e.rubric?.version} · each criterion 0 to 100</span></div><LangToggle lang={lang} onChange={setLang} /></div>
           {err && <Banner tone="bad" title={err} />}
-          {!e.rubric ? <Banner tone="warn" title="No published Round 2 rubric" /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>Criterion</th>{team.map(t => <th key={t.id} title={t.name}>{t.name}</th>)}</tr></thead><tbody>
+          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>Criterion</th>{team.map(t => <th key={t.id} title={t.name}>{t.name}</th>)}</tr></thead><tbody>
             {crit.map(c => <tr key={c.key}><td>{lang !== "ar" && <>{c.label} <span className="faint small">{c.weight}%</span></>}{lang !== "en" && <div className="crit-ar" lang="ar" dir="rtl">{c.label_ar || (lang === "ar" ? c.label : "")}{lang === "ar" && <span className="faint small"> {c.weight}%</span>}</div>}</td>
               {team.map(t => <td key={t.id}>{absent(t.id) ? <span className="faint small">Absent</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setM({ ...m, [t.id]: { ...m[t.id], [c.key]: x.target.value.replace(/\D/g, "").slice(0, 3) } })} />}</td>)}</tr>)}
             {e.rubric.identity_required && <tr><td>National identity</td>{team.map(t => <td key={t.id}>{absent(t.id) ? "" : <span className="f3-yn"><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: true })}>Y</button><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setIdn({ ...idn, [t.id]: false })}>N</button></span>}</td>)}</tr>}
@@ -113,8 +113,8 @@ export default function Session({ params }) {
             <tr><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">Saved</Badge> : absent(t.id) ? (editable ? <Btn sm v="ghost" busy={busy === "abs"} onClick={() => markAbsent(t.id, true)}>Undo absent</Btn> : <Badge>Absent</Badge>) : editable && <div className="stack s4" style={{ alignItems: "flex-end" }}><Btn sm disabled={!filled(t.id) || !!busy} onClick={() => setConfirm({ evs: [t.id] })}>Save</Btn><Btn sm v="ghost" disabled={!!busy} onClick={() => setAbsentAsk(t)}>Absent</Btn></div>}</td>)}</tr>
           </tbody></table></div>}
           {res && <div className="x-tot"><div className="stack s4"><span className="s">Team result</span><span className="v">{res.team != null ? res.final ?? res.team : "–"}</span></div><div className="stack s4"><span className="s">Grade</span><span style={{ fontSize: 18, fontWeight: 600 }}>{res.team != null ? res.grade || gradeFor(res.team, bands) : "–"}</span></div><span className="s" style={{ marginLeft: "auto", textAlign: "right" }}>{resultText}</span></div>}
-          <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>Framing for the showcase</b><span>If this artwork is selected, does it need framing?</span></div>
-            <div className="stack s4"><Check label="Needs framing" disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label="Protective glass" disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>
+          {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>Framing for the showcase</b><span>If this artwork is selected, does it need framing?</span></div>
+            <div className="stack s4"><Check label="Needs framing" disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label="Protective glass" disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>{pending.length > 1 && <Btn v="primary" disabled={!!busy} onClick={() => setConfirm({ evs: pending })}>Save all {pending.length}</Btn>}{idx < entries.length - 1 && <Btn onClick={() => open(entries[idx + 1].code)}>Next artwork ›</Btn>}</div>
         </section>
         <EntryAbout e={{ ...e, id: e.code, pathway: s.pathway }} compact />
@@ -125,7 +125,7 @@ export default function Session({ params }) {
       {confirm && <><table className="x-cmp"><thead><tr><th>Evaluator</th><th>Total</th></tr></thead><tbody>{confirm.evs.map(ev => <tr key={ev}><td>{team.find(t => t.id === ev)?.name}</td><td>{total(crit, m[ev])}</td></tr>)}</tbody></table>
         {pv && !pv.complete && <p className="muted">After this, {pv.left} more score{pv.left === 1 ? "" : "s"} (or absences) are needed for this artwork.</p>}
         {pv?.complete && pv.why.length > 0 && <Banner tone="warn" title="This artwork will go to management review">Because {pv.why.join(", and ")}. Team result {pv.team} · grade {pv.grade}.</Banner>}
-        {pv?.complete && !pv.why.length && <Banner tone={pv.passes ? "ok" : ""} title={`Team result ${pv.team} · grade ${pv.grade}`}>{pv.passes ? "It passes Round 2." : `It does not pass Round 2 (${rules.pass_text}).`}</Banner>}
+        {pv?.complete && !pv.why.length && <Banner tone={pv.passes ? "ok" : ""} title={`Team result ${pv.team} · grade ${pv.grade}`}>{pv.passes ? `It passes Round ${s.round_no}.` : `It does not pass Round ${s.round_no} (${rules.pass_text}).`}</Banner>}
         <p className="faint small">Saved scores can only be corrected by an admin, with a reason.</p></>}
     </Modal>
     <Modal open={!!leave} title="Scores not saved" onClose={() => setLeave(null)} footer={<><Btn onClick={() => setLeave(null)}>Stay</Btn><Btn v="primary" onClick={() => { const c = leave; setLeave(null); go(c); }}>Leave without saving</Btn></>}>

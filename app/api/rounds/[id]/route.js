@@ -66,7 +66,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
     await q(db().from("nae_pathways").update({ status: "open" }).eq("code", r.pathway_code));
     const n = await startEntries(S, { ...r, status: "open" });
     await audit(session, `Opened ${tag}`, "round", r.id, [`${n.entries} entries, ${n.assigned} evaluator assignments`, !rd.ready ? `Opened with: ${rd.blockers.map(x => x.label).join(", ")}. Reason: ${reason}` : null].filter(Boolean).join(" · "));
-    return { ok: true, note: `${tag} is open. ${n.entries} entries are ready, ${n.assigned} evaluator assignments made.` };
+    return { ok: true, note: `${tag} is open. ${n.entries} entries are ready, ${n.assigned} evaluator assignments made.${n.entries && !n.assigned ? " Coordinators score them in sessions with evaluators who have no login." : ""}` };
   }
 
   if (b.action === "close") {
