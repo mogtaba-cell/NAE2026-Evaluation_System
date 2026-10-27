@@ -3,11 +3,12 @@ import { use, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Field, Modal, Check, dshort } from "@/components/ui";
 import FileViewer from "@/components/FileViewer";
+import { SessionArtworks } from "@/components/Movements";
 import EntryAbout from "@/components/EntryAbout";
 import { total, gradeFor } from "@/components/ScoreForm";
 import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/components/lang";
 
-const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identity && idn !== true) return false; return true; };
+const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identityPass && idn !== true) return false; return true; };
 
 export default function Session({ params }) {
   const { id } = use(params); const sp = useSearchParams(); const router = useRouter(); const toast = useToast(); const meta = useMeta();
@@ -18,7 +19,10 @@ export default function Session({ params }) {
   const [leave, setLeave] = useState(null);       // entry code we want to open while scores are unsaved
   const [absentAsk, setAbsentAsk] = useState(null);
   const [finishAsk, setFinishAsk] = useState(null);
-  const [edit, setEdit] = useState(null);
+  const [edit, setEdit] = useState(null); const [art, setArt] = useState(false);
+  const me = meta?.data?.me;
+  const handed = (d.data?.entries || []).filter(x => x.logistics?.state === "handed_over").length;
+  const waiting = (d.data?.entries || []).filter(x => ["requested", "picked"].includes(x.logistics?.state)).length;
   const e = d.data?.entries.find(x => x.code === d.data.current);
   const [lang0, setLang] = useLang(id);
   const lang = scoreLang(lang0), ar = lang === "ar", T = SL[lang];
@@ -52,7 +56,7 @@ export default function Session({ params }) {
     const spread = totals.length > 1 ? Math.max(...totals) - Math.min(...totals) : 0;
     if (rules.flag_spread && spread > rules.spread_limit) why.push(`the evaluators are ${spread} points apart`);
     if (rules.flag_identity && ask && answers.includes(true) && answers.includes(false)) why.push("the evaluators disagree on national identity");
-    return { complete: true, team: teamScore, grade: g, why, passes: passesRule(rules.pass_rule, teamScore, g, identity) };
+    return { complete: true, team: teamScore, grade: g, why, passes: passesRule({ ...rules.pass_rule, identityPass: !!e.rubric?.identity_pass }, teamScore, g, identity) };
   }
   async function submit(evs) {
     setBusy("go"); setErr(null);
@@ -71,7 +75,7 @@ export default function Session({ params }) {
       const r = await api(`/api/sessions/${id}`, { method: "PATCH", body: { action, ...extra } });
       if (r.ok === false && r.incomplete) { setFinishAsk(r); setBusy(null); return; }
       setFinishAsk(null); setEdit(null);
-      toast({ start: "Session started. The artworks are marked as with you.", finish: "Session finished. Physical artworks go back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
+      toast({ start: "Session started.", finish: "Session finished. Artworks still with you are marked as handed back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
       if (action === "cancel") router.push("/sessions"); else d.reload();
     } catch (x) { toast(x.message, "err"); } setBusy(null);
   }
@@ -91,9 +95,12 @@ export default function Session({ params }) {
         {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", time_text: s.time_text || "", venue: s.venue || "", evaluator_ids: team.map(t => t.id), remove: [] })}>Edit</Btn>}
         {s.status === "live" && <Btn busy={busy === "finish"} onClick={() => act("finish")}>Finish session</Btn>}
         {s.status === "done" && admin && <Btn busy={busy === "reopen"} onClick={() => act("reopen")}>Reopen</Btn>}
-        {entries.some(x => x.logistics) && <Btn href={`/pull-list?session=${id}`}>Pull list</Btn>}</>} />
+        {entries.some(x => x.logistics) && <Btn onClick={() => setArt(true)}>Artworks{handed ? ` · ${handed} to confirm` : ""}</Btn>}</>} />
     <p className="small faint" style={{ marginTop: -8 }}>Team: {team.map(t => t.name).join(", ")}</p>
     {s.status === "planned" && <Banner title="Start the session when the team is in the room">Scores can be entered once the session has started. You can still edit the team and the artworks, or cancel the session.</Banner>}
+    {handed > 0 && s.status !== "done" && <Banner tone="warn" title={`Storage handed ${handed} artwork${handed === 1 ? "" : "s"} to you`} action={<Btn sm v="primary" onClick={() => setArt(true)}>Confirm received</Btn>}>Check them and confirm, so both teams know where each artwork is.</Banner>}
+    {waiting > 0 && s.status !== "done" && !handed && <p className="small faint">{waiting} artwork{waiting === 1 ? " is" : "s are"} still with storage for this session.</p>}
+    {art && <SessionArtworks sessionId={id} role={me?.role} onClose={() => setArt(false)} onChanged={d.reload} />}
     {s.status === "done" && <Banner title="This session is finished">Entries that weren't fully scored can go into another session (physical artworks are back in storage).{admin ? " As an admin you can still correct scores here." : ""}</Banner>}
     <div className="f3-sc f3-sess">
       <section className="card f3-queue"><div className="qh"><b>{entries.length} artworks</b><span className="small faint">{entries.filter(x => x.result?.complete).length} fully scored</span></div>

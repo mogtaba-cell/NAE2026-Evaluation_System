@@ -4,7 +4,7 @@ import { hashPassword, tempPassword, ROLES } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 export const GET = route(["admin"], async () => {
   const [accounts, evaluators, asg, scores, reviews, entries] = await Promise.all([
-    q(db().from("nae_accounts").select("id, username, display_name, email, role, pathways, active, last_login_at, must_change_password, created_at").order("display_name")),
+    q(db().from("nae_accounts").select("id, username, display_name, email, role, pathways, programs, active, last_login_at, must_change_password, created_at").order("display_name")),
     q(db().from("nae_evaluators").select("*").order("name")),
     all(() => db().from("nae_assignments").select("evaluator_id")),
     all(() => db().from("nae_scores").select("evaluator_id, status")),
@@ -30,7 +30,7 @@ export const POST = route(["admin"], async ({ session, request }) => {
   if (!username || !name) throw bad("Enter a name and a username.");
   if (!ROLES.includes(b.role)) throw bad("Pick a role.");
   const pw = tempPassword();
-  const acc = await q(db().from("nae_accounts").insert({ username, display_name: name, email: b.email || null, role: b.role, pathways, password_hash: hashPassword(pw), must_change_password: true }).select("id").single());
+  const acc = await q(db().from("nae_accounts").insert({ username, display_name: name, email: b.email || null, role: b.role, pathways, programs: Array.isArray(b.programs) ? b.programs : [], password_hash: hashPassword(pw), must_change_password: true }).select("id").single());
   if (b.role === "evaluator") await q(db().from("nae_evaluators").insert({ name, account_id: acc.id, pathways }));
   await audit(session, `Created account ${username} (${b.role})`, "account", acc.id);
   return { id: acc.id, tempPassword: pw };

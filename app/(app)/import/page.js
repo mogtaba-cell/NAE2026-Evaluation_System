@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { api, useApi, useMeta, PageHead, Card, Table, Btn, Banner, Kpis, Prog, Loading, when, fmt } from "@/components/ui";
 
 const REQUIRED = ["referenceId", "Submission date", "ArtPathwayNameEn", "ArtSubPathwayNameEn", "School eSIS", "School Name English", "ArtLink"];
-const CHUNK = 200;
+const CHUNK = 100;
 const dateKey = v => { if (v instanceof Date) return v.getTime(); const t = Date.parse(String(v || "").replace(" ", "T")); return isNaN(t) ? Infinity : t; };
 
 export default function Import() {
@@ -34,18 +34,26 @@ export default function Import() {
     } catch (e) { setErr(e.message); }
   }
   async function start() {
-    const st = { done: 0, created: 0, updated: 0, errors: [], newSubs: [] }; setRun({ ...st, going: true });
+    const t0 = Date.now(); const batches = Math.ceil(rows.length / CHUNK);
+    const st = { done: 0, created: 0, updated: 0, errors: [], newSubs: [], batch: 0, batches, started: t0 }; setRun({ ...st, going: true });
     for (let i = 0; i < rows.length; i += CHUNK) {
-      try { const r = await api("/api/import", { body: { rows: rows.slice(i, i + CHUNK) } }); st.created += r.created; st.updated += r.updated; st.errors.push(...r.errors); st.newSubs.push(...(r.newSubs || [])); }
-      catch (e) { st.errors.push({ row: `${rows[i].__row}–${rows[Math.min(rows.length, i + CHUNK) - 1].__row}`, message: e.message }); }
+      const part = rows.slice(i, i + CHUNK); st.batch++;
+      let r = null, err = null;
+      // Batches go one after another so entry codes follow submission order. A failed batch is retried once;
+      // it is safe to repeat because rows are matched by referenceId.
+      for (let attempt = 0; attempt < 2 && !r; attempt++) { try { r = await api("/api/import", { body: { rows: part } }); } catch (e) { err = e; } }
+      if (r) { st.created += r.created; st.updated += r.updated; st.errors.push(...r.errors); st.newSubs.push(...(r.newSubs || [])); }
+      else st.errors.push({ row: `${part[0].__row}–${part[part.length - 1].__row}`, message: `${err?.message || "Failed"}. Import the file again to finish these rows.` });
       st.done = Math.min(rows.length, i + CHUNK); setRun({ ...st, going: true });
     }
+    st.seconds = Math.round((Date.now() - t0) / 1000);
     await api("/api/import", { body: { finish: true, file_name: file.name, rows_total: rows.length, created: st.created, updated: st.updated, errors: st.errors.slice(0, 200) } }).catch(() => {});
     setRun({ ...st, going: false }); hist.reload(); meta?.reload();
   }
   const pw = rows ? Object.entries(rows.reduce((m, r) => { const k = r.ArtPathwayNameEn || "Not given"; m[k] = (m[k] || 0) + 1; return m; }, {})) : [];
   return <>
-    <PageHead title="Data import" sub="Upload the NAE submissions export (.xlsx or .csv). New referenceIds become entries with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched." />
+    <PageHead title="Data import" sub="Upload the submissions export (.xlsx or .csv). New referenceIds become entries with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched." />
+    <Banner title={`Importing into ${meta?.data?.program?.name || "the current program"}`}>Switch program at the top to import into another one. Pathways are matched by name to this program's pathways; new subpathways found in the file are added to them.</Banner>
     {!run && <div className={`drop${drag ? " on" : ""}`} role="button" tabIndex={0} onClick={() => inp.current?.click()} onKeyDown={e => e.key === "Enter" && inp.current?.click()}
       onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) read(f); }}>
       <b className="strong">{file ? file.name : "Drop the export here, or click to choose"}</b><span className="small faint">The file is read in your browser and sent in batches of {CHUNK} rows.</span>
@@ -55,7 +63,7 @@ export default function Import() {
       <Table cols={["Pathway", { h: "Rows", cls: "r" }]} rows={pw.map(([k, n]) => [k, <span key="n" className="num">{n}</span>])} />
       <p className="x-note">First submission {String(rows[0]["Submission date"]).slice(0, 16)} · last {String(rows[rows.length - 1]["Submission date"]).slice(0, 16)}. Unknown subpathways are added to their pathway automatically and listed after the import.</p>
     </Card>}
-    {run && <Card title={run.going ? "Importing…" : "Import finished"} right={!run.going && <Btn onClick={() => { setRun(null); setRows(null); setFile(null); }}>Import another file</Btn>}>
+    {run && <Card title={run.going ? `Importing… batch ${run.batch} of ${run.batches}` : `Import finished in ${run.seconds} s`} sub={run.going ? `${Math.round((Date.now() - run.started) / 1000)} s so far · ${CHUNK} rows per batch` : undefined} right={!run.going && <Btn onClick={() => { setRun(null); setRows(null); setFile(null); }}>Import another file</Btn>}>
       <Prog pct={run.done / rows.length * 100} label={`${fmt(run.done)} / ${fmt(rows.length)}`} />
       <Kpis items={[["New entries", fmt(run.created), "", "ok"], ["Updated", fmt(run.updated), "details only"], ["Rows with errors", run.errors.length, "", run.errors.length ? "warn" : "ok"]]} />
       {run.newSubs.length > 0 && <Banner tone="warn" title="New subpathways were added" action={<Btn sm href="/setup">Program setup</Btn>}>{[...new Set(run.newSubs.map(s => s.name || s))].join(", ")}. Give them a rubric before Round 1 opens.</Banner>}

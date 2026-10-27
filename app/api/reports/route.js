@@ -26,12 +26,14 @@ function book(sheetName, rows, draft) {
   XLSX.utils.book_append_sheet(wb, ws, sheetName.slice(0, 30));
   return XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
 }
-export const GET = route(["admin", "management", "leadership"], async ({ session, url }) => {
+export const GET = route(["admin", "management", "leadership"], async ({ session, url, scope }) => {
   const kind = url.searchParams.get("kind") || "entries"; const pathway = url.searchParams.get("pathway") || null; const official = url.searchParams.get("official") === "1";
   const S = await loadStructure();
+  const { has, codes } = await scope(S);
+  if (pathway && !has(pathway)) throw bad("That pathway isn't in this program.");
   const accs = await all(() => db().from("nae_accounts").select("id, display_name")); const acc = Object.fromEntries(accs.map(a => [a.id, a.display_name]));
   let rows = [], name = kind, draft = !official;
-  const loadEntries = () => all(() => { let qy = db().from("nae_entries").select("*, school:nae_schools(name, esis, region, school_type), results:nae_results(round_no, team, final, grade, passed, locked, complete), logistics:nae_logistics(needs_framing, glass_framing, damaged, state, location)").order("code"); if (pathway) qy = qy.eq("pathway_code", pathway); return qy; });
+  const loadEntries = () => all(() => { let qy = db().from("nae_entries").select("*, school:nae_schools(name, esis, region, school_type), results:nae_results(round_no, team, final, grade, passed, locked, complete), logistics:nae_logistics(needs_framing, glass_framing, damaged, state, location)").order("code"); qy = pathway ? qy.eq("pathway_code", pathway) : qy.in("pathway_code", codes.length ? codes : ["-"]); return qy; });
   if (kind === "entries" || kind === "custom") {
     const ents = await loadEntries();
     const keys = kind === "custom" ? String(url.searchParams.get("fields") || "").split(",").filter(k => FIELDS[k]) : ["code", "reference_id", "title_en", "title_ar", "pathway", "sub", "school", "esis", "region", "group", "students", "grades", "status", "coordinator"];
@@ -47,15 +49,15 @@ export const GET = route(["admin", "management", "leadership"], async ({ session
     ents.forEach(e => { const k = e.school?.esis || "?"; const r = by[k] = by[k] || { School: e.school?.name, "School eSIS": k, Region: e.school?.region, "School type": e.school?.school_type, Entries: 0, Students: 0 }; r.Entries++; r.Students += e.students_count || 0; });
     rows = Object.values(by).sort((a, b) => b.Entries - a.Entries); name = "Participation"; draft = false;
   } else if (kind === "reviews") {
-    const rv = await all(() => db().from("nae_reviews").select("*, entry:nae_entries(code, title_en)").order("flagged_at"));
+    const rv = (await all(() => db().from("nae_reviews").select("*, entry:nae_entries(code, title_en, pathway_code)").order("flagged_at"))).filter(r => pathway ? r.entry?.pathway_code === pathway : has(r.entry?.pathway_code));
     rows = rv.filter(r => !official || r.status !== "open").map(r => ({ Entry: r.entry?.code, Title: r.entry?.title_en, Round: r.round_no, Reason: r.reason, "Flagged at": r.flagged_at, Manager: acc[r.manager_id] || null, Status: r.status, "Team at flag": r.team_at_flag, "New result": r.new_result, "Override outcome": r.new_passed == null ? null : r.new_passed ? "Goes through" : "Does not go through", Note: r.decision_note, "Decided at": r.decided_at }));
     name = "Review log";
   } else if (kind === "logistics") {
-    const lg = await all(() => db().from("nae_logistics").select("*, entry:nae_entries(code, title_en, school:nae_schools(name)), collection:nae_collections(code, scheduled_on, status)"));
+    const lg = (await all(() => db().from("nae_logistics").select("*, entry:nae_entries(code, title_en, pathway_code, school:nae_schools(name)), collection:nae_collections(code, scheduled_on, status)"))).filter(x => pathway ? x.entry?.pathway_code === pathway : has(x.entry?.pathway_code));
     rows = lg.map(x => ({ Entry: x.entry?.code, Title: x.entry?.title_en, School: x.entry?.school?.name, State: x.state, Location: x.location, Damaged: x.damaged ? "Yes" : "No", Condition: x.condition, "Needs framing": x.needs_framing ? "Yes" : "No", "Protective glass": x.glass_framing ? "Yes" : "No", "Missing outcome": x.missing_outcome, Collection: x.collection?.code, "Collection date": x.collection?.scheduled_on }));
     name = "Logistics status";
   } else if (kind === "consent") {
-    const st = await all(() => db().from("nae_entry_students").select("name_en, grade, esis, consent, entry:nae_entries(code, school:nae_schools(name))").eq("consent", true));
+    const st = (await all(() => db().from("nae_entry_students").select("name_en, grade, esis, consent, entry:nae_entries(code, pathway_code, school:nae_schools(name))").eq("consent", true))).filter(x => pathway ? x.entry?.pathway_code === pathway : has(x.entry?.pathway_code));
     rows = st.map(s => ({ Student: s.name_en, Grade: s.grade, ESIS: s.esis, Entry: s.entry?.code, School: s.entry?.school?.name }));
     name = "Showcase consent";
   } else throw bad("Unknown report.");

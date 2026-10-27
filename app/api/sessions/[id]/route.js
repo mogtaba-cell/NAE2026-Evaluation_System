@@ -6,6 +6,7 @@ import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
 import { sessionPool } from "@/lib/sessions";
+import { requestForSession, releaseFromSession } from "@/lib/movements";
 
 async function loadSession(id, session) {
   const s = await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name)").eq("id", id).maybeSingle());
@@ -66,13 +67,11 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   const S = await loadStructure(); const r = S.roundById[s.round_id];
   const ids = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
   if (r.status === "closed" && ["start", "edit", "reopen"].includes(b.action || "")) throw bad("This round is closed.");
-  const setState = async (from, to) => { if (ids.length) await q(db().from("nae_logistics").update({ state: to, updated_at: new Date().toISOString() }).in("entry_id", ids).in("state", from)); };
   const action = b.action || ({ live: "start", done: "finish", planned: "edit" })[b.status];
 
   if (action === "start") {
     if (s.status !== "planned") throw bad("Only a planned session can be started.");
     await q(db().from("nae_sessions").update({ status: "live" }).eq("id", s.id));
-    await setState(["storage"], "coordinator");
     await audit(session, `${s.title}: started`, "session", s.id);
     return { ok: true };
   }
@@ -80,9 +79,11 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (s.status !== "live") throw bad("Only a live session can be finished.");
     const res = ids.length ? await q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [];
     const open = ids.filter(id => !res.find(x => x.entry_id === id && x.complete));
-    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} entr${open.length === 1 ? "y is" : "ies are"} not fully scored. They will go back to storage and can be put in another session.` };
+    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} entr${open.length === 1 ? "y is" : "ies are"} not fully scored. They can go into another session. Artworks still with you are handed back to storage.` };
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
-    await setState(["coordinator"], "storage");
+    // artworks still out go back: never handed over → straight back to storage; with the coordinator → handed
+    // back (storage confirms receipt and the shelf)
+    await releaseFromSession(session, s, ids, "session finished");
     for (const id of open) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored` : "");
     return { ok: true };
@@ -97,6 +98,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   if (action === "cancel") {
     if (s.status !== "planned") throw bad("Only a planned session can be cancelled.");
     await q(db().from("nae_sessions").update({ status: "cancelled" }).eq("id", s.id));
+    await releaseFromSession(session, s, ids, "session cancelled");
     for (const id of ids) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: cancelled`, "session", s.id, b.reason || "");
     return { ok: true };
@@ -117,11 +119,13 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (Array.isArray(b.remove) && b.remove.length) {
       const rm = await q(db().from("nae_entries").select("id").in("code", b.remove));
       if (rm.length) await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", rm.map(x => x.id)));
+      if (rm.length) await releaseFromSession(session, s, rm.map(x => x.id), "removed from the session");
     }
     if (Array.isArray(b.add_schools) && b.add_schools.length) {
       const pool = await sessionPool(S, r); const sch = new Set(b.add_schools);
       const add = pool.filter(x => sch.has(x.entry.school_id || "none"));
       if (add.length) await q(db().from("nae_session_entries").insert(add.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: 1000 + i }))));
+      if (add.length) await requestForSession(session, s, add.map(x => x.entry_id));
     }
     const now = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
     for (const id of new Set([...ids, ...now])) await recompute(id, r.round_no, { S, quiet: true });

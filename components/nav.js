@@ -12,7 +12,7 @@ export const NAV = {
     ["Artwork", [["/collections", "Collections"], ["/logistics", "Artwork logistics"]]]
   ],
   evaluator: [["Scoring", [["/queue", "My queue", "queue"]]]],
-  storage: [["Storage", [["/dashboard", "Dashboard"], ["/logistics", "Logistics board"], ["/pull-list", "Pull lists"], ["/collections", "Collections"], ["/exceptions", "Exceptions"]]]],
+  storage: [["Storage", [["/dashboard", "Dashboard"], ["/logistics", "Artwork logistics"], ["/pull-list", "Pull lists"], ["/collections", "Collections"]]]],
   management: [["Review", [["/dashboard", "Dashboard"], ["/reviews?mine=1", "My reviews", "reviews"], ["/entries", "Entries"]]], ["Insights", [["/insights", "Insights"], ["/final-results", "Final results"], ["/reports", "Reports"]]]],
-  leadership: [["HQ", [["/dashboard", "Overview"], ["/reviews", "Reviews"], ["/final-results", "Final results"], ["/entries", "Entries"], ["/reports", "Reports"]]]]
+  leadership: [["HQ", [["/dashboard", "Overview"], ["/final-results", "Final results"], ["/entries", "Entries"], ["/reports", "Reports"]]]]
 };

@@ -3,10 +3,11 @@ import { db, q, all, inChunks } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
 
 // KPIs and charts for HQ, management and admins. Optional ?pathway= narrows everything to one pathway.
-export const GET = route(["admin", "management", "leadership"], async ({ url }) => {
+export const GET = route(["admin", "management", "leadership"], async ({ url, scope }) => {
   const S = await loadStructure();
-  const pw = url.searchParams.get("pathway") || "";
-  const inPw = code => !pw || code === pw;
+  const { has, program } = await scope(S);
+  const pw = has(url.searchParams.get("pathway")) ? url.searchParams.get("pathway") : "";
+  const inPw = code => has(code) && (!pw || code === pw);
   const now = Date.now(), DAY = 864e5;
 
   const [entries, results, reviews, sessions, logistics, coords, schools] = await Promise.all([
@@ -61,7 +62,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url }) 
   const perDay = Object.fromEntries(days.map(d => [d, 0])); scores.forEach(s => { const k = dayKey(s.submitted_at); if (k in perDay) perDay[k]++; });
 
   // coordinators
-  const coordRows = coords.filter(c => !pw || (c.pathways || []).includes(pw) || E.some(e => e.coordinator_id === c.id)).map(c => {
+  const coordRows = coords.filter(c => E.some(e => e.coordinator_id === c.id)).map(c => {
     const mine = E.filter(e => e.coordinator_id === c.id);
     const scored = mine.filter(e => rOf(e.id, e.current_round)?.complete || ["through", "not_through", "final"].includes(e.status)).length;
     return { name: c.display_name, pathways: c.pathways || [], entries: mine.length, schools: new Set(mine.map(e => e.school_id)).size, scored, through: mine.filter(e => rOf(e.id, 1)?.complete && rOf(e.id, 1)?.passed).length, review: mine.filter(e => e.status === "review").length };
@@ -74,7 +75,8 @@ export const GET = route(["admin", "management", "leadership"], async ({ url }) 
   const count = (arr, f) => { const m = {}; arr.forEach(x => { const k = f(x) || "Not given"; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).map(([label, n]) => ({ label, n })).sort((a, b) => b.n - a.n); };
   return {
     pathway: pw,
-    pathwayOptions: S.pathways.map(p => ({ code: p.code, name: p.name })),
+    program: program ? { name: program.name } : null,
+    pathwayOptions: S.pathways.filter(p => has(p.code)).map(p => ({ code: p.code, name: p.name })),
     kpis: { entries: E.length, students: students.length, schools: new Set(E.map(e => e.school_id).filter(Boolean)).size, scores: scoresTotal, r1through, r2passed, shortlisted, reviewsOpen: open.length, reviewsOverdue: open.filter(r => Date.parse(r.due_at) < now).length, avgReviewHours: avgHours },
     pathways, hist,
     daily: days.map(d => ({ day: d, n: perDay[d] })),

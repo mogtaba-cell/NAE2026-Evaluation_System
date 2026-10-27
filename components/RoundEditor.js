@@ -7,7 +7,7 @@ export default function RoundEditor({ r, p, onSaved }) {
   const toast = useToast(); const meta = useMeta();
   const [f, setF] = useState(null); const [reason, setReason] = useState(""); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
   const [impact, setImpact] = useState(null); const [rcReason, setRcReason] = useState("");
-  const init = () => setF({ ...r, rule: r.pass_rule?.min_score != null ? "score" : "grade", min: r.pass_rule?.min_score ?? 75, grades: r.pass_rule?.grades || ["A", "B"], identity: !!r.pass_rule?.identity, panelMode: r.evaluator_ids?.length ? "pick" : "all", panel: r.evaluator_ids || [] });
+  const init = () => setF({ ...r, rule: r.pass_rule?.min_score != null ? "score" : "grade", min: r.pass_rule?.min_score ?? 75, grades: r.pass_rule?.grades || ["A", "B"], panelMode: r.evaluator_ids?.length ? "pick" : "all", panel: r.evaluator_ids || [] });
   useEffect(init, [r]); // eslint-disable-line
   if (!f) return null;
   const started = r.status !== "setup" || r.locked;
@@ -17,10 +17,10 @@ export default function RoundEditor({ r, p, onSaved }) {
   const others = evs.filter(e => !(e.pathways || []).includes(r.pathway_code));
   const panelCount = f.panelMode === "all" ? inPath.length : f.panel.filter(id => evs.some(e => e.id === id)).length;
   const physicalSubs = r.round_no === 2 ? (p?.subs || []).filter(s => s.is_physical) : [];
-  const ruleBad = f.rule === "score" ? !(Number.isInteger(Number(f.min)) && f.min >= 1 && f.min <= 100) : !f.grades.length || (f.grades.length === 3 && !f.identity);
+  const ruleBad = f.rule === "score" ? !(Number.isInteger(Number(f.min)) && f.min >= 1 && f.min <= 100) : !f.grades.length || f.grades.length === 3;
   async function save() {
     setBusy(true); setErr(null);
-    const pass_rule = f.rule === "score" ? { min_score: Number(f.min), ...(f.identity ? { identity: true } : {}) } : { grades: f.grades, ...(f.identity ? { identity: true } : {}) };
+    const pass_rule = f.rule === "score" ? { min_score: Number(f.min) } : { grades: f.grades };
     try {
       const res = await api(`/api/rounds/${r.id}`, { method: "PATCH", body: { opens_on: f.opens_on || "", closes_on: f.closes_on || "", pass_rule, evaluators_per_entry: Number(f.evaluators_per_entry), flag_near: !!f.flag_near, flag_margin: Number(f.flag_margin), flag_line: f.flag_line, flag_spread: !!f.flag_spread, spread_limit: Number(f.spread_limit), flag_identity: !!f.flag_identity, review_hours: Number(f.review_hours), evaluator_ids: f.panelMode === "all" ? null : f.panel, reason } });
       toast("Round saved"); setReason(""); onSaved();
@@ -43,10 +43,9 @@ export default function RoundEditor({ r, p, onSaved }) {
         <input className="input num" style={{ width: 80 }} value={f.min} disabled={f.rule !== "score"} onChange={e => set("min", e.target.value.replace(/\D/g, "").slice(0, 3))} />
         <label className="check radio"><input type="radio" checked={f.rule === "grade"} onChange={() => set("rule", "grade")} /><span className="box" /><span>Grade</span></label>
         {["A", "B", "C"].map(g => <Check key={g} label={g} disabled={f.rule !== "grade"} checked={f.grades.includes(g)} onChange={v => set("grades", v ? [...f.grades, g].sort() : f.grades.filter(x => x !== g))} />)}
-        <Check label="and national identity = yes" checked={f.identity} onChange={v => set("identity", v)} />
       </div>
     </Field>
-    {f.identity && <p className="small faint" style={{ marginTop: -8 }}>Every rubric used in this round must ask the national identity question; opening is blocked otherwise. Grade lines come from each rubric.</p>}
+    <p className="small faint" style={{ marginTop: -8 }}>National identity (asking it, and whether "yes" is needed to go through) is set in each rubric, in the Rubric library. Grade lines come from each rubric too.</p>
     <Field label={`Round ${r.round_no} evaluator panel`} help={`${panelCount} evaluator${panelCount === 1 ? "" : "s"} with a login will get online entries. Each entry needs ${f.evaluators_per_entry || 2}.${r.round_no === 2 ? " Round 1 evaluators are only used for an entry they already judged when nobody else is free." : ""}`} err={panelCount < Number(f.evaluators_per_entry || 2)}>
       <div className="stack s8">
         <label className="check radio"><input type="radio" checked={f.panelMode === "all"} onChange={() => set("panelMode", "all")} /><span className="box" /><span>Everyone with a login in {p?.name || r.pathway_code} ({inPath.length})</span></label>

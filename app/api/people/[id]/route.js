@@ -8,6 +8,7 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
   if (b.email !== undefined) patch.email = b.email || null;
   if (b.role) { if (!ROLES.includes(b.role)) throw bad("Unknown role."); patch.role = b.role; }
   if (Array.isArray(b.pathways)) patch.pathways = b.pathways;
+  if (Array.isArray(b.programs)) patch.programs = b.programs;
   if (b.active !== undefined) { if (params.id === session.sub && !b.active) throw bad("You can't switch off your own account."); patch.active = !!b.active; }
   let pw = null;
   if (b.reset_password) { pw = tempPassword(); patch.password_hash = hashPassword(pw); patch.must_change_password = true; }

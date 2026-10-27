@@ -5,7 +5,8 @@ import { scopeEntries, mySessionEntryIds } from "@/lib/perms";
 const SELECT_LIST = "id, code, reference_id, registration_id, title_en, title_ar, group_name, registration_type, students_count, grades_text, pathway_code, sub_code, current_round, status, files_count, coordinator_id, mgmt_viewed_at, mgmt_viewed_how, school:nae_schools!inner(id, name, esis, region, school_type), results:nae_results(round_no, team, final, grade, scored, needed, complete, passed)";
 const clean = s => String(s || "").trim().replace(/[%,()]/g, " ").trim();
 
-export const GET = route(["admin", "coordinator", "management", "storage", "leadership"], async ({ session, url }) => {
+export const GET = route(["admin", "coordinator", "management", "storage", "leadership"], async ({ session, url, scope }) => {
+  const { codes } = await scope();
   const p = Object.fromEntries(url.searchParams);
   const per = Math.min(100, parseInt(p.per) || 25), page = Math.max(0, parseInt(p.page) || 0);
   const term = clean(p.q).toLowerCase();
@@ -13,6 +14,7 @@ export const GET = route(["admin", "coordinator", "management", "storage", "lead
   // coordinators: "My entries" by default; "All entries" (scope=all) is a view-only list of everything
   const allScope = session.role === "coordinator" && p.scope === "all";
   if (!allScope) qy = (await scopeEntries(qy, session)).q;
+  qy = qy.in("pathway_code", codes.length ? codes : ["-"]);
   if (term) qy = qy.like("search_text", `%${term}%`);
   if (p.pathway) qy = qy.eq("pathway_code", p.pathway);
   if (p.sub) qy = qy.eq("sub_code", p.sub);
@@ -30,7 +32,7 @@ export const GET = route(["admin", "coordinator", "management", "storage", "lead
   if (p.status) { const [r, s] = p.status.split(":"); qy = qy.eq("current_round", Number(r)).eq("status", s); }
   qy = qy.order(p.sort === "recent" ? "updated_at" : "code", { ascending: p.sort !== "recent" }).range(page * per, page * per + per - 1);
   const { data, count } = await qc(qy);
-  const counts = await q(db().rpc("nae_status_counts", { p_q: term || null, p_pathway: p.pathway || null, p_sub: p.sub || null, p_region: p.region || null, p_type: p.type || null, p_coord: p.mine === "1" ? session.sub : (p.coordinator || null), p_scope_coord: session.role === "coordinator" && !allScope ? session.sub : null, p_reg: p.reg || null, p_mgmt: p.mgmt || null, p_nofiles: p.nofiles === "1" ? true : null, p_school: p.school || null, p_unalloc: p.unallocated === "1" ? true : null }));
+  const counts = await q(db().rpc("nae_status_counts", { p_q: term || null, p_pathway: p.pathway || null, p_sub: p.sub || null, p_region: p.region || null, p_type: p.type || null, p_coord: p.mine === "1" ? session.sub : (p.coordinator || null), p_scope_coord: session.role === "coordinator" && !allScope ? session.sub : null, p_reg: p.reg || null, p_mgmt: p.mgmt || null, p_nofiles: p.nofiles === "1" ? true : null, p_school: p.school || null, p_unalloc: p.unallocated === "1" ? true : null, p_pathways: codes.length ? codes : ["-"] }));
   // results are shown only for entries the person works on
   const own = session.role === "coordinator" ? new Set([...(await mySessionEntryIds(session))]) : null;
   const hideScores = r => session.role === "storage" || (session.role === "coordinator" && r.coordinator_id !== session.sub && !own.has(r.id));

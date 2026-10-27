@@ -4,7 +4,7 @@ import { createReview } from "@/lib/scoring";
 import { canWorkOnEntry, can, mySessionEntryIds } from "@/lib/perms";
 import { loadStructure, roundOf } from "@/lib/structure";
 
-export const GET = route(["admin", "management", "coordinator", "leadership"], async ({ session, url }) => {
+export const GET = route(["admin", "management", "coordinator", "leadership"], async ({ session, url, scope: inProgram }) => {
   const scope = url.searchParams.get("scope") || (session.role === "management" ? "mine" : "all");
   const status = url.searchParams.get("status") || "open";
   let qy = db().from("nae_reviews").select("*, entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, coordinator_id, school:nae_schools(name))").order(status === "open" ? "due_at" : "decided_at", { ascending: status === "open" });
@@ -13,11 +13,13 @@ export const GET = route(["admin", "management", "coordinator", "leadership"], a
   let rows = await all(() => qy);
   if (session.role === "coordinator") { const mine = new Set(await mySessionEntryIds(session)); rows = rows.filter(r => r.entry && (r.entry.coordinator_id === session.sub || mine.has(r.entry_id))); }
   const S = await loadStructure();
+  const { has } = await inProgram(S);
+  rows = rows.filter(r => r.entry && has(r.entry.pathway_code));
   const scores = await inChunks(rows.map(r => r.entry_id), ids => q(db().from("nae_scores").select("entry_id, round_id, total, status").in("entry_id", ids).eq("status", "submitted")));
   const accs = await q(db().from("nae_accounts").select("id, display_name, role"));
   const name = id => accs.find(a => a.id === id)?.display_name || null;
   const managers = accs.filter(a => a.role === "management").map(m => ({ id: m.id, name: m.display_name }));
-  const all2 = await q(db().from("nae_reviews").select("manager_id, status, due_at, decided_at, flagged_at"));
+  const all2 = (await all(() => db().from("nae_reviews").select("manager_id, status, due_at, decided_at, flagged_at, entry:nae_entries(pathway_code)"))).filter(r => has(r.entry?.pathway_code));
   const now = Date.now();
   const load = managers.map(m => ({ ...m, open: all2.filter(r => r.manager_id === m.id && r.status === "open").length, overdue: all2.filter(r => r.manager_id === m.id && r.status === "open" && Date.parse(r.due_at) < now).length, decided: all2.filter(r => r.manager_id === m.id && r.status !== "open").length }));
   return {

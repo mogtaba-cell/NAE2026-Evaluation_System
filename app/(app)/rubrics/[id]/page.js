@@ -5,12 +5,12 @@ import { api, useApi, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loa
 export default function RubricBuilder({ params }) {
   const { id } = use(params);
   const d = useApi(`/api/rubrics/${id}`); const meta = useMeta(); const toast = useToast();
-  const [crit, setCrit] = useState(null); const [idn, setIdn] = useState(false); const [bands, setBands] = useState({ A: 80, B: 50 }); const [reason, setReason] = useState(""); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
+  const [crit, setCrit] = useState(null); const [idn, setIdn] = useState("off"); const [bands, setBands] = useState({ A: 80, B: 50 }); const [reason, setReason] = useState(""); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
   const admin = meta?.data?.me?.role === "admin";
   const draft = d.data?.versions.find(v => v.status === "draft"); const pub = d.data?.versions.filter(v => v.status === "published").pop();
   const bandOf = (v, g, dflt) => (v?.grade_bands || []).find(b => b.grade === g)?.min ?? dflt;
   // admins edit the draft (or start one from the published version); everyone else sees the version in use
-  useEffect(() => { if (d.data) { const v = admin ? (draft || pub) : (pub || draft); setCrit((v?.criteria || []).map(c => ({ ...c }))); setIdn(!!v?.identity_required); setBands({ A: bandOf(v, "A", 80), B: bandOf(v, "B", 50) }); } }, [d.data, admin]); // eslint-disable-line
+  useEffect(() => { if (d.data) { const v = admin ? (draft || pub) : (pub || draft); setCrit((v?.criteria || []).map(c => ({ ...c }))); setIdn(!v?.identity_required ? "off" : v?.identity_pass ? "require" : "ask"); setBands({ A: bandOf(v, "A", 80), B: bandOf(v, "B", 50) }); } }, [d.data, admin]); // eslint-disable-line
   if (!d.data || !crit) return <Loading error={d.error} />;
   const tot = crit.reduce((s, c) => s + (Number(c.weight) || 0), 0);
   const upd = (i, k, v) => setCrit(c => c.map((x, j) => j === i ? { ...x, [k]: v } : x));
@@ -19,10 +19,10 @@ export default function RubricBuilder({ params }) {
   const base = draft || pub;
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const strip = c => (c || []).map(x => ({ key: x.key || "", label: x.label || "", label_ar: x.label_ar || "", weight: Number(x.weight) || 0, description: x.description || "", description_ar: x.description_ar || "" }));
-  const changed = !base || !same(strip(crit), strip(base.criteria)) || idn !== !!base.identity_required || bandOf(base, "A", 80) !== Number(bands.A) || bandOf(base, "B", 50) !== Number(bands.B);
+  const changed = !base || !same(strip(crit), strip(base.criteria)) || idn !== (!base.identity_required ? "off" : base.identity_pass ? "require" : "ask") || bandOf(base, "A", 80) !== Number(bands.A) || bandOf(base, "B", 50) !== Number(bands.B);
   const canPublish = !!draft || changed;
-  async function save() { setBusy("save"); setErr(null); try { await api(`/api/rubrics/${id}`, { method: "PATCH", body: { criteria: crit, identity_required: idn, grade_bands: gb } }); toast("Draft saved"); d.reload(); } catch (e) { setErr(e.message); } setBusy(null); }
-  async function publish() { setBusy("pub"); setErr(null); try { if (changed || !draft) await api(`/api/rubrics/${id}`, { method: "PATCH", body: { criteria: crit, identity_required: idn, grade_bands: gb } }); const r = await api(`/api/rubrics/${id}`, { body: { action: "publish", reason } }); toast(r.note); setReason(""); d.reload(); meta.reload(); } catch (e) { setErr(e.message); } setBusy(null); }
+  async function save() { setBusy("save"); setErr(null); try { await api(`/api/rubrics/${id}`, { method: "PATCH", body: { criteria: crit, identity_required: idn !== "off", identity_pass: idn === "require", grade_bands: gb } }); toast("Draft saved"); d.reload(); } catch (e) { setErr(e.message); } setBusy(null); }
+  async function publish() { setBusy("pub"); setErr(null); try { if (changed || !draft) await api(`/api/rubrics/${id}`, { method: "PATCH", body: { criteria: crit, identity_required: idn !== "off", identity_pass: idn === "require", grade_bands: gb } }); const r = await api(`/api/rubrics/${id}`, { body: { action: "publish", reason } }); toast(r.note); setReason(""); d.reload(); meta.reload(); } catch (e) { setErr(e.message); } setBusy(null); }
   return <>
     <PageHead back={["Rubric library", "/rubrics"]} title={<span className="code" style={{ fontSize: 22 }}>{d.data.rubric.code}</span>} badges={<>{pub && <Badge tone="ok">Published v{pub.version}</Badge>}{draft && <Badge tone="warn">Draft v{draft.version}</Badge>}</>}
       sub={`${d.data.rubric.name} · used by ${d.data.subs.map(s => `${s.pathway_code} ${s.name}${s.rubric_r1 === id && s.rubric_r2 === id ? " (R1, R2)" : s.rubric_r1 === id ? (s.rubric_r2 ? " (R1)" : " (R1, R2)") : " (R2)"}`).join(", ") || "no subpathway yet"} · ${d.data.scored} scores saved`} />
@@ -44,7 +44,9 @@ export default function RubricBuilder({ params }) {
       </div>)}
       {crit.length > 0 && crit.some(c => c.label && !c.label_ar) && <p className="small" style={{ color: "var(--warn)" }}>{crit.filter(c => c.label && !c.label_ar).length} of {crit.length} criteria have no Arabic name. Evaluators who choose Arabic will see English for those.</p>}
       {admin && <div><Btn sm onClick={() => setCrit([...crit, { label: "", label_ar: "", weight: 0, description: "", description_ar: "" }])}>Add criterion</Btn></div>}
-      <Switch checked={idn} onChange={v => admin && setIdn(v)} label="Also ask evaluators: does the work express national identity? (yes/no)" />
+      <Field label="National identity" help="Whether evaluators answer “Does the work express UAE national identity?” (yes/no), and whether every evaluator must say yes for the entry to go through. This is the only place it is set.">
+        <select className="select" style={{ maxWidth: 420 }} disabled={!admin} value={idn} onChange={e => setIdn(e.target.value)}><option value="off">Don't ask</option><option value="ask">Ask (recorded and can flag disagreement, not needed to go through)</option><option value="require">Ask, and “yes” from every evaluator is needed to go through</option></select>
+      </Field>
       <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
         <Field label="Grade A from (total)"><input className="input num" style={{ width: 90 }} inputMode="numeric" disabled={!admin} value={bands.A} onChange={e => setBands({ ...bands, A: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></Field>
         <Field label="Grade B from (total)"><input className="input num" style={{ width: 90 }} inputMode="numeric" disabled={!admin} value={bands.B} onChange={e => setBands({ ...bands, B: e.target.value.replace(/\D/g, "").slice(0, 3) })} /></Field>

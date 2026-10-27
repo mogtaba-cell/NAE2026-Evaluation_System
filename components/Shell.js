@@ -45,14 +45,26 @@ function ViewAs({ session }) {
     </Modal></>;
 }
 
+// The program everyone works in; every page shows that program. Only shown as a menu when there's a choice.
+function ProgramSwitch({ meta }) {
+  const cur = meta?.data?.program; const list = meta?.data?.programs || [];
+  const [busy, setBusy] = useState(false);
+  if (!cur) return <span className="strong">NAE</span>;
+  if (list.length < 2) return <span className="strong">{cur.name}</span>;
+  async function change(id) { setBusy(true); await fetch("/api/programs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ id }) }); window.location.reload(); }
+  return <label className="prog-sw" title="The program you're working in">
+    <span className="lb hide-s">Program</span>
+    <select className="select" value={cur.id || ""} disabled={busy} onChange={e => change(e.target.value)} aria-label="Program">{list.map(g => <option key={g.id} value={g.id}>{g.name}{g.status === "setup" ? " (setting up)" : g.status === "closed" ? " (closed)" : g.status === "archived" ? " (archived)" : ""}</option>)}</select>
+  </label>;
+}
+
 function Top({ session, onMenu }) {
   const meta = useMeta(); const router = useRouter(); const [q, setQ] = useState("");
   const canSearch = session.role !== "evaluator";
   return <header className="top">
     <button type="button" className="btn secondary icon menu-btn" title="Menu" aria-label="Menu" onClick={onMenu}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
-    <span className="strong">{meta?.data?.program?.name || "NAE 2026"}</span>
-    <span className="ctx hide-s">{[...new Set((meta?.data?.pathways || []).map(p => p.track))].map(t => `${t} track`).join(" · ")}</span>
+    <ProgramSwitch meta={meta} />
     <span className="sp" />
     {canSearch && <form className="hide-s search" style={{ width: 300 }} onSubmit={e => { e.preventDefault(); if (q.trim()) router.push(`/entries?q=${encodeURIComponent(q.trim())}`); }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="faint"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>

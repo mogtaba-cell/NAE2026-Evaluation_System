@@ -52,6 +52,7 @@ export default function Dashboard() {
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/entries?mine=1">My entries</Btn><Btn v="primary" href="/sessions">Scoring sessions</Btn></>} />
       <Kpis items={[["My entries", m.entries, `${m.schools} schools`], ["To score", sum("to_score") + sum("in_progress"), "in open rounds", "brand"], ["Needs review", sum("review"), "with management", sum("review") ? "warn" : ""], ["Through to Round 2", Object.entries(st).filter(([k]) => k.startsWith("2:")).reduce((a, [, n]) => a + n, 0), "so far", "ok"], ["Passed Round 2", m.r2passed || 0, "", "ok"]]} />
       <div className="x-side">
+        {(lg?.toMe || lg?.withMe) ? <Card title="Artworks from storage" right={<Btn sm v={lg.toMe ? "primary" : "secondary"} href="/logistics">{lg.toMe ? "Confirm" : "Open"}</Btn>}><p className="muted">{lg.toMe ? `${lg.toMe} artwork${lg.toMe === 1 ? " was" : "s were"} handed to you. Confirm what you received. ` : ""}{lg.withMe ? `${lg.withMe} with you now; hand them back when they are scored.` : ""}</p></Card> : null}
         <Card title="My scoring sessions" right={<Btn sm v="ghost" href="/sessions">All sessions</Btn>}>{mySessions.length ? <div className="x-todo">{mySessions.map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} {s.time_text || ""} · {s.venue || ""} · {s.count} entries</span></div><Btn sm v={s.status === "live" ? "primary" : "secondary"} href={`/sessions/${s.id}`}>{s.status === "live" ? "Continue" : "Open"}</Btn></div>)}</div> : <p className="muted">No sessions planned. Physical Round 2 entries are scored in sessions you create.</p>}</Card>
         <Card title="Follow up with schools">{m.nofiles.length || lg?.mineMissing?.length || m.collections.length ? <div className="x-todo">
           {lg?.mineMissing?.map(c => <div className="it" key={c}><div className="tx"><b>{c} missing at collection</b><span>Ask the school to check</span></div><Btn sm href={`/entries/${c}`}>Open</Btn></div>)}
@@ -62,13 +63,23 @@ export default function Dashboard() {
     </>;
   }
   if (role === "storage") {
+    const b = lg.by || {}; const n = k => b[k] || 0;
+    const todo = [
+      ...(n("requested") + n("picked") ? [[`${n("requested") + n("picked")} artwork${n("requested") + n("picked") === 1 ? "" : "s"} to pull for ${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, `${n("picked")} picked, ${n("requested")} still on the shelf`, <Btn key="p" sm v="primary" href="/logistics">Open</Btn>]] : []),
+      ...(n("returning") ? [[`${n("returning")} coming back from sessions`, "Check them and receive them into storage", <Btn key="r" sm href="/logistics">Receive</Btn>]] : []),
+      ...(lg.unbatched ? [[`${lg.unbatched} artwork${lg.unbatched === 1 ? "" : "s"} not in a collection`, "Schedule collections from the schools", <Btn key="c" sm href="/logistics">Schedule</Btn>]] : []),
+      ...(lg.to_collect - lg.unbatched > 0 ? [[`${lg.to_collect - lg.unbatched} artworks in scheduled collections`, "Check them in as they arrive", <Btn key="cc" sm href="/collections">Collections</Btn>]] : []),
+      ...(n("handed_over") ? [[`${n("handed_over")} handed over, waiting for coordinators`, "They confirm receipt on their side", <Btn key="h" sm v="ghost" href="/logistics?tab=all&state=handed_over">View</Btn>]] : []),
+      ...(lg.missing + lg.damaged ? [[`${lg.missing} missing · ${lg.damaged} damaged`, "Decide what happens to each", <Btn key="x" sm href="/logistics?tab=exceptions">Exceptions</Btn>]] : [])
+    ];
     return <>
-      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/collections">Collections</Btn><Btn v="primary" href="/pull-list">Pull lists</Btn></>} />
-      <Kpis items={[["Physical entries", lg.total, "Round 2"], ["To collect", lg.to_collect, `${lg.unbatched} not scheduled`], ["In storage", lg.storage, "", "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"], ["Framing", lg.framing || 0, `${lg.framer || 0} at the framer`]]} />
+      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/collections">Collections</Btn><Btn v="primary" href="/logistics">Artwork logistics</Btn></>} />
+      <Kpis items={[["Physical artworks", lg.total, "Round 2"], ["To pull", n("requested") + n("picked"), `${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, n("requested") + n("picked") ? "brand" : ""], ["Out with coordinators", n("handed_over") + n("coordinator"), `${n("returning")} coming back`], ["In storage", lg.storage, `${lg.to_collect} still to collect`, "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"]]} />
       <div className="x-side">
-        <Card title="Upcoming sessions" sub="Pull lists are made from these">{x.sessions.filter(s => s.status !== "done").length ? <div className="x-todo">{x.sessions.filter(s => s.status !== "done").map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} · {s.venue || ""} · {s.count} entries</span></div><Btn sm href={`/pull-list?session=${s.id}`}>Pull list</Btn></div>)}</div> : <p className="muted">No sessions planned.</p>}</Card>
-        <Bars title="Shelves" rows={Object.entries(lg.shelves).map(([label, n]) => ({ label, n }))} />
+        <Todo items={todo} />
+        <Card title="Upcoming sessions" sub="Each one has a pull list">{x.sessions.filter(s => s.status !== "done").length ? <div className="x-todo">{x.sessions.filter(s => s.status !== "done").map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} · {s.venue || ""} · {s.count} entries</span></div><Btn sm href={`/pull-list?session=${s.id}`}>Pull list</Btn></div>)}</div> : <p className="muted">No sessions planned.</p>}</Card>
       </div>
+      <Bars title="Shelves" rows={Object.entries(lg.shelves).map(([label, n]) => ({ label, n }))} />
     </>;
   }
   if (role === "management") {

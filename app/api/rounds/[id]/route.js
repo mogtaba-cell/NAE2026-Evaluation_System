@@ -20,7 +20,7 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
   if (b.closes_on !== undefined) patch.closes_on = b.closes_on || null;
   const o = patch.opens_on !== undefined ? patch.opens_on : r.opens_on, c = patch.closes_on !== undefined ? patch.closes_on : r.closes_on;
   if (o && c && c < o) throw bad("The closing date is before the opening date.");
-  if (b.pass_rule !== undefined) { const p = ruleProblem(b.pass_rule); if (p) throw bad(p); patch.pass_rule = b.pass_rule.min_score != null ? { min_score: Number(b.pass_rule.min_score), ...(b.pass_rule.identity ? { identity: true } : {}) } : { grades: [...new Set(b.pass_rule.grades)].sort(), ...(b.pass_rule.identity ? { identity: true } : {}) }; }
+  if (b.pass_rule !== undefined) { const p = ruleProblem(b.pass_rule); if (p) throw bad(p); patch.pass_rule = b.pass_rule.min_score != null ? { min_score: Number(b.pass_rule.min_score) } : { grades: [...new Set(b.pass_rule.grades)].sort() }; }
   if (b.evaluators_per_entry !== undefined) patch.evaluators_per_entry = int(b.evaluators_per_entry, 1, 6, "Evaluators per entry");
   if (b.flag_near !== undefined) patch.flag_near = !!b.flag_near;
   if (b.flag_margin !== undefined) patch.flag_margin = int(b.flag_margin, 0, 20, "The \"close to\" margin");

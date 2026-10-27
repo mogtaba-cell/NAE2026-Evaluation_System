@@ -14,7 +14,7 @@ export default function Rubrics() {
     <PageHead title="Rubric library" sub="Each subpathway uses one rubric per round. Publishing a new version never changes scores already saved: they keep the version they were scored with." actions={admin && <Btn v="primary" onClick={() => setNw({ code: "", name: "", pathway_code: "", copyFrom: "" })}>New rubric</Btn>} />
     <Card flush><Table minw={820} cols={["Rubric", "Criteria", "Used by", "Version"]} onRow={i => router.push(`/rubrics/${list[i].id}`)} rows={list.map(r => [
       <div key="a" className="stack s4"><span className="code strong">{r.code}</span><span className="small faint">{r.name}</span></div>,
-      <span key="b" className="small">{r.published ? r.published.criteria.map(c => `${c.label} ${c.weight}%`).join(" · ") : "Not published"}{r.published?.identity_required ? " · identity" : ""}</span>,
+      <span key="b" className="small">{r.published ? r.published.criteria.map(c => `${c.label} ${c.weight}%`).join(" · ") : "Not published"}{r.published?.identity_required ? (r.published?.identity_pass ? " · national identity (yes required)" : " · national identity asked") : ""}</span>,
       <span key="c" className="small">{r.usedBy.length ? r.usedBy.map(u => `${u.name} (R${u.r1 && u.r2 ? "1+2" : u.r1 ? 1 : 2})`).join(", ") : <span className="faint">Not used</span>}</span>,
       <span key="d" className="row" style={{ gap: 4 }}>{r.published ? <Badge tone="ok">v{r.published.version}</Badge> : null}{r.draft ? <Badge tone="warn">Draft v{r.draft.version}</Badge> : null}</span>])} /></Card>
     <Modal open={!!nw} title="New rubric" onClose={() => setNw(null)} footer={<><Btn onClick={() => setNw(null)}>Cancel</Btn><Btn v="primary" busy={busy} onClick={create}>Create draft</Btn></>}>

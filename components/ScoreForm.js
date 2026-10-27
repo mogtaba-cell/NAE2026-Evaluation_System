@@ -14,7 +14,7 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
   const lang = scoreLang(lang0), ar = lang === "ar", T = SL[lang];
   const [s, setS] = useState({}); const [idn, setIdn] = useState(null); const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(null); const [err, setErr] = useState(null); const [confirm, setConfirm] = useState(false);
-  const bands = round?.rubric?.grade_bands; const needIdentity = !!round?.pass_rule?.identity;
+  const bands = round?.rubric?.grade_bands; const needIdentity = !!round?.rubric?.identity_pass;
   const [fr, setFr] = useState({ needs: !!framing?.needs_framing, glass: !!framing?.glass_framing });
   useEffect(() => { setFr({ needs: !!framing?.needs_framing, glass: !!framing?.glass_framing }); }, [code, framing?.needs_framing, framing?.glass_framing]);
   useEffect(() => { setS(mine?.scores || {}); setIdn(typeof mine?.national_identity === "boolean" ? mine.national_identity : null); setComment(mine?.comment || ""); setErr(null); }, [code, round?.id, mine?.id, mine?.status]); // eslint-disable-line

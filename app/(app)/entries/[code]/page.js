@@ -4,7 +4,8 @@ import { api, useApi, useMeta, useToast, PageHead, Card, Badge, Banner, Btn, Loa
 import FileViewer from "@/components/FileViewer";
 import EntryAbout from "@/components/EntryAbout";
 import { total as wTotal } from "@/components/ScoreForm";
-import { EditLogistics, LG, MISSING } from "@/components/Logistics";
+import { LG, MISSING } from "@/components/Logistics";
+import { ArtworkDrawer } from "@/components/Movements";
 
 const REASONS = ["Close to the pass mark", "Evaluators disagree", "Possible plagiarism or AI use", "Eligibility question", "Wrong pathway or subpathway", "Other"];
 const yn = v => v == null ? "–" : v ? "Yes" : "No";
@@ -114,7 +115,7 @@ export default function EntryPage({ params }) {
           <Card title="Submission"><dl className="kv">{[["Entry code", e.code], ["referenceId", e.reference_id], ["RegistrationId", e.registration_id], ["Submitted", e.submitted_at ? when(e.submitted_at) : ""], ["Entry type", e.registration_type || (e.group_name ? "Group" : "Individual")], ["School", `${e.school?.name || ""}${e.school?.esis ? ` · eSIS ${e.school.esis}` : ""}`], ["School type", e.school?.school_type], ["Coordinator", e.coordinator || "Not allocated"], ["Drive folder", e.source_path]].filter(x => x[1]).flatMap(([k, v]) => [<dt key={k}>{k}</dt>, <dd key={k + "v"}>{v}</dd>])}</dl></Card>
           {logistics && <Card title="Artwork" right={<span className="row" style={{ gap: 4 }}>{logistics.damaged && <Badge tone="warn">Damaged</Badge>}<Badge tone={logistics.state === "missing" ? "bad" : logistics.state === "storage" ? "ok" : ""}>{LG[logistics.state]}</Badge></span>}>
             <dl className="kv">{[["Stored in", logistics.where], ["Condition", logistics.condition], ["Missing", logistics.missing_outcome ? MISSING[logistics.missing_outcome] : null], ["Framing", logistics.needs_framing ? (logistics.glass_framing ? "Needs framing, with protective glass" : "Needs framing") : "Not needed"], ["Collection", logistics.collection ? `${logistics.collection.code || ""} ${logistics.collection.scheduled_on || ""}` : null]].filter(x => x[1]).flatMap(([k, v]) => [<dt key={k}>{k}</dt>, <dd key={k + "v"}>{v}</dd>])}</dl>
-            {["admin", "storage"].includes(me) && <div><Btn sm onClick={() => setLgEdit(true)}>Update artwork</Btn></div>}</Card>}
+            <div className="row" style={{ gap: 8 }}><Btn sm onClick={() => setLgEdit(true)}>History</Btn>{["admin", "storage", "coordinator"].includes(me) && <Btn sm href={`/logistics?tab=all&q=${encodeURIComponent(e.code)}`}>Open in logistics</Btn>}</div></Card>}
           {sessions.length > 0 && <Card title="Scoring sessions">{sessions.map(s => <Two key={s.id} a={s.title} b={`${s.session_date || ""} · ${s.venue || ""} · ${s.status}`} />)}</Card>}
         </>}
         {tab === "history" && <Card flush><div className="tl" style={{ padding: 16 }}>{history.length ? history.map(h => <div key={h.id} className="stack s4" style={{ padding: "8px 0", borderTop: "1px solid var(--rule)" }}><span className="strong">{h.action}</span><span className="small faint">{h.actor_name || "System"} · {when(h.at)}</span>{h.detail && <span className="small muted" style={{ overflowWrap: "anywhere" }}>{h.detail}</span>}</div>) : <p className="muted">Nothing recorded yet.</p>}</div></Card>}
@@ -128,6 +129,6 @@ export default function EntryPage({ params }) {
     <Modal open={coord} title="Change coordinator" onClose={() => setCoord(false)}>
       <div className="stack s8">{(meta?.data?.accounts || []).filter(a => a.role === "coordinator").map(a => <Btn key={a.id} v={a.id === e.coordinator_id ? "primary" : "secondary"} onClick={() => setCoordinator(a.id)}>{a.display_name}</Btn>)}<Btn v="ghost" onClick={() => setCoordinator(null)}>Remove coordinator</Btn></div>
     </Modal>
-    {lgEdit && logistics && <EditLogistics row={{ ...logistics, entry: { code: e.code, school: e.school }, sub: e.sub }} onClose={() => setLgEdit(false)} onSaved={d.reload} />}
+    {lgEdit && logistics && <ArtworkDrawer row={{ ...logistics, entry: { code: e.code, title_en: e.title_en, group_name: e.group_name, school: e.school }, sub: e.sub }} role={me} onClose={() => setLgEdit(false)} onChanged={d.reload} />}
   </>;
 }
