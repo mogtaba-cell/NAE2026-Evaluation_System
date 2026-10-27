@@ -45,8 +45,8 @@ export const GET = route("*", async ({ session, scope }) => {
     out.attention = { unallocated: byPw, nofiles: nofiles.count, unmatched: unmatched.count, collectionsScheduled: toCollect.count, oldestOverdue: reviews.find(r => Date.parse(r.due_at) < now) || null };
     const act = await q(db().from("nae_audit").select("*").order("at", { ascending: false }).limit(8));
     const eids = [...new Set(act.filter(x => x.object_type === "entry" && x.object_id).map(x => x.object_id))];
-    const codes = eids.length ? await q(db().from("nae_entries").select("id, code").in("id", eids)) : [];
-    out.activity = act.map(x => ({ ...x, entry_code: codes.find(c => c.id === x.object_id)?.code || null }));
+    const ecodes = eids.length ? await q(db().from("nae_entries").select("id, code").in("id", eids)) : [];
+    out.activity = act.map(x => ({ ...x, entry_code: ecodes.find(c => c.id === x.object_id)?.code || null }));
   }
   if (session.role === "coordinator") {
     const mine = await all(() => db().from("nae_entries").select("id, code, title_en, status, current_round, files_count, school_id, school:nae_schools(name), results:nae_results(round_no, passed, complete)").eq("coordinator_id", session.sub).in("pathway_code", codes.length ? codes : ["-"]));
