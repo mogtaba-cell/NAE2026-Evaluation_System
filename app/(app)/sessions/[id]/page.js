@@ -38,6 +38,8 @@ export default function Session({ params }) {
   const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null);
   const me = meta?.data?.me;
   const e = d.data?.entries.find(x => x.code === d.data.current);
+  // keep the open artwork in the address, so a live refresh never switches to another one
+  useEffect(() => { if (!cur && d.data?.current) router.replace(`/sessions/${id}?entry=${encodeURIComponent(d.data.current)}`, { scroll: false }); }, [cur, d.data?.current]); // eslint-disable-line
   const [lang0, setLang] = useLang(id);
   const lang = scoreLang(lang0), ar = lang === "ar", T = SL[lang];
   const admin = meta?.data?.me?.role === "admin";
@@ -94,7 +96,10 @@ export default function Session({ params }) {
   const physical = entries.some(x => x.logistics);
   const roomN = entries.filter(inRoom).length;
   const filter = only ?? (physical && roomN > 0 && s.status === "live" ? "room" : "all");
-  const shown = filter === "room" ? entries.filter(inRoom) : entries;
+  // in the room: in the order they arrived (batch 1 first), so a new batch is added at the bottom
+  const arrived = x => `${String(x.logistics?.batch || 0).padStart(4, "0")}|${x.logistics?.handed_at || ""}|${String(x.position ?? 0).padStart(5, "0")}`;
+  const shown = filter === "room" ? entries.filter(inRoom).sort((a, b) => arrived(a).localeCompare(arrived(b))) : entries;
+  const isNew = x => inRoom(x) && x.logistics?.handed_at && Date.now() - Date.parse(x.logistics.handed_at) < 3 * 60 * 1000;
   const nextOpen = () => { const order = [...entries.filter(inRoom), ...entries]; return order.find(x => x.code !== e.code && !x.result?.complete && !(x.scores.filter(y => y.status !== "draft").length >= team.length)); };
   async function saveSheet() {
     setBusy("go"); setErr(null);
@@ -143,7 +148,7 @@ export default function Session({ params }) {
     <div className="f3-sc f3-sess">
       <section className="card f3-queue"><div className="qh"><b>{shown.length} artworks</b><span className="small faint">{entries.filter(x => x.result?.complete).length} of {entries.length} fully scored</span></div>
         {physical && <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--rule)" }}><Seg value={filter} onChange={setOnly} items={[["room", `In the room ${roomN}`], ["all", `All ${entries.length}`]]} /></div>}
-        <div className="qb">{shown.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => go(x.code)} onKeyDown={k => k.key === "Enter" && go(x.code)}><div className="t"><b>{x.code}</b><span dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</span>{x.logistics && <span className={`room-chip${inRoom(x) ? " in" : ""}`}>{inRoom(x) ? `In the room${x.logistics.batch ? ` · batch ${x.logistics.batch}` : ""}` : x.logistics.state === "returning" ? "Handed back" : x.logistics.state === "missing" ? "Missing" : "On the shelf"}</span>}</div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status !== "draft").length}/${team.length}`}{hasDraft(x.code) && !x.result?.complete ? " ·" : ""}</span></div>)}
+        <div className="qb">{shown.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => go(x.code)} onKeyDown={k => k.key === "Enter" && go(x.code)}><div className="t"><b>{x.code}</b><span dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</span>{isNew(x) && <span className="room-chip new">Just arrived</span>}{x.logistics && <span className={`room-chip${inRoom(x) ? " in" : ""}`}>{inRoom(x) ? `In the room${x.logistics.batch ? ` · batch ${x.logistics.batch}` : ""}` : x.logistics.state === "returning" ? "Handed back" : x.logistics.state === "missing" ? "Missing" : "On the shelf"}</span>}</div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status !== "draft").length}/${team.length}`}{hasDraft(x.code) && !x.result?.complete ? " ·" : ""}</span></div>)}
           {!shown.length && <p className="small faint" style={{ padding: 12 }}>{filter === "room" ? "No artworks in the room right now. Storage brings the next batch." : "No artworks."}</p>}</div></section>
       {e ? <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><span className="code" style={{ fontSize: 15, fontWeight: 600 }}>{e.code}</span><Badge>{e.sub}</Badge>{e.r1 && <Badge tone="ok">Round 1: {e.r1.final ?? e.r1.team} · {e.r1.grade}</Badge>}{e.logistics?.damaged && <Badge tone="warn">Damaged</Badge>}{e.logistics?.where && <Badge>{e.logistics.where}</Badge>}</div>

@@ -30,7 +30,7 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
   if (url.searchParams.get("pools")) for (const r of rounds) {
     const pool = await sessionPool(S, r);
     const bySchool = {};
-    pool.forEach(x => { const k = x.entry.school_id || "none"; const g = bySchool[k] = bySchool[k] || { school_id: x.entry.school_id, name: x.entry.school?.name || "No school", esis: x.entry.school?.esis, count: 0, subs: {}, mine: false }; g.count++; g.subs[x.entry.sub_code] = (g.subs[x.entry.sub_code] || 0) + 1; if (x.entry.coordinator_id === session.sub) g.mine = true; });
+    pool.forEach(x => { const k = x.entry.school_id || "none"; const g = bySchool[k] = bySchool[k] || { school_id: x.entry.school_id, name: x.entry.school?.name || "No school", esis: x.entry.school?.esis, count: 0, physical: 0, subs: {}, physSubs: {}, mine: false }; g.count++; if (!x.online) { g.physical++; g.physSubs[x.entry.sub_code] = (g.physSubs[x.entry.sub_code] || 0) + 1; } g.subs[x.entry.sub_code] = (g.subs[x.entry.sub_code] || 0) + 1; if (x.entry.coordinator_id === session.sub) g.mine = true; });
     pools[r.id] = Object.values(bySchool).sort((a, b) => (b.mine - a.mine) || a.name.localeCompare(b.name));
   }
   const visible = sessions.filter(s => session.role !== "coordinator" || s.coordinator_id === session.sub);
@@ -78,6 +78,6 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   await q(db().from("nae_session_entries").insert(picked.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: i }))));
   const requested = await requestForSession(session, s, picked.filter(x => !x.online).map(x => x.entry_id));
   for (const x of picked) await recompute(x.entry_id, r.round_no, { S, quiet: true });
-  await audit(session, `Created ${s.title}`, "session", s.id, `${picked.length} entries${picked.some(x => !x.online) ? " · pull list sent to storage" : ""}`);
-  return { id: s.id, count: picked.length };
+  await audit(session, `Created ${s.title}`, "session", s.id, `${picked.length} artworks${requested ? ` · ${requested} physical, on storage's session board` : ""}`);
+  return { id: s.id, count: picked.length, physical: requested, online: picked.filter(x => x.online).length };
 });

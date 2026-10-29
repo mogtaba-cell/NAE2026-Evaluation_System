@@ -46,13 +46,13 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
     const rv = reviews.filter(x => x.entry_id === e.id);
     const lg = logistics.find(x => x.entry_id === e.id) || null;
     entries.push({
-      code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
+      position: l.position, code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
       r1: r.round_no === 2 ? results.find(x => x.entry_id === e.id && x.round_no === 1) || null : null,
       rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
       scores: scores.filter(x => x.entry_id === e.id),
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
-      logistics: lg ? { state: lg.state, batch: lg.batch_no, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
+      logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
       files: null
     });
   }

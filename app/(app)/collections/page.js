@@ -1,58 +1,203 @@
 "use client";
-import { useState, useEffect } from "react";
-import { api, useApi, useMeta, useToast, PageHead, Card, Table, Badge, Loading, Btn, Banner, Field, Modal, Two, Check, dshort } from "@/components/ui";
+// Collections from schools, made for a phone: pick a collection, mark each artwork received / missing / not yet,
+// photograph the artworks and the school contact's Emirates ID, enter who handed them over, confirm. Mistakes can be
+// corrected afterwards (received <-> missing), and every visit is kept with its photos.
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { api, useApi, useMeta, useToast, PageHead, Badge, Loading, Btn, Banner, Field, Modal, Check, Seg, Search, Empty, dshort, when } from "@/components/ui";
+
+// Shrink a camera photo to at most 1600 px (about 200 to 400 KB) before sending it.
+async function shrink(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
+  if (!bmp) return file;
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise(r => c.toBlob(b => r(b || file), "image/jpeg", 0.82));
+}
+function PhotoButton({ collectionId, kind, entry, onAdded, label, primary }) {
+  const ref = useRef(null); const toast = useToast(); const [busy, setBusy] = useState(false);
+  async function pick(e) {
+    const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return;
+    setBusy(true);
+    try {
+      for (const f of files) {
+        const blob = await shrink(f);
+        const r = await fetch(`/api/collections/${collectionId}/photos`, { method: "POST", headers: { "content-type": blob.type || "image/jpeg", "x-kind": kind, ...(entry ? { "x-entry": entry } : {}) }, body: blob });
+        const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || "Upload failed");
+        onAdded && onAdded(j.photo);
+      }
+    } catch (x) { toast(x.message, "err"); }
+    setBusy(false);
+  }
+  return <><input ref={ref} type="file" accept="image/*" capture="environment" multiple={kind !== "eid"} hidden onChange={pick} />
+    <Btn sm={!primary} v={primary ? "primary" : "secondary"} busy={busy} onClick={() => ref.current?.click()}>{label}</Btn></>;
+}
+function Thumbs({ photos, onRemove, canRemove }) {
+  const [big, setBig] = useState(null);
+  if (!photos?.length) return null;
+  return <><div className="cl-thumbs">{photos.map(p => <button key={p.id} type="button" className="cl-thumb" onClick={() => setBig(p)}><img src={p.url} alt={p.kind === "eid" ? "Emirates ID" : "Artwork photo"} loading="lazy" />{p.kind === "eid" && <span>EID</span>}</button>)}</div>
+    <Modal open={!!big} wide title={big?.kind === "eid" ? "Emirates ID photo" : "Photo"} sub={big ? `${big.taken_by_name || ""}${big.at ? ` · ${when(big.at)}` : ""}` : ""} onClose={() => setBig(null)} footer={<>{canRemove && <Btn v="ghost" onClick={async () => { await onRemove(big); setBig(null); }}>Remove photo</Btn>}<span className="sp" /><Btn onClick={() => setBig(null)}>Close</Btn></>}>
+      {big && <img src={big.url} alt="" style={{ width: "100%", borderRadius: 8 }} />}
+    </Modal></>;
+}
+// The school's submitted photos of an artwork: small previews; tap one to see it large and swipe through the rest.
+function Submitted({ files, code }) {
+  const [i, setI] = useState(null); const touch = useRef(null);
+  if (!files?.length) return <span className="small faint">No photos submitted</span>;
+  const go = d => setI(x => (x + d + files.length) % files.length);
+  const f = i != null ? files[i] : null;
+  return <><div className="cl-sub"><span className="small faint">Submitted photos</span><div className="cl-thumbs">{files.map((x, k) => <button key={k} type="button" className="cl-thumb sm" onClick={() => setI(k)} aria-label={`Open ${x.name}`}><img src={`${x.thumb}?s=240`} alt="" loading="lazy" />{x.video && <span>Video</span>}</button>)}</div></div>
+    <Modal open={f != null} wide title={code} sub={f ? `${f.name} · ${i + 1} of ${files.length}` : ""} onClose={() => setI(null)} footer={<>{files.length > 1 && <><Btn onClick={() => go(-1)}>‹ Previous</Btn><Btn onClick={() => go(1)}>Next ›</Btn></>}<span className="sp" /><Btn onClick={() => setI(null)}>Close</Btn></>}>
+      {f && <div className="cl-big" onTouchStart={e => { touch.current = e.touches[0].clientX; }} onTouchEnd={e => { const dx = e.changedTouches[0].clientX - (touch.current ?? 0); if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); }}>
+        {f.video ? <video src={f.big} controls playsInline style={{ width: "100%", maxHeight: "70vh" }} /> : <img src={f.big} alt={f.name} />}
+      </div>}
+    </Modal></>;
+}
+function LocSelect({ value, onChange, placeholder }) {
+  const locs = useApi("/api/locations"); const list = (locs.data?.locations || []).filter(l => l.active);
+  return <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{list.map(l => <option key={l.id} value={l.id}>{l.label} ({l.count} stored)</option>)}</select>;
+}
+const STATUS = c => c.status === "checked_in" ? (c.missing ? ["Checked in · " + c.missing + " missing", "warn"] : ["Checked in", "ok"]) : c.left < c.count ? [`${c.left} still to collect`, "info"] : ["To collect", ""];
 
 export default function Collections() {
-  const d = useApi("/api/collections", [], { live: true }); const meta = useMeta(); const toast = useToast();
-  const locs = useApi("/api/locations");
-  const [sel, setSel] = useState(null); const c = useApi(sel ? `/api/collections/${sel}` : null);
-  const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [where, setWhere] = useState(""); const [itemWhere, setItemWhere] = useState({});
-  const [by, setBy] = useState(""); const [conf, setConf] = useState(false); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
-  useEffect(() => { if (d.data && !sel) setSel((d.data.collections.find(x => x.status === "scheduled") || d.data.collections[0])?.id || null); }, [d.data]); // eslint-disable-line
-  useEffect(() => { setRec({}); setCond({}); setDmg({}); setWhere(""); setItemWhere({}); setBy(""); setErr(null); }, [sel]);
+  const sp = useSearchParams(); const router = useRouter();
+  const d = useApi("/api/collections", [], { live: true }); const meta = useMeta();
+  const [q, setQ] = useState(""); const [f, setF] = useState("todo");
+  const sel = sp.get("c");
+  const open = id => router.replace(id ? `/collections?c=${id}` : "/collections", { scroll: false });
   if (!d.data) return <Loading error={d.error} />;
-  const list = d.data.collections; const can = ["admin", "storage"].includes(meta?.data?.me?.role);
-  const active = (locs.data?.locations || []).filter(l => l.active);
-  const x = c.data; const scheduled = x?.collection.status === "scheduled";
-  const todo = (x?.items || []).filter(i => i.state === "to_collect");
-  const received = Object.values(rec).filter(v => v === "ok").length;
-  const missingN = Object.values(rec).filter(v => v === "missing").length;
-  const laterN = todo.length - received - missingN;
-  const needWhere = todo.some(i => rec[i.entry.code] === "ok" && !itemWhere[i.entry.code]) && !where;
-  async function handover() { setBusy(true); setErr(null); try { const r = await api(`/api/collections/${sel}`, { body: { action: "handover", received: rec, conditions: cond, damaged: dmg, location_id: where || null, locations: itemWhere, handed_by: by } }); toast(r.note); setConf(false); c.reload(); d.reload(); } catch (e) { setErr(e.message); setConf(false); } setBusy(false); }
-  async function schedule(v) { try { await api(`/api/collections/${sel}`, { body: { action: "schedule", scheduled_on: v } }); c.reload(); d.reload(); } catch (e) { toast(e.message, "err"); } }
-  const locSelect = (value, onChange, placeholder) => <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{active.map(l => <option key={l.id} value={l.id}>{l.label} ({l.count} stored)</option>)}</select>;
+  const can = ["admin", "storage", "coordinator"].includes(meta?.data?.me?.role);   // coordinators see (and work on) only their schools' collections
+  const all = d.data.collections;
+  const t = q.trim().toLowerCase();
+  const isTodo = c => c.status === "scheduled", isPart = c => c.status === "scheduled" && c.left < c.count;
+  const list = all.filter(c => (f === "all" || (f === "todo" && isTodo(c)) || (f === "part" && isPart(c)) || (f === "done" && !isTodo(c)))
+    && (!t || [c.school?.name, c.school?.esis, c.code, c.sub, c.coordinator].some(v => String(v || "").toLowerCase().includes(t))))
+    .sort((a, b) => isTodo(a) !== isTodo(b) ? (isTodo(a) ? -1 : 1) : String(a.scheduled_on || "9").localeCompare(String(b.scheduled_on || "9")) || String(a.school?.name).localeCompare(String(b.school?.name)));
+  const n = k => all.filter(k).length;
   return <>
-    <PageHead title="Collections" sub="One batch per school, pathway and subpathway. Storage checks each artwork on arrival and records where the batch is stored. A missing artwork is marked on its own and the rest of the batch carries on." actions={<Btn href="/logistics">Artwork logistics</Btn>} />
-    {!list.length ? <Banner title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks go through to Round 2.</Banner> : <div className="x-side">
-      <Card title="All collections" flush><Table minw={560} sel={list.findIndex(l => l.id === sel)} onRow={i => setSel(list[i].id)} cols={["School", "Subpathway", "Date", { h: "Artworks", cls: "r" }, "Status"]} rows={list.map(l => [<Two key="s" a={l.school?.name} b={`${l.code}${l.coordinator ? " · " + l.coordinator : ""}`} />, <span key="p" className="small">{l.sub || l.pathway}</span>, l.scheduled_on ? dshort(l.scheduled_on) : <span key="d" className="faint">Not set</span>, l.count, l.status === "scheduled" ? <Badge key="b" tone={l.left < l.count ? "info" : ""}>{l.left < l.count ? `Partly in · ${l.left} left` : "Scheduled"}</Badge> : <Badge key="b" tone={l.missing ? "warn" : "ok"}>Checked in{l.where ? ` · ${l.where}` : ""}{l.missing ? ` · ${l.missing} missing` : ""}</Badge>])} /></Card>
-      {!x ? <Loading error={c.error} /> : <Card title={x.collection.school?.name} sub={`${x.collection.pathway || ""}${x.collection.sub ? " · " + x.collection.sub : ""} · ${x.collection.code} · eSIS ${x.collection.school?.esis || ""}`} right={scheduled ? <Badge>{todo.length < x.items.length ? `${todo.length} still to collect` : "Scheduled"}</Badge> : <Badge tone="ok">Checked in{x.collection.where ? ` · ${x.collection.where}` : ""}</Badge>}>
-        {err && <Banner tone="bad" title={err} />}
-        {can && scheduled && <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
-          <Field label="Collection date"><input type="date" className="input" value={x.collection.scheduled_on || ""} onChange={e => schedule(e.target.value)} /></Field>
-          <Field label="Stored in" help="Where this batch goes. Change single artworks below if needed.">{locSelect(where, setWhere, "Choose room and shelf…")}</Field>
-        </div>}
-        <div className="stack s8">{can && scheduled && todo.length > 1 && <div className="row" style={{ gap: 8 }}><Btn sm onClick={() => setRec(Object.fromEntries(todo.map(i => [i.entry.code, "ok"])))}>Mark all received</Btn><Btn sm v="ghost" onClick={() => setRec({})}>Clear</Btn><span className="small faint">Anything you don't mark stays in this collection for a later visit.</span></div>}
-          {x.items.map(i => { const code = i.entry.code; const on = rec[code] === "ok"; const act = can && scheduled && i.state === "to_collect"; return <div key={i.entry_id} style={{ padding: "8px 0", borderTop: "1px solid var(--rule)" }}>
-          <div className="row nowrap" style={{ gap: 12 }}>
-            <div className="grow stack s4" style={{ minWidth: 0 }}><span className="code">{code}</span><span className="small faint" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{i.entry.title_en || i.entry.group_name} · {i.entry.size_text || i.entry.medium || ""}</span></div>
-            {act ? <span className="f3-yn lg" style={{ flex: "none" }}><button type="button" className={on ? "on" : ""} style={{ width: 88 }} onClick={() => setRec({ ...rec, [code]: "ok" })}>Received</button><button type="button" className={rec[code] === "missing" ? "on" : ""} style={{ width: 72 }} onClick={() => setRec({ ...rec, [code]: "missing" })}>Missing</button><button type="button" className={!rec[code] ? "on" : ""} style={{ width: 72 }} onClick={() => { const r = { ...rec }; delete r[code]; setRec(r); }}>Not yet</button></span>
-              : <span className="small">{i.state === "missing" ? <Badge tone="bad">Missing</Badge> : <>{i.where || i.state}{i.damaged ? <> <Badge tone="warn">Damaged</Badge></> : null}</>}</span>}
-          </div>
-          {act && on && <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-            <Check label="Damaged" checked={!!dmg[code]} onChange={v => setDmg({ ...dmg, [code]: v })} />
-            <input className="input" style={{ height: 30, flex: "1 1 180px" }} placeholder={dmg[code] ? "What's damaged?" : "Condition notes (optional)"} value={cond[code] || ""} onChange={e => setCond({ ...cond, [code]: e.target.value })} />
-            <div style={{ flex: "1 1 200px" }}>{locSelect(itemWhere[code] || "", v => setItemWhere({ ...itemWhere, [code]: v }), "Same place as the batch")}</div>
-          </div>}
-        </div>; })}</div>
-        {can && scheduled && <div className="row" style={{ gap: 8 }}><span className="small faint">{received} received · {missingN} missing · {laterN} not yet</span><span className="sp" style={{ flex: 1 }} /><Btn v="primary" disabled={!(received + missingN) || needWhere} onClick={() => setConf(true)}>{laterN && received + missingN ? "Check in these" : "Confirm handover"}</Btn></div>}
-        {can && scheduled && needWhere && <p className="small" style={{ color: "var(--warn)" }}>Choose where the batch is stored.</p>}
-        {!scheduled && <p className="x-note">Handed over by {x.collection.handed_by || "the school"}.</p>}
-      </Card>}
+    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one, photograph them and the school contact's Emirates ID, and confirm. One collection per school and subpathway." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
+    {!all.length ? <Empty title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks go through to Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
+      <section className="cl-list">
+        <div className="cl-tools"><Search value={q} onChange={setQ} placeholder="School, eSIS, code" />
+          <Seg value={f} onChange={setF} items={[["todo", `To collect ${n(isTodo)}`], ["part", `Partly in ${n(isPart)}`], ["done", `Checked in ${n(c => !isTodo(c))}`], ["all", "All"]]} /></div>
+        {list.map(c => { const [st, tone] = STATUS(c); return <button key={c.id} type="button" className={`cl-card${c.id === sel ? " on" : ""}`} onClick={() => open(c.id)}>
+          <span className="cl-c1"><b>{c.school?.name}</b><Badge tone={tone}>{st}</Badge></span>
+          <span className="small faint">{[c.sub || c.pathway, c.school?.esis && `eSIS ${c.school.esis}`, c.coordinator].filter(Boolean).join(" · ")}</span>
+          <span className="cl-c3"><span>{c.scheduled_on ? dshort(c.scheduled_on) : "No date"}</span><span>{c.count} artwork{c.count === 1 ? "" : "s"}</span>{c.where && <span>{c.where}</span>}</span>
+        </button>; })}
+        {!list.length && <p className="muted" style={{ padding: 16 }}>No collections here.</p>}
+      </section>
+      <section className="cl-detail">{sel ? <Detail key={sel} id={sel} can={can} onBack={() => open(null)} onChanged={d.reload} /> : <div className="cl-pick">Choose a collection.</div>}</section>
     </div>}
-    <Modal open={conf} title="Confirm handover" onClose={() => setConf(false)} footer={<><Btn onClick={() => setConf(false)}>Cancel</Btn><Btn v="primary" busy={busy} onClick={handover}>Confirm</Btn></>}>
-      <p>{received} received{Object.values(dmg).filter(Boolean).length ? ` (${Object.values(dmg).filter(Boolean).length} damaged)` : ""}, {Object.values(rec).filter(v => v === "missing").length} missing.{where ? ` Received artworks go to ${active.find(l => l.id === where)?.label}.` : ""} Missing artworks are listed under Exceptions.{laterN ? ` ${laterN} not yet collected stay in this collection for a later visit.` : ""}</p>
-      <Field label="Handed over by (school contact)"><input className="input" value={by} onChange={e => setBy(e.target.value)} /></Field>
-    </Modal>
   </>;
+}
+
+function Detail({ id, can, onBack, onChanged }) {
+  const c = useApi(`/api/collections/${id}`, [], { live: 30000 }); const toast = useToast();
+  const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [where, setWhere] = useState(""); const [itemWhere, setItemWhere] = useState({});
+  const [contact, setContact] = useState({ name: "", phone: "" }); const [newPhotos, setNewPhotos] = useState([]);
+  const [conf, setConf] = useState(false); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [fix, setFix] = useState(null);
+  const x = c.data;
+  const photosByEntry = useMemo(() => { const m = {}; (x?.items || []).forEach(i => { m[i.entry.code] = [...(i.photos || []), ...newPhotos.filter(p => p.entry_id === i.entry_id)]; }); return m; }, [x, newPhotos]);
+  if (!x) return <Loading error={c.error} />;
+  const col = x.collection; const scheduled = col.status === "scheduled";
+  const todo = x.items.filter(i => i.state === "to_collect");
+  const doneItems = x.items.filter(i => i.state !== "to_collect");
+  const received = todo.filter(i => rec[i.entry.code] === "ok").length, missingN = todo.filter(i => rec[i.entry.code] === "missing").length, laterN = todo.length - received - missingN;
+  const eid = newPhotos.find(p => p.kind === "eid");
+  const needs = [];
+  if (!(received + missingN)) needs.push("mark at least one artwork");
+  if (received && !where && todo.some(i => rec[i.entry.code] === "ok" && !itemWhere[i.entry.code])) needs.push("choose where they are stored");
+  if (received && !contact.name.trim()) needs.push("enter the contact's name");
+  if (received && !/^\+?[0-9 ()-]{7,20}$/.test(contact.phone.trim())) needs.push("enter their phone number");
+  if (received && !eid) needs.push("photograph their Emirates ID");
+  const added = p => setNewPhotos(l => [...l, p]);
+  async function removePhoto(p) { try { await api(`/api/collections/photos/${p.id}`, { method: "DELETE" }); setNewPhotos(l => l.filter(y => y.id !== p.id)); c.reload(); } catch (e) { toast(e.message, "err"); } }
+  async function schedule(v) { try { await api(`/api/collections/${id}`, { body: { action: "schedule", scheduled_on: v } }); c.reload(); onChanged(); } catch (e) { toast(e.message, "err"); } }
+  async function handover() {
+    setBusy(true); setErr(null);
+    try { const r = await api(`/api/collections/${id}`, { body: { action: "handover", received: rec, conditions: cond, damaged: dmg, location_id: where || null, locations: itemWhere, contact_name: contact.name, contact_phone: contact.phone, photo_ids: newPhotos.map(p => p.id) } });
+      toast(r.note); setConf(false); setRec({}); setCond({}); setDmg({}); setItemWhere({}); setNewPhotos([]); setContact({ name: "", phone: "" }); c.reload(); onChanged(); }
+    catch (e) { setErr(e.message); setConf(false); } setBusy(false);
+  }
+  async function correct() {
+    setBusy(true);
+    try { const r = await api(`/api/collections/${id}`, { body: { action: "correct", entry_code: fix.code, to: fix.to, note: fix.note, location_id: fix.loc || null } }); toast(r.note); setFix(null); c.reload(); onChanged(); }
+    catch (e) { toast(e.message, "err"); } setBusy(false);
+  }
+  const stateBadge = i => i.state === "missing" ? <Badge tone="bad">Missing</Badge> : i.state === "storage" ? <Badge tone="ok">In storage{i.where ? ` · ${i.where}` : ""}</Badge> : <Badge>{i.state === "to_collect" ? "To collect" : i.state}</Badge>;
+  return <div className="cl-d">
+    <button type="button" className="cl-back link" onClick={onBack}>‹ All collections</button>
+    <div className="cl-dh"><div><h2>{col.school?.name}</h2><p className="small faint">{[col.pathway, col.sub, col.code, col.school?.esis && `eSIS ${col.school.esis}`].filter(Boolean).join(" · ")}</p></div>{scheduled ? <Badge>{todo.length < x.items.length ? `${todo.length} still to collect` : "To collect"}</Badge> : <Badge tone="ok">Checked in{col.where ? ` · ${col.where}` : ""}</Badge>}</div>
+    {err && <Banner tone="bad" title={err} />}
+
+    {can && scheduled && todo.length > 0 && <>
+      <div className="cl-sec"><div className="cl-sh"><b>Collection date</b></div><input type="date" className="input" value={col.scheduled_on || ""} onChange={e => schedule(e.target.value)} /></div>
+      <div className="cl-sec">
+        <div className="cl-sh"><b>1. Artworks ({todo.length})</b><span className="sp" /><Btn sm onClick={() => setRec(Object.fromEntries(todo.map(i => [i.entry.code, "ok"])))}>All received</Btn></div>
+        {todo.map(i => { const code = i.entry.code; const v = rec[code]; return <div key={code} className={`cl-item${v === "ok" ? " ok" : v === "missing" ? " miss" : ""}`}>
+          <div className="cl-it"><span className="code">{code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="small faint">{[i.entry.size_text, i.entry.medium].filter(Boolean).join(" · ")}</span></div>
+          <Submitted files={i.files} code={code} />
+          <div className="cl-3"><button type="button" className={v === "ok" ? "on ok" : ""} onClick={() => setRec({ ...rec, [code]: "ok" })}>Received</button><button type="button" className={v === "missing" ? "on miss" : ""} onClick={() => setRec({ ...rec, [code]: "missing" })}>Missing</button><button type="button" className={!v ? "on" : ""} onClick={() => { const r = { ...rec }; delete r[code]; setRec(r); }}>Not yet</button></div>
+          {v === "ok" && <div className="cl-more">
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}><Check label="Damaged" checked={!!dmg[code]} onChange={on => setDmg({ ...dmg, [code]: on })} /><PhotoButton collectionId={id} kind="item" entry={code} onAdded={added} label="Take photo" /></div>
+            {(dmg[code] || cond[code]) !== undefined && <input className="input" placeholder={dmg[code] ? "What's damaged?" : "Condition notes (optional)"} value={cond[code] || ""} onChange={e => setCond({ ...cond, [code]: e.target.value })} />}
+            {photosByEntry[code]?.length > 0 && <span className="small faint">Your photos</span>}
+            <Thumbs photos={photosByEntry[code]} canRemove onRemove={removePhoto} />
+            <LocSelect value={itemWhere[code] || ""} onChange={v2 => setItemWhere({ ...itemWhere, [code]: v2 })} placeholder="Same place as the batch" />
+          </div>}
+        </div>; })}
+      </div>
+      {received > 0 && <>
+        <div className="cl-sec"><div className="cl-sh"><b>2. Store the batch in</b></div><LocSelect value={where} onChange={setWhere} placeholder="Choose room and shelf…" /></div>
+        <div className="cl-sec"><div className="cl-sh"><b>3. Handed over by (school contact)</b></div>
+          <Field label="Full name"><input className="input" autoComplete="off" value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} placeholder="As on the Emirates ID" /></Field>
+          <Field label="Mobile number"><input className="input" type="tel" inputMode="tel" autoComplete="off" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="050 123 4567" /></Field>
+          <Field label="Emirates ID photo" help="Kept privately: only the storage team and admins can see it, and every view is recorded.">
+            <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>{!eid && <PhotoButton collectionId={id} kind="eid" onAdded={added} label="Photograph Emirates ID" primary />}<Thumbs photos={eid ? [eid] : []} canRemove onRemove={removePhoto} /></div>
+          </Field>
+        </div>
+      </>}
+      <div className="cl-bar">
+        <div className="small"><b>{received}</b> received · <b>{missingN}</b> missing · <b>{laterN}</b> not yet{needs.length ? <span className="faint"> · To confirm: {needs.join(", ")}</span> : ""}</div>
+        <Btn v="primary" disabled={needs.length > 0} onClick={() => setConf(true)}>{laterN && received + missingN ? "Confirm these" : "Confirm handover"}</Btn>
+      </div>
+    </>}
+
+    {doneItems.length > 0 && <div className="cl-sec">
+      <div className="cl-sh"><b>{scheduled ? "Already collected" : "Artworks"}</b></div>
+      {doneItems.map(i => <div key={i.entry.code} className="cl-item">
+        <div className="cl-it"><span className="code">{i.entry.code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="row" style={{ gap: 6, flexWrap: "wrap" }}>{stateBadge(i)}{i.damaged && <Badge tone="warn">Damaged</Badge>}</span></div>
+        <Submitted files={i.files} code={i.entry.code} />
+        <Thumbs photos={photosByEntry[i.entry.code]} canRemove={can} onRemove={removePhoto} />
+        {can && <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+          {i.state === "missing" && <Btn sm v="primary" onClick={() => setFix({ code: i.entry.code, to: "received", note: "", loc: "" })}>It was received</Btn>}
+          {i.state === "storage" && <Btn sm v="ghost" onClick={() => setFix({ code: i.entry.code, to: "missing", note: "", loc: "" })}>Mark missing</Btn>}
+          <PhotoButton collectionId={id} kind="item" entry={i.entry.code} onAdded={() => c.reload()} label="Add photo" />
+        </div>}
+      </div>)}
+    </div>}
+
+    {x.visits.length > 0 && <div className="cl-sec"><div className="cl-sh"><b>Visits</b></div>
+      {x.visits.map(v => <div key={v.id} className="cl-visit">
+        <div className="row between" style={{ gap: 8, flexWrap: "wrap" }}><b>{when(v.at)}</b><span className="small faint">by {v.by_name}</span></div>
+        {v.contact_name && <span className="small">Handed over by <b>{v.contact_name}</b>{v.contact_phone ? <> · <a href={`tel:${v.contact_phone.replace(/[^0-9+]/g, "")}`}>{v.contact_phone}</a></> : ""}{v.location ? ` · stored in ${v.location}` : ""}</span>}
+        <span className="small faint">{[v.received.length && `${v.received.length} received`, v.missing.length && `${v.missing.length} missing (${v.missing.join(", ")})`, v.later.length && `${v.later.length} not yet`].filter(Boolean).join(" · ")}</span>
+        <Thumbs photos={v.photos} canRemove={can} onRemove={removePhoto} />
+      </div>)}
+    </div>}
+
+    <Modal open={conf} title="Confirm handover" onClose={() => setConf(false)} footer={<><Btn onClick={() => setConf(false)}>Back</Btn><Btn v="primary" busy={busy} onClick={handover}>Confirm</Btn></>}>
+      <p><b>{received}</b> received{Object.values(dmg).filter(Boolean).length ? ` (${Object.values(dmg).filter(Boolean).length} damaged)` : ""}, <b>{missingN}</b> missing{laterN ? `, ${laterN} not yet (they stay in this collection for the next visit)` : ""}.</p>
+      {received > 0 && <p className="muted">Handed over by {contact.name} ({contact.phone}). {newPhotos.filter(p => p.kind === "item").length} artwork photo{newPhotos.filter(p => p.kind === "item").length === 1 ? "" : "s"} and the Emirates ID photo are saved with this visit.</p>}
+      {missingN > 0 && <p className="muted">Missing artworks are listed under Exceptions, where you decide what happens to them.</p>}
+    </Modal>
+    <Modal open={!!fix} title={fix?.to === "missing" ? `Mark ${fix?.code} missing?` : `${fix?.code} was received`} onClose={() => setFix(null)} footer={<><Btn onClick={() => setFix(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={fix?.to === "missing" && !fix?.note.trim()} onClick={correct}>Save</Btn></>}>
+      {fix && <div className="stack" style={{ gap: 12 }}>
+        {fix.to === "received" && <Field label="Stored in"><LocSelect value={fix.loc} onChange={v => setFix({ ...fix, loc: v })} placeholder={col.where ? `Same as the batch (${col.where})` : "Choose room and shelf…"} /></Field>}
+        <Field label={fix.to === "missing" ? "What happened?" : "Note (optional)"}><input className="input" value={fix.note} onChange={e => setFix({ ...fix, note: e.target.value })} placeholder={fix.to === "missing" ? "For example: not in the box after all" : "For example: found in the second box"} /></Field>
+      </div>}
+    </Modal>
+  </div>;
 }

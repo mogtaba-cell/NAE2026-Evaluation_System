@@ -20,6 +20,7 @@ export default function Sessions() {
   const pool = (f && pools[f.round_id]) || [];
   const shownPool = admin || schoolScope === "all" ? pool : pool.filter(g => g.mine);
   const chosen = pool.filter(g => f?.school_ids.includes(g.school_id || "none"));
+  const physN = mode === "pick" ? (pe.data?.entries || []).filter(x => (f?.entry_ids || []).includes(x.id) && !x.online).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + ((g.physSubs || {})[c] || 0), 0) : (g.physical || 0)), 0);
   const count = mode === "pick" ? (f?.entry_ids || []).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + (g.subs[c] || 0), 0) : g.count), 0);
   const list = x.sessions.filter(s => show === "all" || (show === "active" ? ["planned", "live"].includes(s.status) : s.status === show));
   async function create() { setBusy(true); setErr(null); try { const r = await api("/api/sessions", { body: mode === "pick" ? { ...f, school_ids: [], sub_codes: [] } : { ...f, entry_ids: [] } }); toast(`Session created with ${r.count} artworks.`); router.push(`/sessions/${r.id}`); } catch (e) { setErr(e.message); } setBusy(false); }
@@ -29,7 +30,7 @@ export default function Sessions() {
     <div className="row" style={{ marginBottom: 12 }}><Seg value={show} onChange={setShow} items={[["active", "Planned and live"], ["done", "Done"], ["cancelled", "Cancelled"], ["all", "All"]]} /></div>
     <Card flush><Table minw={860} cols={["Session", "When", "Coordinator", "Team", "Progress", "Status"]} onRow={i => router.push(me?.role === "storage" ? `/pull-list?session=${list[i].id}` : `/sessions/${list[i].id}`)} empty="No sessions here."
       rows={list.map(s => [<Two key="t" a={s.title} b={s.pathway} />, <Two key="w" a={s.session_date ? dshort(s.session_date) : "Date not set"} b={[s.time_text, s.venue].filter(Boolean).join(" · ")} />, s.coordinator || "", <span key="e" className="small">{s.team.map(t => t.name).join(", ")}</span>, <Prog key="p" pct={s.count ? s.scored / s.count * 100 : 0} label={`${s.scored}/${s.count}`} />, <Badge key="s" tone={LABEL[s.status]?.[1]}>{LABEL[s.status]?.[0] || s.status}</Badge>])} /></Card>
-    <Modal open={!!f} wide title="New scoring session" onClose={() => setF(null)} footer={<><span className="small faint">{count ? (mode === "pick" ? `${count} artwork${count === 1 ? "" : "s"} picked` : `${count} artwork${count === 1 ? "" : "s"} from ${chosen.length} school${chosen.length === 1 ? "" : "s"}`) : mode === "pick" ? "Pick artworks" : "Pick schools"}</span><span className="sp" /><Btn onClick={() => setF(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!count} onClick={create}>Create session</Btn></>}>
+    <Modal open={!!f} wide title="New scoring session" onClose={() => setF(null)} footer={<><span className="small faint">{count ? `${count} artwork${count === 1 ? "" : "s"}: ${physN ? `${physN} physical (storage brings them to the room)` : "no physical ones"}${count - physN ? `, ${count - physN} online (scored from files)` : ""}` : mode === "pick" ? "Pick artworks" : "Pick schools"}</span><span className="sp" /><Btn onClick={() => setF(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!count} onClick={create}>Create session</Btn></>}>
       {err && <Banner tone="bad" title={err} />}
       {f && <div className="stack" style={{ gap: 12 }}>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
@@ -72,7 +73,7 @@ function PickEntries({ pe, f, setF, q, setQ, admin, schoolScope, setSchoolScope 
     <div className="stack s4" style={{ maxHeight: 300, overflow: "auto", border: "1px solid var(--rule)", borderRadius: "var(--r)", padding: 8 }}>
       {groups.length ? groups.map(g => { const ids = g.rows.map(e => e.id); const on = ids.every(id => sel.has(id)); return <details key={g.key} open={!!t}>
         <summary className="row nowrap" style={{ gap: 8, cursor: "pointer", padding: "4px 0" }}><span onClick={e => e.stopPropagation()}><Check label="" checked={on} onChange={v => set(ids, v)} /></span><b style={{ fontWeight: 500 }}>{g.name}</b><span className="small faint">{ids.filter(id => sel.has(id)).length}/{ids.length}</span></summary>
-        <div className="stack s4" style={{ paddingLeft: 32, paddingBottom: 6 }}>{g.rows.map(e => <Check key={e.id} label={`${e.code} · ${e.title || ""} · ${e.sub || ""}${e.online ? " · online" : e.where ? ` · ${e.where}` : ""}`} checked={sel.has(e.id)} onChange={v => set([e.id], v)} />)}</div>
+        <div className="stack s4" style={{ paddingLeft: 32, paddingBottom: 6 }}>{g.rows.map(e => <Check key={e.id} label={`${e.code} · ${e.title || ""} · ${e.sub || ""} · ${e.online ? "online, scored from files" : `physical${e.where ? `, ${e.where}` : ""}`}`} checked={sel.has(e.id)} onChange={v => set([e.id], v)} />)}</div>
       </details>; }) : <span className="muted">No artworks are waiting{!admin && schoolScope === "mine" ? " for your schools. Switch to All schools." : "."}</span>}
     </div>
   </Field>;
