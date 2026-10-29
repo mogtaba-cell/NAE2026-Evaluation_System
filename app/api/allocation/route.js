@@ -46,5 +46,5 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const byCoord = {}; pool.forEach(e => { (byCoord[map[e.school_id]] = byCoord[map[e.school_id]] || []).push(e.id); });
   for (const [k, ids] of Object.entries(byCoord)) for (let i = 0; i < ids.length; i += 150) await q(db().from("nae_entries").update({ coordinator_id: k }).in("id", ids.slice(i, i + 150)));
   await audit(session, `Allocated ${pool.length} ${pathway} entries`, "pathway", pathway, sel.map(c => c.display_name).join(", "));
-  return { ok: true, note: `Allocated ${pool.length} entries. Each school stays with one coordinator.` };
+  return { ok: true, note: `Allocated ${pool.length} artworks. Each school stays with one coordinator.` };
 });

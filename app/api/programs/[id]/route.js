@@ -39,7 +39,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
     if (S.PR[g.id].pathways.some(c => S.P[c].name.toLowerCase() === name.toLowerCase())) throw bad(`${g.name} already has a pathway called ${name}.`);
     const code = String(b.code || suggestPathwayCode(S, g, name)).trim().toUpperCase();
     if (!/^[A-Z0-9]{2,10}$/.test(code)) throw bad("The pathway code is 2 to 10 letters or numbers.");
-    if (S.P[code]) throw bad("That pathway code is used by another program. Codes are unique across programs because they start every entry code.");
+    if (S.P[code]) throw bad("That pathway code is used by another program. Codes are unique across programs because they start every artwork code.");
     await addPathway(S, g, { name, code, eval_type: b.eval_type });
     await audit(session, `Added pathway ${name} to ${g.name}`, "program", g.id, code);
     return { code };
@@ -62,7 +62,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
   }
   if (b.action === "remove_pathway") {
     if (!mine(b.code)) throw bad("That pathway isn't in this program.");
-    if (await hasEntries(b.code)) throw bad("This pathway has entries, so it can't be removed.");
+    if (await hasEntries(b.code)) throw bad("This pathway has artworks, so it can't be removed.");
     if (Object.values(S.P[b.code].rounds).some(r => r.status !== "setup")) throw bad("A round of this pathway has opened, so it can't be removed.");
     await q(db().from("nae_subpathways").update({ rubric_r1: null, rubric_r2: null }).eq("pathway_code", b.code));
     await q(db().from("nae_subpathways").delete().eq("pathway_code", b.code));
@@ -86,7 +86,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
   }
   if (b.action === "remove_sub") {
     if (!mine(b.pathway_code)) throw bad("That pathway isn't in this program.");
-    if (await hasEntries(b.pathway_code, b.code)) throw bad("This subpathway has entries, so it can't be removed.");
+    if (await hasEntries(b.pathway_code, b.code)) throw bad("This subpathway has artworks, so it can't be removed.");
     await q(db().from("nae_subpathways").delete().eq("pathway_code", b.pathway_code).eq("code", b.code));
     await audit(session, `Removed subpathway ${b.code} from ${b.pathway_code}`, "program", g.id);
     return { ok: true };

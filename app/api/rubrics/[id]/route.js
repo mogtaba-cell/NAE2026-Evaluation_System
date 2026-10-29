@@ -62,6 +62,6 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
   if (openUse.length && !String(b.reason || "").trim()) throw bad(`This rubric is in use by an open round (${openUse.map(s => s.name).join(", ")}). Give a reason to publish.`);
   const { error } = await db().rpc("nae_publish_rubric", { p_draft: draft.id, p_by: session.sub });
   if (error) throw bad(error.message);
-  await audit(session, `Published rubric ${rub.code} v${draft.version}`, "rubric", params.id, ["Entries with saved scores keep the version they were scored with", b.reason].filter(Boolean).join(" · "));
-  return { ok: true, note: `Published ${rub.code} v${draft.version}. Entries already scored keep their version.` };
+  await audit(session, `Published rubric ${rub.code} v${draft.version}`, "rubric", params.id, ["Artworks with saved scores keep the version they were scored with", b.reason].filter(Boolean).join(" · "));
+  return { ok: true, note: `Published ${rub.code} v${draft.version}. Artworks already scored keep their version.` };
 });

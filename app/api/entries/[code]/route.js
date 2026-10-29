@@ -78,7 +78,7 @@ export const PATCH = route(["admin", "coordinator", "management", "storage", "le
   }
   if (!Object.keys(patch).length) return { ok: true };
   await q(db().from("nae_entries").update({ ...patch, updated_at: new Date().toISOString() }).eq("id", e.id));
-  await audit(session, b.mgmt_viewed !== undefined ? (b.mgmt_viewed ? "Marked as viewed by management" : "Unmarked \"viewed by management\"") : "Entry updated", "entry", e.id, b.mgmt_viewed !== undefined ? "" : JSON.stringify(patch));
+  await audit(session, b.mgmt_viewed !== undefined ? (b.mgmt_viewed ? "Marked as viewed by management" : "Unmarked \"viewed by management\"") : "Artwork updated", "entry", e.id, b.mgmt_viewed !== undefined ? "" : JSON.stringify(patch));
   return { ok: true };
 });
 

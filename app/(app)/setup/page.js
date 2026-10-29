@@ -24,7 +24,7 @@ export default function Setup() {
     const next = p.rounds.find(r => r.status === "setup") || p.rounds.find(r => r.status === "open") || p.rounds[0];
     const rd = next?.readiness; const ok = rd ? rd.checks.filter(c => c.ok).length : 0;
     return <div className="x-pwc">
-      <div className="nm"><h3>{p.name}</h3><span className="small faint">{p.code} · {fmt(p.entries)} entries · {p.subs.length} subpathway{p.subs.length === 1 ? "" : "s"}</span>
+      <div className="nm"><h3>{p.name}</h3><span className="small faint">{p.code} · {fmt(p.entries)} artworks · {p.subs.length} subpathway{p.subs.length === 1 ? "" : "s"}</span>
         <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>{p.rounds.map(r => <Badge key={r.id} tone={r.status === "open" ? "info" : r.status === "closed" ? "ok" : ""}>R{r.round_no} {r.status}</Badge>)}</div>
         {p.subs.length > 0 && <span className="small faint">{p.subs.map(s => s.name).join(" · ")}</span>}</div>
       <div className="stack s8"><span className="small faint">{next ? `Round ${next.round_no} ${next.status === "setup" ? "readiness" : "checks"}` : ""}</span>{rd && <Readiness checks={rd.checks} />}</div>
@@ -34,10 +34,10 @@ export default function Setup() {
   };
 
   return <>
-    <PageHead title="Program setup" sub="Programs hold their own pathways and subpathways, each with its own rubrics and rounds. Pick the program to work on; every page then shows that program." actions={<><Btn href="/import">Import entries</Btn><Btn href="/rubrics">Rubric library</Btn><Btn v="primary" onClick={() => { setErr(null); setNewP({ name: "", code: "", cycle: "", starts_on: "", ends_on: "", copy_from: "", copy_rubrics: true }); }}>New program</Btn></>} />
+    <PageHead title="Program setup" sub="Programs hold their own pathways and subpathways, each with its own rubrics and rounds. Pick the program to work on; every page then shows that program." actions={<><Btn href="/import">Import artworks</Btn><Btn href="/rubrics">Rubric library</Btn><Btn v="primary" onClick={() => { setErr(null); setNewP({ name: "", code: "", cycle: "", starts_on: "", ends_on: "", copy_from: "", copy_rubrics: true }); }}>New program</Btn></>} />
 
     <Card title="Programs" flush>
-      <Table cols={["Program", "Cycle", "Window", "Status", { h: "Pathways", cls: "r" }, { h: "Entries", cls: "r" }, ""]} rows={programs.map(p => [
+      <Table cols={["Program", "Cycle", "Window", "Status", { h: "Pathways", cls: "r" }, { h: "Artworks", cls: "r" }, ""]} rows={programs.map(p => [
         <Two key="n" a={<span className="strong">{p.name}</span>} b={p.code} />, p.cycle || <span className="faint">–</span>,
         <span key="w" className="small">{p.starts_on ? `${dshort(p.starts_on)} to ${p.ends_on ? dshort(p.ends_on) : "?"}` : <span className="faint">Not set</span>}</span>,
         <Badge key="s" tone={ST[p.status]?.[1]}>{ST[p.status]?.[0] || p.status}</Badge>, <span key="pw" className="num">{p.pathways.length}</span>, <span key="e" className="num">{fmt(p.entries)}</span>,
@@ -67,7 +67,7 @@ export default function Setup() {
           <Field label="Evaluation window starts"><input type="date" className="input" value={newP.starts_on} onChange={e => setNewP({ ...newP, starts_on: e.target.value })} /></Field>
           <Field label="Ends"><input type="date" className="input" value={newP.ends_on} onChange={e => setNewP({ ...newP, ends_on: e.target.value })} /></Field>
         </div>
-        <Field label="Start from" help="Copying brings pathways, subpathways, round settings and (optionally) copies of their rubrics. No entries, dates or evaluator panels are copied.">
+        <Field label="Start from" help="Copying brings pathways, subpathways, round settings and (optionally) copies of their rubrics. No artworks, dates or evaluator panels are copied.">
           <select className="select" value={newP.copy_from} onChange={e => setNewP({ ...newP, copy_from: e.target.value })}><option value="">An empty program</option>{programs.filter(p => p.pathways.length).map(p => <option key={p.id} value={p.id}>A copy of {p.name}'s structure</option>)}</select></Field>
         {newP.copy_from && <Check label="Copy the rubrics too (as new rubrics for this program)" checked={newP.copy_rubrics} onChange={v => setNewP({ ...newP, copy_rubrics: v })} />}
       </div>}
@@ -95,7 +95,7 @@ export default function Setup() {
       {addPw && <div className="stack" style={{ gap: 12 }}>
         <Field label="Name"><input className="input" value={addPw.name} onBlur={async () => { if (addPw.name.trim() && !addPw.code) { const r = await api(`/api/programs/${cur.id}`, { body: { action: "suggest_code", name: addPw.name } }).catch(() => null); if (r) setAddPw(a => ({ ...a, code: a.code || r.code })); } }} onChange={e => setAddPw({ ...addPw, name: e.target.value })} placeholder="Literary Arts" /></Field>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <Field label="Code" help="Starts every entry code, so it's unique across programs."><input className="input" value={addPw.code} onChange={e => setAddPw({ ...addPw, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} /></Field>
+          <Field label="Code" help="Starts every artwork code, so it's unique across programs."><input className="input" value={addPw.code} onChange={e => setAddPw({ ...addPw, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10) })} /></Field>
           <Field label="Evaluation type"><select className="select" value={addPw.eval_type} onChange={e => setAddPw({ ...addPw, eval_type: e.target.value })}>{TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
         </div>
         <p className="small faint">The pathway gets Round 1 (online) and Round 2. Add its subpathways and rubrics on the next page.</p>
@@ -107,11 +107,11 @@ export default function Setup() {
       {editPw && <div className="stack" style={{ gap: 12 }}>
         <Field label="Name"><input className="input" value={editPw.name} onChange={e => setEditPw({ ...editPw, name: e.target.value })} /></Field>
         <Field label="Evaluation type"><select className="select" value={editPw.eval_type} onChange={e => setEditPw({ ...editPw, eval_type: e.target.value })}>{TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></Field>
-        <p className="small faint">Code {editPw.code}. {editPw.entries ? "A pathway with entries can't be removed." : "A pathway without entries can be removed."}</p>
+        <p className="small faint">Code {editPw.code}. {editPw.entries ? "A pathway with artworks can't be removed." : "A pathway without artworks can be removed."}</p>
       </div>}
     </Modal>
 
-    <Modal open={!!copy} wide title={`Copy pathways into ${cur.name}`} sub="Each copy gets its own code, its subpathways, round settings and (optionally) copies of its rubrics. Entries stay where they are." onClose={() => setCopy(null)} footer={<><Btn onClick={() => setCopy(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!copy?.codes.length} onClick={() => run(() => api(`/api/programs/${cur.id}`, { body: { action: "copy_pathways", codes: copy.codes, with_rubrics: copy.with_rubrics } }), r => { setCopy(null); toast(`Copied ${r.codes.length} pathway${r.codes.length === 1 ? "" : "s"}`); })}>Copy {copy?.codes.length || ""}</Btn></>}>
+    <Modal open={!!copy} wide title={`Copy pathways into ${cur.name}`} sub="Each copy gets its own code, its subpathways, round settings and (optionally) copies of its rubrics. Artworks stay where they are." onClose={() => setCopy(null)} footer={<><Btn onClick={() => setCopy(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!copy?.codes.length} onClick={() => run(() => api(`/api/programs/${cur.id}`, { body: { action: "copy_pathways", codes: copy.codes, with_rubrics: copy.with_rubrics } }), r => { setCopy(null); toast(`Copied ${r.codes.length} pathway${r.codes.length === 1 ? "" : "s"}`); })}>Copy {copy?.codes.length || ""}</Btn></>}>
       {err && <Banner tone="bad" title={err} />}
       {copy && <div className="stack" style={{ gap: 12 }}>
         <Field label="From"><select className="select" value={copy.from} onChange={e => setCopy({ ...copy, from: e.target.value, codes: [] })}>{others.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>

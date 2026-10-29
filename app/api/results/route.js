@@ -6,9 +6,9 @@ import { recompute } from "@/lib/scoring";
 export const POST = route(["admin"], async ({ session, request }) => {
   const b = await body(request);
   const reason = String(b.reason || "").trim(); if (!reason) throw bad("Give a reason.");
-  const e = await q(db().from("nae_entries").select("id, code").eq("code", b.entry_code).maybeSingle()); if (!e) throw bad("Entry not found.");
+  const e = await q(db().from("nae_entries").select("id, code").eq("code", b.entry_code).maybeSingle()); if (!e) throw bad("Artwork not found.");
   const roundNo = Number(b.round_no);
-  const r = await q(db().from("nae_results").select("*").eq("entry_id", e.id).eq("round_no", roundNo).maybeSingle()); if (!r) throw bad("This entry has no result for that round yet.");
+  const r = await q(db().from("nae_results").select("*").eq("entry_id", e.id).eq("round_no", roundNo).maybeSingle()); if (!r) throw bad("This artwork has no result for that round yet.");
   if (b.action === "unlock") {
     await q(db().from("nae_results").update({ locked: false }).eq("entry_id", e.id).eq("round_no", roundNo));
     await audit(session, `Result unlocked (Round ${roundNo})`, "entry", e.id, reason);

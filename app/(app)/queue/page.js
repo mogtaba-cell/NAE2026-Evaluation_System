@@ -30,7 +30,7 @@ export default function Queue() {
   const openItem = i => i && open(i.code, i.round_no);
   if (qd.loading && !qd.data) return <Loading />;
   if (qd.error) return <Loading error={qd.error} />;
-  if (!items.length) return <><div className="ph"><div className="t"><h1>My queue</h1></div></div><Empty title="Nothing to score right now">Entries appear here when a round you are on opens.</Empty></>;
+  if (!items.length) return <><div className="ph"><div className="t"><h1>My queue</h1></div></div><Empty title="Nothing to score right now">Artworks appear here when a round you are on opens.</Empty></>;
   const cur = items.find(i => i.key === key);
   const round = d?.rounds?.find(r => r.round_no === cur?.round_no);
   const mine = round?.scores?.find(s => s.evaluator_id === qd.data.evaluator_id);
@@ -46,7 +46,7 @@ export default function Queue() {
           <span className="s">{i.myStatus === "submitted" ? i.myTotal : i.myStatus === "draft" ? "Draft" : ""}</span></div>) : <p className="x-note" style={{ padding: 12 }}>{filter === "todo" ? "All done. Thank you!" : "Nothing here."}</p>}</div>
       </section>
       <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
-        {err && <Banner tone="bad" title="Could not load this entry">{err}</Banner>}
+        {err && <Banner tone="bad" title="Could not load this artwork">{err}</Banner>}
         {!d ? <Loading /> : <>
           <div className="stack s4"><div className="row" style={{ gap: 8 }}><span className="code" style={{ fontSize: 15, fontWeight: 600 }}>{d.entry.code}</span><Badge>{d.entry.sub || d.entry.pathway}</Badge><Badge>Round {cur?.round_no}</Badge>{cur?.physical && <Badge tone="info">Physical artwork</Badge>}</div>
             <span className="small faint">Reference {d.entry.reference_id}</span></div>
@@ -58,7 +58,7 @@ export default function Queue() {
         {d && round && <ScoreForm code={d.entry.code} round={round} mine={mine} framing={cur?.round_no === 2 && d.logistics ? d.logistics : null} onSaved={async submit => { await qd.reload(); if (submit) { if (nextItem) openItem(nextItem); else load(code); } else load(code); }} />}
         {d && round && mine?.status === "submitted" && round.scores.length > 1 && <section className="card"><div className="card-h"><div className="tt"><h3>Team scores</h3><span className="sub">Visible after you submit</span></div></div>
           <table className="x-cmp"><tbody>{round.scores.map(s => <tr key={s.id}><td>{s.evaluator_id === qd.data.evaluator_id ? "You" : s.evaluator}</td><td>{s.status === "submitted" ? s.total : "Not yet"}</td></tr>)}</tbody></table></section>}
-        {d && nextItem && <Btn onClick={() => openItem(nextItem)}>Next entry ›</Btn>}
+        {d && nextItem && <Btn onClick={() => openItem(nextItem)}>Next artwork ›</Btn>}
       </div>
     </div>
   </>;

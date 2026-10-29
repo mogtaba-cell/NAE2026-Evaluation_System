@@ -36,7 +36,7 @@ export const POST = route(["admin", "management"], async ({ session, params, req
   if (b.action === "confirm") patch.status = "confirmed";
   else if (b.action === "override") {
     if (!String(b.note || "").trim()) throw bad("Give a reason for the override.");
-    if (b.outcome !== "pass" && b.outcome !== "fail") throw bad("Choose whether the entry goes through.");
+    if (b.outcome !== "pass" && b.outcome !== "fail") throw bad("Choose whether the artwork goes through.");
     patch.status = "overridden"; patch.new_passed = b.outcome === "pass";
     if (b.new_result !== undefined && b.new_result !== "" && b.new_result !== null) { const v = parseInt(b.new_result, 10); if (isNaN(v) || v < 0 || v > 100) throw bad("Enter a result from 0 to 100, or leave it empty."); patch.new_result = v; }
   }

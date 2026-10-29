@@ -40,7 +40,7 @@ function Stage({ f, full, zoom, rot, onErr, err, mediaRef, onNotice }) {
     return <div className="fv-zm" style={{ transform: `scale(${zoom}) rotate(${rot}deg)` }}><img key={src} className="fv-img" src={src} alt={f.name} onError={() => onErr(f.thumb ? "Google Drive has not made a preview of this image yet. Use Source or Download to see the original." : "The image did not load.")} /></div>;
   }
   if (k === "video") return <video ref={mediaRef} key={f.url} className="fv-media" src={f.url} poster={f.thumb ? `${f.thumb}?s=1280` : undefined} controls preload="metadata" playsInline
-    onLoadedMetadata={e => onNotice(e.currentTarget.videoWidth === 0 ? (f.preview ? "This file has sound only: the school's original has no picture. Check the other files of this entry for the video." : "Only the sound of this video can play in the browser: its picture is in a format browsers can't show. A converted preview will appear here automatically; meanwhile use Download to watch the original.") : null)}
+    onLoadedMetadata={e => onNotice(e.currentTarget.videoWidth === 0 ? (f.preview ? "This file has sound only: the school's original has no picture. Check the other files of this artwork for the video." : "Only the sound of this video can play in the browser: its picture is in a format browsers can't show. A converted preview will appear here automatically; meanwhile use Download to watch the original.") : null)}
     onError={() => onErr(f.preview ? "The video did not load. Try again in a moment." : "This video can't play in the browser yet (often an iPhone .mov). A 720p preview is made by the sync computer; meanwhile use Download to watch the original.")} />;
   if (k === "audio") return <div className="fv-state" style={{ maxWidth: 520, width: "100%" }}><b>{f.name}</b><audio ref={mediaRef} key={f.url} src={f.url} controls preload="metadata" style={{ width: "100%" }} onError={() => onErr("The audio did not load.")} /></div>;
   if (k === "pdf") return <PdfStage f={f} onErr={onErr} />;
@@ -63,7 +63,7 @@ export default function FileViewer({ files = [], tall, canDownload = true, onRef
     const k = e => { if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName) || e.target.isContentEditable) return; if (e.key === "ArrowLeft" && n > 1) go(-1); if (e.key === "ArrowRight" && n > 1) go(1); };
     document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k);
   }, [go, n]);
-  if (!n) return <div className={`fv${tall ? " tall" : ""}`}><div className="fv-stage"><div className="fv-state"><b>No files found for this entry</b><span>The school's folder is empty or has not been matched yet. Files are checked again every 10 minutes.</span>{onRefresh && <Btn sm onClick={onRefresh} busy={refreshing}>Check again now</Btn>}</div></div></div>;
+  if (!n) return <div className={`fv${tall ? " tall" : ""}`}><div className="fv-stage"><div className="fv-state"><b>No files found for this artwork</b><span>The school's folder is empty or has not been matched yet. Files are checked again every 10 minutes.</span>{onRefresh && <Btn sm onClick={onRefresh} busy={refreshing}>Check again now</Btn>}</div></div></div>;
 
   const k = kindShown(f);
   const isImg = k === "image" || f.kind === "heic";

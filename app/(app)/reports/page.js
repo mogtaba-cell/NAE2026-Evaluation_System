@@ -4,14 +4,14 @@ import { useMeta, useToast, PageHead, Card, Btn, Field, Check, Switch, Banner } 
 import { download } from "@/components/ui";
 
 const REPORTS = [
-  ["entries", "Entries by school", "Every entry with school, group, students, status and coordinator."],
-  ["results", "Round results", "Round 1 and Round 2 results, grades and whether each entry went through."],
-  ["participation", "Participation", "Entries and students by pathway, region and school type."],
+  ["entries", "Artworks by school", "Every artwork with school, group, students, status and coordinator."],
+  ["results", "Round results", "Round 1 and Round 2 results, grades and whether each artwork went through."],
+  ["participation", "Participation", "Artworks and students by pathway, region and school type."],
   ["reviews", "Management reviews", "Every flag with reason, scores, decision and who decided."],
   ["logistics", "Artwork logistics", "Physical entries: collection, shelf, condition, session."],
   ["consent", "Showcase consent", "Students with and without consent for showcase photos and interviews."]
 ];
-const FIELDS = [["code", "Entry code"], ["reference_id", "referenceId"], ["registration_id", "RegistrationId"], ["title_en", "Title (English)"], ["title_ar", "Title (Arabic)"], ["description_en", "Description (English)"], ["description_ar", "Description (Arabic)"], ["pathway", "Pathway"], ["sub", "Subpathway"], ["school", "School"], ["esis", "School eSIS"], ["region", "Region"], ["school_type", "School type"], ["group", "Group name"], ["students", "Number of students"], ["grades", "Grades"], ["medium", "Medium"], ["size", "Size"], ["files", "Files"], ["r1", "Round 1 result"], ["r1g", "Round 1 grade"], ["r2", "Round 2 result"], ["r2g", "Round 2 grade"], ["status", "Status"], ["coordinator", "Coordinator"]];
+const FIELDS = [["code", "Artwork code"], ["reference_id", "referenceId"], ["registration_id", "RegistrationId"], ["title_en", "Title (English)"], ["title_ar", "Title (Arabic)"], ["description_en", "Description (English)"], ["description_ar", "Description (Arabic)"], ["pathway", "Pathway"], ["sub", "Subpathway"], ["school", "School"], ["esis", "School eSIS"], ["region", "Region"], ["school_type", "School type"], ["group", "Group name"], ["students", "Number of students"], ["grades", "Grades"], ["medium", "Medium"], ["size", "Size"], ["files", "Files"], ["r1", "Round 1 result"], ["r1g", "Round 1 grade"], ["r2", "Round 2 result"], ["r2g", "Round 2 grade"], ["status", "Status"], ["coordinator", "Coordinator"]];
 
 export default function Reports() {
   const meta = useMeta(); const toast = useToast();

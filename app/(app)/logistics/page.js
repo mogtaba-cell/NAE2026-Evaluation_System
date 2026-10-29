@@ -7,8 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Modal, Field, Card, Table, Tabs, Check, Seg, Search, dshort } from "@/components/ui";
 import { ArtworkBatch, ArtworkDrawer, bySession, SHORT } from "@/components/Movements";
 
-const CHAIN = ["to_collect", "storage", "requested", "picked", "handed_over", "coordinator", "returning"];
-const SIDE = ["framer", "showcase", "returned", "missing"];
+const CHAIN = ["to_collect", "storage", "requested", "coordinator", "returning"];
+const SIDE = ["picked", "handed_over", "framer", "showcase", "returned", "missing"];
 
 function group(rows, by) {
   if (by === "session") return bySession(rows, () => true);
@@ -20,7 +20,7 @@ function group(rows, by) {
 
 export default function Logistics() {
   const sp = useSearchParams();
-  const d = useApi("/api/logistics"); const meta = useMeta(); const toast = useToast();
+  const d = useApi("/api/logistics", [], { live: 15000 }); const meta = useMeta(); const toast = useToast();
   const role = meta?.data?.me?.role;
   const staff = ["admin", "storage"].includes(role); const coord = role === "coordinator";
   const [tab0, setTab] = useState(sp.get("tab") || null);
@@ -45,7 +45,14 @@ export default function Logistics() {
   const toMe = rows.filter(r => r.state === "handed_over" && r.session?.mine);
   const withMe = rows.filter(r => r.state === "coordinator" && r.session?.mine);
   const exc = rows.filter(r => r.state === "missing" || r.damaged || r.issue);
-  const todoN = staff ? pull.length + back.length + (count.to_collect || 0) : coord ? toMe.length + withMe.length : 0;
+  // sessions with artworks to move (from the artworks' own session links)
+  const sessMap = {}; rows.filter(r => r.session && ["requested", "picked", "handed_over", "coordinator", "returning"].includes(r.state)).forEach(r => { const g = sessMap[r.session.id] = sessMap[r.session.id] || { s: r.session, waiting: 0, room: 0, back: 0 }; if (["requested", "picked"].includes(r.state)) g.waiting++; else if (r.state === "returning") g.back++; else g.room++; });
+  const sessList = Object.values(sessMap).filter(g => !coord || g.s.mine).sort((a, b) => (a.s.status === "live" ? 0 : 1) - (b.s.status === "live" ? 0 : 1) || String(a.s.date || "9").localeCompare(String(b.s.date || "9")));
+  const todoN = staff ? pull.length + back.length + (count.to_collect || 0) : coord ? sessList.reduce((a, g) => a + g.room, 0) : 0;
+  const Sessions = () => <div className="mv-sec"><Card flush title="Scoring sessions" sub={staff ? "Bring each session's artworks into the room in batches, take each batch back when it's scored. Open a board to work on it." : "Storage brings your artworks in batches. Hand a batch back on the board when it's scored."}>
+    {sessList.length ? <div className="x-todo" style={{ padding: "4px 16px 12px" }}>{sessList.map(g => <div className="it" key={g.s.id}><div className="tx"><b>{g.s.title} {g.s.status === "live" && <Badge tone="info">In progress</Badge>}</b><span>{[g.s.date && dshort(g.s.date), g.s.time, g.s.venue, g.s.coordinator].filter(Boolean).join(" · ")}</span><span>{[g.waiting && `${g.waiting} waiting on the shelves`, g.room && `${g.room} in the room`, g.back && `${g.back} handed back`].filter(Boolean).join(" · ")}</span></div>
+      <Btn sm v={(staff && (g.back || (g.s.status === "live" && g.waiting && !g.room))) || (coord && g.room) ? "primary" : "secondary"} href={`/pull-list?session=${g.s.id}`}>Open board</Btn></div>)}</div> : <p className="muted" style={{ padding: 16 }}>No session has artworks to move right now.</p>}
+  </Card></div>;
 
   const tabs = [
     ...(staff || coord ? [["todo", "To do", todoN]] : []),
@@ -57,8 +64,8 @@ export default function Logistics() {
 
   return <>
     <PageHead title="Artwork logistics"
-      sub={coord ? "Physical artworks in your sessions. Confirm when storage hands them to you, and hand them back when the session is over." : "Physical Round 2 artworks from collection to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
-      actions={<>{staff && <Btn href="/collections">Collections</Btn>}{(staff || coord) && <Btn href="/pull-list">Pull lists</Btn>}</>} />
+      sub={coord ? "Physical artworks of your schools and sessions. During a session, storage brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from collection to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
+      actions={<>{staff && <Btn href="/collections">Collections</Btn>}{(staff || coord) && <Btn v="primary" href="/pull-list">Session boards</Btn>}</>} />
 
     <div className="mv-pipe">
       {CHAIN.map((k, i) => <span key={k} className="row nowrap" style={{ gap: 6 }}>{i > 0 && <span className="arrow">→</span>}<button type="button" className={`chip${tab === "all" && f.state === k ? " on" : ""}`} onClick={() => showState(f.state === k && tab === "all" ? "" : k)}>{SHORT[k]}<span className="n">{count[k] || 0}</span></button></span>)}
@@ -69,13 +76,8 @@ export default function Logistics() {
     <Tabs value={tab} onChange={setTab} items={tabs} />
 
     {tab === "todo" && staff && <>
-      {!pull.length && !back.length && !unbatched.length && !scheduled.length && <Banner tone="ok" title="Nothing waiting on storage">New pull requests appear here as soon as a coordinator creates a session with physical artworks.</Banner>}
-      {pull.length > 0 && <div className="mv-sec"><Card flush title={`Pull for sessions · ${pull.length}`} sub="Sorted by room and shelf. Mark artworks picked as you take them off the shelf, then hand them over. The coordinator confirms receipt on their side.">
-        <ArtworkBatch rows={pull} role={role} steps={["pick", "unpick", "hand_over", "missing"]} onDone={reload} onOpen={openRow}
-          groups={bySession(pull, () => true).map(g => ({ ...g, sub: `${g.sub} · ${g.rows.filter(r => r.state === "picked").length}/${g.rows.length} picked`, right: g.session && <Btn sm href={`/pull-list?session=${g.session.id}`}>Pull list</Btn> }))} /></Card></div>}
-      {waitingCoord.length > 0 && <p className="small faint mv-sec">{waitingCoord.length} artwork{waitingCoord.length === 1 ? " is" : "s are"} handed over and waiting for the coordinator to confirm. <button type="button" className="link" onClick={() => showState("handed_over")}>See them</button></p>}
-      {back.length > 0 && <div className="mv-sec"><Card flush title={`Coming back to storage · ${back.length}`} sub="Handed back by coordinators. Check them and confirm. Leave the shelf empty to put each artwork back where it was.">
-        <ArtworkBatch rows={back} role={role} steps={["receive_back", "missing"]} onDone={reload} onOpen={openRow} groups={bySession(back, () => true)} /></Card></div>}
+      
+      <Sessions />
       {(unbatched.length > 0 || scheduled.length > 0) && <div className="mv-sec"><Card title="Collections from schools" right={<span className="row" style={{ gap: 8 }}>{unbatched.length > 0 && <Btn v="primary" sm onClick={() => setMk({ mode: "all", date: "", codes: [] })}>Schedule collections</Btn>}<Btn sm href="/collections">Open collections</Btn></span>}>
         <p className="muted">{unbatched.length ? `${unbatched.length} artwork${unbatched.length === 1 ? " is" : "s are"} not in a collection yet. ` : ""}{scheduled.length ? `${scheduled.length} collection${scheduled.length === 1 ? " is" : "s are"} scheduled and waiting to be checked in.` : ""}</p></Card></div>}
       <div className="mv-sec"><Card flush title="Framing for the showcase" sub="Ticked during Round 2 scoring. Shortlisted means grade A and passed Round 2." right={<Check label="Shortlisted only" checked={onlyShort} onChange={setOnlyShort} />}>
@@ -83,13 +85,7 @@ export default function Logistics() {
           groups={[{ key: "s", title: "In storage, to send", rows: framing.filter(is("storage")) }, { key: "f", title: "At the framer", rows: framing.filter(is("framer")) }].filter(g => g.rows.length)} /></Card></div>
     </>}
 
-    {tab === "todo" && coord && <>
-      {!toMe.length && !withMe.length && <Banner tone="ok" title="Nothing waiting on you">When storage hands artworks over for one of your sessions, confirm them here or on the session page.</Banner>}
-      {toMe.length > 0 && <div className="mv-sec"><Card flush title={`Handed to you · ${toMe.length}`} sub="Storage says these are with you. Confirm the ones you received. If something is not there, leave it unticked and tell storage.">
-        <ArtworkBatch rows={toMe} role={role} steps={["receive", "send_back"]} onDone={reload} onOpen={openRow} groups={bySession(toMe, () => true)} /></Card></div>}
-      {withMe.length > 0 && <div className="mv-sec"><Card flush title={`With you · ${withMe.length}`} sub="Hand artworks back when they are scored. Finishing the session hands back everything still with you.">
-        <ArtworkBatch rows={withMe} role={role} steps={["send_back"]} onDone={reload} onOpen={openRow} groups={bySession(withMe, () => true)} /></Card></div>}
-    </>}
+    {tab === "todo" && coord && <Sessions />}
 
     {tab === "all" && <AllArtworks rows={rows} f={f} setF={setF} role={role} onDone={reload} onOpen={openRow} />}
 

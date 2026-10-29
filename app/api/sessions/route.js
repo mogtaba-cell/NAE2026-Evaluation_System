@@ -26,7 +26,8 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
   // any round that is not closed: Round 2 physical artworks, and online entries scored by evaluators without a login
   const rounds = S.rounds.filter(r => has(r.pathway_code) && r.status !== "closed" && (r.status === "open" || (r.round_no === 2 && S.P[r.pathway_code].subs.some(s => s.is_physical))));
   const pools = {};
-  for (const r of rounds) {
+  // working out what's waiting is the slow part: only when asked (?pools=1, the New session form and banner)
+  if (url.searchParams.get("pools")) for (const r of rounds) {
     const pool = await sessionPool(S, r);
     const bySchool = {};
     pool.forEach(x => { const k = x.entry.school_id || "none"; const g = bySchool[k] = bySchool[k] || { school_id: x.entry.school_id, name: x.entry.school?.name || "No school", esis: x.entry.school?.esis, count: 0, subs: {}, mine: false }; g.count++; g.subs[x.entry.sub_code] = (g.subs[x.entry.sub_code] || 0) + 1; if (x.entry.coordinator_id === session.sub) g.mine = true; });
@@ -63,14 +64,14 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   let picked;
   if (Array.isArray(b.entry_ids) && b.entry_ids.length) {
     const ok = new Set(pool.map(x => x.entry_id));
-    if (b.entry_ids.some(id => !ok.has(id))) throw bad("Some of those entries are not waiting for a session.");
+    if (b.entry_ids.some(id => !ok.has(id))) throw bad("Some of those artworks are not waiting for a session.");
     picked = pool.filter(x => b.entry_ids.includes(x.entry_id));
   } else {
     const schools = new Set(b.school_ids || []); if (!schools.size) throw bad("Pick at least one school.");
     const subs = Array.isArray(b.sub_codes) && b.sub_codes.length ? new Set(b.sub_codes) : null;
     picked = pool.filter(x => schools.has(x.entry.school_id || "none") && (!subs || subs.has(x.entry.sub_code)));
   }
-  if (!picked.length) throw bad("No waiting entries match. Check the schools and subpathways.");
+  if (!picked.length) throw bad("No waiting artworks match. Check the schools and subpathways.");
   picked.sort((a, b) => String(a.entry.school?.name).localeCompare(String(b.entry.school?.name)) || a.entry.code.localeCompare(b.entry.code));
   const count = (await q(db().from("nae_sessions").select("id").eq("round_id", r.id))).length;
   const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, venue: b.venue || null, coordinator_id: coordinatorId, evaluator_ids: team }).select("*").single());

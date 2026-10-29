@@ -34,7 +34,7 @@ export default function RoundEditor({ r, p, onSaved }) {
     <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
       <Field label="Opens"><input type="date" className="input" value={f.opens_on || ""} onChange={e => set("opens_on", e.target.value)} /></Field>
       <Field label="Closes" help="For planning; the round closes when an admin closes it" err={f.opens_on && f.closes_on && f.closes_on < f.opens_on}><input type="date" className="input" value={f.closes_on || ""} onChange={e => set("closes_on", e.target.value)} /></Field>
-      <Field label="Evaluators per entry (online)">{num("evaluators_per_entry", 80)}</Field>
+      <Field label="Evaluators per artwork (online)">{num("evaluators_per_entry", 80)}</Field>
       <Field label="Management review time (hours)">{num("review_hours", 80)}</Field>
     </div>
     <Field label="Who goes through" help={ruleBad ? "Tick at least one grade (not all three), or set a minimum score from 1 to 100." : null} err={ruleBad}>
@@ -46,7 +46,7 @@ export default function RoundEditor({ r, p, onSaved }) {
       </div>
     </Field>
     <p className="small faint" style={{ marginTop: -8 }}>National identity (asking it, and whether "yes" is needed to go through) is set in each rubric, in the Rubric library. Grade lines come from each rubric too.</p>
-    <Field label={`Round ${r.round_no} evaluator panel`} help={`${panelCount} evaluator${panelCount === 1 ? "" : "s"} with a login will get online entries. Each entry needs ${f.evaluators_per_entry || 2}.${r.round_no === 2 ? " Round 1 evaluators are only used for an entry they already judged when nobody else is free." : ""}`} err={panelCount < Number(f.evaluators_per_entry || 2)}>
+    <Field label={`Round ${r.round_no} evaluator panel`} help={`${panelCount} evaluator${panelCount === 1 ? "" : "s"} with a login will get online artworks. Each artwork needs ${f.evaluators_per_entry || 2}.${r.round_no === 2 ? " Round 1 evaluators are only used for an artwork they already judged when nobody else is free." : ""}`} err={panelCount < Number(f.evaluators_per_entry || 2)}>
       <div className="stack s8">
         <label className="check radio"><input type="radio" checked={f.panelMode === "all"} onChange={() => set("panelMode", "all")} /><span className="box" /><span>Everyone with a login in {p?.name || r.pathway_code} ({inPath.length})</span></label>
         <label className="check radio"><input type="radio" checked={f.panelMode === "pick"} onChange={() => set("panelMode", "pick")} /><span className="box" /><span>Choose the evaluators for this round</span></label>

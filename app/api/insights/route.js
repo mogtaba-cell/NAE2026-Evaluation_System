@@ -47,7 +47,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url, sc
     const c = (no, f) => pe.filter(e => { const r = rOf(e.id, no); return r && f(r); }).length;
     const openR = Object.values(S.P[p.code].rounds).filter(r => r.status === "open").sort((a, b) => b.round_no - a.round_no)[0];
     return { code: p.code, name: p.name, entries: pe.length,
-      stages: [["Entries", pe.length], ["Round 1 scored", c(1, r => r.complete)], ["Through to Round 2", c(1, r => r.complete && r.passed)], ["Round 2 scored", c(2, r => r.complete)], ["Passed Round 2", c(2, r => r.complete && r.passed)]],
+      stages: [["Artworks", pe.length], ["Round 1 scored", c(1, r => r.complete)], ["Through to Round 2", c(1, r => r.complete && r.passed)], ["Round 2 scored", c(2, r => r.complete)], ["Passed Round 2", c(2, r => r.complete && r.passed)]],
       grades: [1, 2].map(no => ({ round: no, A: c(no, r => r.complete && r.grade === "A"), B: c(no, r => r.complete && r.grade === "B"), C: c(no, r => r.complete && r.grade === "C") })),
       stage: openR ? `Round ${openR.round_no} open` : Object.values(S.P[p.code].rounds).some(r => r.status === "closed") ? "Between rounds" : "Setup",
       progress: openR ? { round: openR.round_no, done: pe.filter(e => e.current_round === openR.round_no && rOf(e.id, openR.round_no)?.complete).length, total: pe.filter(e => e.current_round === openR.round_no && !["withdrawn"].includes(e.status)).length } : null };

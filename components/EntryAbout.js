@@ -19,9 +19,9 @@ function Block({ en, ar, lang, big, stack }) {
 export default function EntryAbout({ e, compact, showStudents, students = [] }) {
   const [lang, setLang] = useLang(e);
   const refl = Q.filter(([k]) => e.reflections?.[k]);
-  const details = [["Pathway", [e.pathway, e.sub].filter(Boolean).join(" · ")], ["Medium", e.medium], ["Size", e.size_text], ["Entry type", e.registration_type === "Group" || e.group_name ? `Group${e.group_name ? `: ${e.group_name}` : ""}` : "Individual"], ["Students", e.students_count ? `${e.students_count}${e.grades_text ? ` · ${e.grades_text}` : ""}` : e.grades_text]].filter(x => x[1]);
+  const details = [["Pathway", [e.pathway, e.sub].filter(Boolean).join(" · ")], ["Medium", e.medium], ["Size", e.size_text], ["Artwork type", e.registration_type === "Group" || e.group_name ? `Group${e.group_name ? `: ${e.group_name}` : ""}` : "Individual"], ["Students", e.students_count ? `${e.students_count}${e.grades_text ? ` · ${e.grades_text}` : ""}` : e.grades_text]].filter(x => x[1]);
   return <section className="card x-about">
-    <div className="card-h"><div className="tt"><h3>About the entry</h3><span className="sub">As submitted by the school</span></div><LangToggle lang={lang} onChange={setLang} /></div>
+    <div className="card-h"><div className="tt"><h3>About the artwork</h3><span className="sub">As submitted by the school</span></div><LangToggle lang={lang} onChange={setLang} /></div>
     <div className="stack" style={{ gap: 16 }}>
       <Block en={e.title_en} ar={e.title_ar} lang={lang} big stack={compact} />
       <div className="stack s8"><span className="label">Description</span><Block en={e.description_en} ar={e.description_ar} lang={lang} stack={compact} /></div>

@@ -21,7 +21,7 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
   const o = patch.opens_on !== undefined ? patch.opens_on : r.opens_on, c = patch.closes_on !== undefined ? patch.closes_on : r.closes_on;
   if (o && c && c < o) throw bad("The closing date is before the opening date.");
   if (b.pass_rule !== undefined) { const p = ruleProblem(b.pass_rule); if (p) throw bad(p); patch.pass_rule = b.pass_rule.min_score != null ? { min_score: Number(b.pass_rule.min_score) } : { grades: [...new Set(b.pass_rule.grades)].sort() }; }
-  if (b.evaluators_per_entry !== undefined) patch.evaluators_per_entry = int(b.evaluators_per_entry, 1, 6, "Evaluators per entry");
+  if (b.evaluators_per_entry !== undefined) patch.evaluators_per_entry = int(b.evaluators_per_entry, 1, 6, "Evaluators per artwork");
   if (b.flag_near !== undefined) patch.flag_near = !!b.flag_near;
   if (b.flag_margin !== undefined) patch.flag_margin = int(b.flag_margin, 0, 20, "The \"close to\" margin");
   if (b.flag_line !== undefined) { if (!["pass", "A"].includes(b.flag_line)) throw bad("Unknown flag line."); patch.flag_line = b.flag_line; }
@@ -65,14 +65,14 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
     await q(db().from("nae_rounds").update({ status: "open", opened_at: new Date().toISOString() }).eq("id", r.id));
     await q(db().from("nae_pathways").update({ status: "open" }).eq("code", r.pathway_code));
     const n = await startEntries(S, { ...r, status: "open" });
-    await audit(session, `Opened ${tag}`, "round", r.id, [`${n.entries} entries, ${n.assigned} evaluator assignments`, !rd.ready ? `Opened with: ${rd.blockers.map(x => x.label).join(", ")}. Reason: ${reason}` : null].filter(Boolean).join(" · "));
-    return { ok: true, note: `${tag} is open. ${n.entries} entries are ready, ${n.assigned} evaluator assignments made.${n.entries && !n.assigned ? " Coordinators score them in sessions with evaluators who have no login." : ""}` };
+    await audit(session, `Opened ${tag}`, "round", r.id, [`${n.entries} artworks, ${n.assigned} evaluator assignments`, !rd.ready ? `Opened with: ${rd.blockers.map(x => x.label).join(", ")}. Reason: ${reason}` : null].filter(Boolean).join(" · "));
+    return { ok: true, note: `${tag} is open. ${n.entries} artworks are ready, ${n.assigned} evaluator assignments made.${n.entries && !n.assigned ? " Coordinators score them in sessions with evaluators who have no login." : ""}` };
   }
 
   if (b.action === "close") {
     const ents = await all(() => db().from("nae_entries").select("id, code, status").eq("pathway_code", r.pathway_code).eq("current_round", r.round_no));
     const notDone = ents.filter(e => UNFINISHED.includes(e.status));
-    if (notDone.length) throw bad(`${notDone.length} entr${notDone.length === 1 ? "y is" : "ies are"} not finished (for example ${notDone.slice(0, 3).map(e => e.code).join(", ")}). Score, reassign or mark them "not scored" first.`);
+    if (notDone.length) throw bad(`${notDone.length} artwork${notDone.length === 1 ? " is" : "s are"} not finished (for example ${notDone.slice(0, 3).map(e => e.code).join(", ")}). Score, reassign or mark them "not scored" first.`);
     await q(db().from("nae_rounds").update({ status: "closed", closed_at: new Date().toISOString(), locked: true }).eq("id", r.id));
     await q(db().from("nae_results").update({ locked: true }).eq("round_id", r.id).eq("complete", true));
     await audit(session, `Closed ${tag}`, "round", r.id, reason || `${ents.length} entries`);
@@ -85,9 +85,9 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
     let ents = await all(() => db().from("nae_entries").select("id, code, status").eq("pathway_code", r.pathway_code).eq("current_round", r.round_no).in("status", UNFINISHED));
     if (Array.isArray(b.codes) && b.codes.length) ents = ents.filter(e => b.codes.includes(e.code));
     for (const part of chunk(ents.map(e => e.id), 150)) await q(db().from("nae_entries").update({ status: "not_scored", updated_at: new Date().toISOString() }).in("id", part));
-    for (const part of chunk(ents.map(e => e.id), 150)) await q(db().from("nae_reviews").update({ status: "confirmed", decided_at: new Date().toISOString(), decided_by: session.sub, decision_note: `Closed: entry marked not scored. ${reason}` }).in("entry_id", part).eq("round_no", r.round_no).eq("status", "open"));
-    await audit(session, `Marked ${ents.length} entries not scored (${tag})`, "round", r.id, `${ents.map(e => e.code).slice(0, 40).join(", ")} · ${reason}`);
-    return { ok: true, note: `${ents.length} entr${ents.length === 1 ? "y" : "ies"} marked not scored.` };
+    for (const part of chunk(ents.map(e => e.id), 150)) await q(db().from("nae_reviews").update({ status: "confirmed", decided_at: new Date().toISOString(), decided_by: session.sub, decision_note: `Closed: artwork marked not scored. ${reason}` }).in("entry_id", part).eq("round_no", r.round_no).eq("status", "open"));
+    await audit(session, `Marked ${ents.length} artworks not scored (${tag})`, "round", r.id, `${ents.map(e => e.code).slice(0, 40).join(", ")} · ${reason}`);
+    return { ok: true, note: `${ents.length} artwork${ents.length === 1 ? "" : "s"} marked not scored.` };
   }
 
   if (b.action === "assign") {
@@ -102,7 +102,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
     const n = await startEntries(S, r);
     const touched = [...new Set([...drop.map(a => a.entry_id), ...n.ids])];
     for (const id of touched) await recompute(id, r.round_no, { S, quiet: true });
-    const short = n.short ? ` ${n.short} entr${n.short === 1 ? "y has" : "ies have"} fewer evaluators than needed: add evaluators to the Round ${r.round_no} panel.` : "";
+    const short = n.short ? ` ${n.short} artwork${n.short === 1 ? " has" : "s have"} fewer evaluators than needed: add evaluators to the Round ${r.round_no} panel.` : "";
     await audit(session, `Rebalanced assignments for ${tag}`, "round", r.id, `${drop.length} removed, ${n.assigned} added`);
     return { ok: true, note: `Assignments updated: ${drop.length} removed, ${n.assigned} added.${short}` };
   }

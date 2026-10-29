@@ -1,6 +1,6 @@
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
-import { loadStructure } from "@/lib/structure";
+import { loadStructure, versionById, versionView, rubricFor } from "@/lib/structure";
 import { pinnedVersion, scorePlan, recompute, ruleText, flagLine, passThreshold, DEFAULT_BANDS } from "@/lib/scoring";
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
@@ -30,11 +30,19 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
     ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", r.round_no).in("entry_id", ids)) : []
   ]);
   const cur = url.searchParams.get("entry") || null;
+  // Everything per artwork comes from these batch reads (no query per artwork): the rubric version an artwork was
+  // first scored with, and the latest session of this round each artwork is in (its team decides the minimum).
+  const sessLinks = ids.length ? await q(db().from("nae_session_entries").select("entry_id, session:nae_sessions!inner(id, evaluator_ids, round_id, status, created_at)").in("entry_id", ids).eq("session.round_id", r.id).neq("session.status", "cancelled")) : [];
   const entries = [];
   for (const l of links) {
     const e = l.entry;
-    const ver = await pinnedVersion(S, e, r.round_no);
-    const plan = await scorePlan(S, e, r);
+    const firstScored = scores.filter(x => x.entry_id === e.id && x.rubric_version_id).sort((a, b) => String(a.updated_at).localeCompare(String(b.updated_at)))[0];
+    const hit = firstScored ? versionById(S, firstScored.rubric_version_id) : null;
+    const rub = hit ? null : rubricFor(S, e.pathway_code, e.sub_code, r.round_no);
+    const ver = hit ? versionView(hit.rubric, hit.version) : rub?.published ? versionView(rub, rub.published) : null;
+    const latest = sessLinks.filter(x => x.entry_id === e.id).map(x => x.session).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+    const tm = latest?.evaluator_ids || s.evaluator_ids || [];
+    const plan = { session: latest || null, min: Math.min(tm.length, Math.max(2, Math.ceil(tm.length / 2))) };
     const rv = reviews.filter(x => x.entry_id === e.id);
     const lg = logistics.find(x => x.entry_id === e.id) || null;
     entries.push({
@@ -44,11 +52,12 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
       scores: scores.filter(x => x.entry_id === e.id),
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
-      logistics: lg ? { state: lg.state, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
+      logistics: lg ? { state: lg.state, batch: lg.batch_no, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
       files: null
     });
   }
-  const target = entries.find(x => x.code === cur) || entries.find(x => !x.result?.complete) || entries[0];
+  const inRoom = x => ["coordinator", "handed_over"].includes(x.logistics?.state);
+  const target = entries.find(x => x.code === cur) || entries.find(x => inRoom(x) && !x.result?.complete) || entries.find(x => !x.result?.complete && (!x.logistics || inRoom(x))) || entries.find(x => !x.result?.complete) || entries[0];
   if (target) { const e = links.find(l => l.entry.code === target.code).entry; target.files = (await entryFiles(e)).map(fileView); }
   const bandsFor = x => x.rubric?.grade_bands || DEFAULT_BANDS;
   return {
@@ -79,7 +88,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (s.status !== "live") throw bad("Only a live session can be finished.");
     const res = ids.length ? await q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [];
     const open = ids.filter(id => !res.find(x => x.entry_id === id && x.complete));
-    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} entr${open.length === 1 ? "y is" : "ies are"} not fully scored. They can go into another session. Artworks still with you are handed back to storage.` };
+    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} artwork${open.length === 1 ? " is" : "s are"} not fully scored. They can go into another session. Artworks still with you are handed back to storage.` };
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
     // artworks still out go back: never handed over → straight back to storage; with the coordinator → handed
     // back (storage confirms receipt and the shelf)

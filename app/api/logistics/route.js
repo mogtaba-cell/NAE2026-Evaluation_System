@@ -58,7 +58,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   // ---------- movements (batch or selected artworks) ----------
   if (ACTIONS[b.action]) {
     const ids = await targets();
-    const coordinatorStep = ["receive", "send_back"].includes(b.action);
+    const coordinatorStep = ["receive", "send_back", "return_room"].includes(b.action);
     const sessCache = {};
     const check = coordinatorStep && session.role === "coordinator" ? async r => {
       if (!r.session_id) return "not in a session";
@@ -106,9 +106,9 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   }
 
   // ---------- one artwork ----------
-  const e = await q(db().from("nae_entries").select(ENTRY_COLS).eq("code", b.entry_code).maybeSingle()); if (!e || !has(e.pathway_code)) throw bad("Entry not found.");
+  const e = await q(db().from("nae_entries").select(ENTRY_COLS).eq("code", b.entry_code).maybeSingle()); if (!e || !has(e.pathway_code)) throw bad("Artwork not found.");
   const lg = await q(db().from("nae_logistics").select("*").eq("entry_id", e.id).maybeSingle());
-  if (!lg) throw bad("This entry has no artwork record (it isn't physical).");
+  if (!lg) throw bad("This artwork has no artwork record (it isn't physical).");
 
   if (b.action === "framing") {
     if (!staff) { const mine = new Set(await mySessionEntryIds(session)); if (!mine.has(e.id)) throw forbidden(); }

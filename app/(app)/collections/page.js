@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { api, useApi, useMeta, useToast, PageHead, Card, Table, Badge, Loading, Btn, Banner, Field, Modal, Two, Check, dshort } from "@/components/ui";
 
 export default function Collections() {
-  const d = useApi("/api/collections"); const meta = useMeta(); const toast = useToast();
+  const d = useApi("/api/collections", [], { live: true }); const meta = useMeta(); const toast = useToast();
   const locs = useApi("/api/locations");
   const [sel, setSel] = useState(null); const c = useApi(sel ? `/api/collections/${sel}` : null);
   const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [where, setWhere] = useState(""); const [itemWhere, setItemWhere] = useState({});
@@ -24,7 +24,7 @@ export default function Collections() {
   const locSelect = (value, onChange, placeholder) => <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{active.map(l => <option key={l.id} value={l.id}>{l.label} ({l.count} stored)</option>)}</select>;
   return <>
     <PageHead title="Collections" sub="One batch per school, pathway and subpathway. Storage checks each artwork on arrival and records where the batch is stored. A missing artwork is marked on its own and the rest of the batch carries on." actions={<Btn href="/logistics">Artwork logistics</Btn>} />
-    {!list.length ? <Banner title="No collections yet">Schedule them from Artwork logistics (To do) once physical entries go through to Round 2.</Banner> : <div className="x-side">
+    {!list.length ? <Banner title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks go through to Round 2.</Banner> : <div className="x-side">
       <Card title="All collections" flush><Table minw={560} sel={list.findIndex(l => l.id === sel)} onRow={i => setSel(list[i].id)} cols={["School", "Subpathway", "Date", { h: "Artworks", cls: "r" }, "Status"]} rows={list.map(l => [<Two key="s" a={l.school?.name} b={`${l.code}${l.coordinator ? " · " + l.coordinator : ""}`} />, <span key="p" className="small">{l.sub || l.pathway}</span>, l.scheduled_on ? dshort(l.scheduled_on) : <span key="d" className="faint">Not set</span>, l.count, l.status === "scheduled" ? <Badge key="b" tone={l.left < l.count ? "info" : ""}>{l.left < l.count ? `Partly in · ${l.left} left` : "Scheduled"}</Badge> : <Badge key="b" tone={l.missing ? "warn" : "ok"}>Checked in{l.where ? ` · ${l.where}` : ""}{l.missing ? ` · ${l.missing} missing` : ""}</Badge>])} /></Card>
       {!x ? <Loading error={c.error} /> : <Card title={x.collection.school?.name} sub={`${x.collection.pathway || ""}${x.collection.sub ? " · " + x.collection.sub : ""} · ${x.collection.code} · eSIS ${x.collection.school?.esis || ""}`} right={scheduled ? <Badge>{todo.length < x.items.length ? `${todo.length} still to collect` : "Scheduled"}</Badge> : <Badge tone="ok">Checked in{x.collection.where ? ` · ${x.collection.where}` : ""}</Badge>}>
         {err && <Banner tone="bad" title={err} />}

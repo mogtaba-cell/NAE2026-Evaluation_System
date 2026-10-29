@@ -44,7 +44,7 @@ export default function RubricBuilder({ params }) {
       </div>)}
       {crit.length > 0 && crit.some(c => c.label && !c.label_ar) && <p className="small" style={{ color: "var(--warn)" }}>{crit.filter(c => c.label && !c.label_ar).length} of {crit.length} criteria have no Arabic name. Evaluators who choose Arabic will see English for those.</p>}
       {admin && <div><Btn sm onClick={() => setCrit([...crit, { label: "", label_ar: "", weight: 0, description: "", description_ar: "" }])}>Add criterion</Btn></div>}
-      <Field label="National identity" help="Whether evaluators answer “Does the work express UAE national identity?” (yes/no), and whether every evaluator must say yes for the entry to go through. This is the only place it is set.">
+      <Field label="National identity" help="Whether evaluators answer “Does the work express UAE national identity?” (yes/no), and whether every evaluator must say yes for the artwork to go through. This is the only place it is set.">
         <select className="select" style={{ maxWidth: 420 }} disabled={!admin} value={idn} onChange={e => setIdn(e.target.value)}><option value="off">Don't ask</option><option value="ask">Ask (recorded and can flag disagreement, not needed to go through)</option><option value="require">Ask, and “yes” from every evaluator is needed to go through</option></select>
       </Field>
       <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>

@@ -60,5 +60,5 @@ async function resyncPhysical(S, P, subCode, physical, session) {
     for (let i = 0; i < ids.length; i += 150) await q(db().from("nae_logistics").delete().eq("state", "to_collect").is("collection_id", null).in("entry_id", ids.slice(i, i + 150)));
     if (r2.status === "open") await assignEntries(S2, r2, ents.filter(e => ["to_score", "in_progress", "not_open"].includes(e.status)));
   }
-  await audit(session, `${physical ? "Physical" : "Online"} in Round 2: ${ents.length} entries updated`, "pathway", P.code, subCode);
+  await audit(session, `${physical ? "Physical" : "Online"} in Round 2: ${ents.length} artworks updated`, "pathway", P.code, subCode);
 }

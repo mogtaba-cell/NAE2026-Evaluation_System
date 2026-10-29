@@ -6,7 +6,7 @@ import * as XLSX from "xlsx";
 export const maxDuration = 60;
 
 const FIELDS = {
-  code: ["Entry code", e => e.code], reference_id: ["referenceId", e => e.reference_id], registration_id: ["RegistrationId", e => e.registration_id],
+  code: ["Artwork code", e => e.code], reference_id: ["referenceId", e => e.reference_id], registration_id: ["RegistrationId", e => e.registration_id],
   title_en: ["Title (English)", e => e.title_en], title_ar: ["Title (Arabic)", e => e.title_ar], pathway: ["Pathway", (e, S) => S.P[e.pathway_code]?.name],
   sub: ["Subpathway", (e, S) => (S.P[e.pathway_code]?.subs.find(s => s.code === e.sub_code) || {}).name], school: ["School", e => e.school?.name], esis: ["School eSIS", e => e.school?.esis],
   region: ["Region", e => e.school?.region], school_type: ["School type", e => e.school?.school_type], group: ["Group name", e => e.group_name], students: ["Number of students", e => e.students_count],
@@ -15,7 +15,7 @@ const FIELDS = {
   status: ["Status", e => `Round ${e.current_round} · ${e.status.replace(/_/g, " ")}`], coordinator: ["Coordinator", (e, S, x) => x.acc[e.coordinator_id] || null], description_en: ["Description (English)", e => e.description_en], description_ar: ["Description (Arabic)", e => e.description_ar],
   r2p: ["Round 2 passed", e => res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No"], shortlist: ["Shortlisted (grade A, passed)", e => res(e, 2)?.passed && res(e, 2)?.grade === "A" ? "Yes" : "No"],
   framing: ["Needs framing", e => lgOf(e)?.needs_framing ? "Yes" : "No"], glass: ["Protective glass", e => lgOf(e)?.glass_framing ? "Yes" : "No"],
-  mgmt: ["Viewed by management", e => e.mgmt_viewed_at ? "Yes" : "No"], reg: ["Entry type", e => e.registration_type || (e.group_name ? "Group" : "Individual")]
+  mgmt: ["Viewed by management", e => e.mgmt_viewed_at ? "Yes" : "No"], reg: ["Artwork type", e => e.registration_type || (e.group_name ? "Group" : "Individual")]
 };
 const lgOf = e => Array.isArray(e.logistics) ? e.logistics[0] : e.logistics;
 const res = (e, n) => (e.results || []).find(r => r.round_no === n);
@@ -39,7 +39,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ session
     const keys = kind === "custom" ? String(url.searchParams.get("fields") || "").split(",").filter(k => FIELDS[k]) : ["code", "reference_id", "title_en", "title_ar", "pathway", "sub", "school", "esis", "region", "group", "students", "grades", "status", "coordinator"];
     if (!keys.length) throw bad("Pick at least one field.");
     rows = ents.filter(e => !official || [1, 2].every(n => !res(e, n) || res(e, n).locked)).map(e => Object.fromEntries(keys.map(k => [FIELDS[k][0], FIELDS[k][1](e, S, { acc })])));
-    name = kind === "custom" ? "Custom export" : "Entries by school";
+    name = kind === "custom" ? "Custom export" : "Artworks by school";
   } else if (kind === "results") {
     const ents = await loadEntries();
     rows = ents.filter(e => res(e, 1)?.complete || res(e, 2)?.complete).filter(e => !official || [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked)).map(e => ({ "Entry code": e.code, Title: e.title_en, School: e.school?.name, Pathway: S.P[e.pathway_code]?.name, Subpathway: (S.P[e.pathway_code]?.subs.find(s => s.code === e.sub_code) || {}).name, "Round 1 result": res(e, 1)?.final ?? null, "Round 1 grade": res(e, 1)?.grade || null, "Round 1 passed": res(e, 1)?.passed == null ? null : res(e, 1).passed ? "Yes" : "No", "Round 2 result": res(e, 2)?.final ?? null, "Round 2 grade": res(e, 2)?.grade || null, "Round 2 passed": res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No", Shortlisted: res(e, 2)?.passed && res(e, 2)?.grade === "A" ? "Yes" : "No", "Needs framing": lgOf(e)?.needs_framing ? (lgOf(e).glass_framing ? "Yes, with glass" : "Yes") : "No", Final: [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked) ? "Yes" : "No" }));

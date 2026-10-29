@@ -4,26 +4,22 @@
 import { useMemo, useState } from "react";
 import { api, useApi, useToast, Btn, Badge, Banner, Modal, Field, Check, Loading, when, dshort } from "@/components/ui";
 
-export const SHORT = { to_collect: "To collect", storage: "In storage", requested: "Requested", picked: "Picked", handed_over: "Handed over", coordinator: "With coordinator", returning: "Returning", framer: "At the framer", showcase: "Showcase", returned: "Returned to school", missing: "Missing" };
+export const SHORT = { to_collect: "To collect", storage: "In storage", requested: "Waiting for its session", picked: "Picked", handed_over: "Handed over", coordinator: "In the session room", returning: "Handed back", framer: "At the framer", showcase: "Showcase", returned: "Returned to school", missing: "Missing" };
 const TONE = { to_collect: "", storage: "ok", requested: "info", picked: "info", handed_over: "warn", coordinator: "info", returning: "warn", framer: "", showcase: "ok", returned: "", missing: "bad" };
 export const MISSING = { collect_later: "Collect later", score_online: "Scored from its files", withdrawn: "Withdrawn" };
 export const StateBadge = ({ s }) => <Badge tone={TONE[s]}>{SHORT[s] || s}</Badge>;
 
 // label, from states, roles, needs (location | framer | note), primary
 export const STEPS = {
-  pick:          ["Mark picked", ["requested"], ["admin", "storage"]],
-  hand_over:     ["Hand over to coordinator", ["requested", "picked"], ["admin", "storage"], null, true],
-  receive:       ["Confirm received", ["handed_over"], ["admin", "coordinator"], null, true],
-  send_back:     ["Hand back to storage", ["coordinator", "handed_over"], ["admin", "coordinator"]],
-  receive_back:  ["Receive back into storage", ["returning", "coordinator", "handed_over"], ["admin", "storage"], "location", true],
+  return_room:   ["Hand back to storage", ["coordinator", "handed_over"], ["admin", "coordinator", "storage"]],
+  receive_back:  ["Back on the shelves", ["returning", "coordinator", "handed_over"], ["admin", "storage"], "location", true],
   move:          ["Move to…", ["storage", "showcase"], ["admin", "storage"], "location"],
   to_framer:     ["Send to the framer", ["storage"], ["admin", "storage"], "framer"],
   from_framer:   ["Back from the framer", ["framer"], ["admin", "storage"], "location"],
   showcase:      ["Ready for showcase", ["storage"], ["admin", "storage"]],
   unshowcase:    ["Back to storage list", ["showcase"], ["admin", "storage"]],
   return_school: ["Returned to the school", ["storage", "showcase"], ["admin", "storage"], "note"],
-  unpick:        ["Not picked", ["picked"], ["admin", "storage"]],
-  missing:       ["Mark missing", ["storage", "requested", "picked", "handed_over", "returning"], ["admin", "storage"], "note"],
+  missing:       ["Mark missing", ["storage", "requested", "picked", "handed_over", "coordinator", "returning"], ["admin", "storage"], "note"],
   found:         ["Found: put in storage", ["missing"], ["admin", "storage"], "location"]
 };
 
@@ -97,7 +93,7 @@ export function ArtworkDrawer({ row, onClose, role, onChanged }) {
     ["Framing", row.needs_framing ? `${row.glass_framing ? "Needs framing with protective glass" : "Needs framing"}${row.framed ? " · framed" : ""}` : "Not needed"],
     ["Round 2", row.scored ? `${row.r2?.final ?? ""} · grade ${row.r2?.grade || ""}${row.shortlisted ? " · shortlisted" : ""}` : "Not scored yet"]
   ];
-  return <Modal open wide title={`${row.entry.code} · ${SHORT[row.state] || row.state}`} sub={[row.entry.title_en || row.entry.group_name, row.entry.school?.name, row.sub].filter(Boolean).join(" · ")} onClose={onClose} footer={<><Btn href={`/entries/${row.entry.code}`}>Open entry</Btn><span className="sp" /><Btn onClick={onClose}>Close</Btn></>}>
+  return <Modal open wide title={`${row.entry.code} · ${SHORT[row.state] || row.state}`} sub={[row.entry.title_en || row.entry.group_name, row.entry.school?.name, row.sub].filter(Boolean).join(" · ")} onClose={onClose} footer={<><Btn href={`/entries/${row.entry.code}`}>Open artwork</Btn><span className="sp" /><Btn onClick={onClose}>Close</Btn></>}>
     {err && <Banner tone="bad" title={err} />}
     <div className="mv-facts">{facts.map(([k, v]) => <div key={k}><span className="small faint">{k}</span><span>{v}</span></div>)}</div>
     {staff && row.state === "missing" && <div className="stack s8" style={{ borderTop: "1px solid var(--rule)", paddingTop: 12 }}>
@@ -130,7 +126,7 @@ export function bySession(rows, filter) {
 
 // The artworks of one session, for its coordinator: confirm what storage handed over, hand back when scored.
 export function SessionArtworks({ sessionId, role, onClose, onChanged }) {
-  const lg = useApi(`/api/logistics`); const [open, setOpen] = useState(null);
+  const lg = useApi(`/api/logistics`, [], { live: 10000 }); const [open, setOpen] = useState(null);
   const rows = (lg.data?.rows || []).filter(r => r.session?.id === sessionId).sort((a, b) => a.entry.code.localeCompare(b.entry.code));
   const steps = role === "coordinator" ? ["receive", "send_back"] : ["pick", "hand_over", "receive", "send_back", "receive_back", "missing"];
   const done = () => { lg.reload(); onChanged && onChanged(); };

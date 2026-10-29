@@ -4,6 +4,12 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 
 // ---------- data ----------
+// Pages show what they loaded last time at once and refresh it in the background (no "Loading" flash when you
+// come back to a page). After any change (POST/PATCH/...) every open page refetches, and pages that pass
+// { live: true } also refresh every 20 seconds while the tab is visible, so new data appears without reloading.
+const cache = new Map();          // url -> data
+const inflight = new Map();       // url -> promise
+const subs = new Set();           // reload functions of mounted useApi hooks
 export async function api(url, opts = {}) {
   const init = { method: opts.method || (opts.body ? "POST" : "GET"), headers: {} };
   if (opts.body !== undefined) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(opts.body); }
@@ -11,18 +17,37 @@ export async function api(url, opts = {}) {
   if (r.status === 401) { window.location.href = "/login"; throw new Error("Please sign in again."); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+  if (init.method !== "GET") { cache.clear(); setTimeout(() => subs.forEach(f => f(true)), 0); }
   return j;
 }
-export function useApi(url, deps = []) {
-  const [state, setState] = useState({ data: null, error: null, loading: true });
-  const load = useCallback(async () => {
-    if (!url) { setState({ data: null, error: null, loading: false }); return; }
-    setState(s => ({ ...s, loading: true }));
-    try { const d = await api(url); setState({ data: d, error: null, loading: false }); }
-    catch (e) { setState({ data: null, error: e.message, loading: false }); }
+function getOnce(url) {
+  if (inflight.has(url)) return inflight.get(url);
+  const p = api(url).then(d => { cache.set(url, d); return d; }).finally(() => inflight.delete(url));
+  inflight.set(url, p); return p;
+}
+export function useApi(url, deps = [], opts = {}) {
+  const [state, setState] = useState(() => ({ url, data: url ? cache.get(url) ?? null : null, error: null, loading: !!url }));
+  const urlRef = useRef(url); urlRef.current = url;
+  const load = useCallback(async quiet => {
+    if (!url) { setState({ url, data: null, error: null, loading: false }); return; }
+    // show the cached copy (or the last data of this same address) while the fresh one loads
+    if (!quiet) setState(s => ({ url, data: cache.get(url) ?? (s.url === url ? s.data : null), error: null, loading: true }));
+    try { const d = await getOnce(url); if (urlRef.current === url) setState({ url, data: d, error: null, loading: false }); }
+    catch (e) { if (urlRef.current === url) setState(s => (quiet && s.data && s.url === url) ? { ...s, loading: false } : { url, data: null, error: e.message, loading: false }); }
   }, [url]);
-  useEffect(() => { load(); }, [load, ...deps]);
-  return { ...state, reload: load };
+  useEffect(() => { load(); }, [load, ...deps]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!url) return;
+    const f = () => load(true); subs.add(f);
+    let t = null;
+    const vis = () => { if (document.visibilityState === "visible") load(true); };
+    if (opts.live) {
+      t = setInterval(() => { if (document.visibilityState === "visible") load(true); }, typeof opts.live === "number" ? opts.live : 20000);
+      window.addEventListener("focus", vis); document.addEventListener("visibilitychange", vis);
+    }
+    return () => { subs.delete(f); if (t) clearInterval(t); window.removeEventListener("focus", vis); document.removeEventListener("visibilitychange", vis); };
+  }, [url, load, opts.live]);
+  return { data: state.url === url ? state.data : (url ? cache.get(url) ?? null : null), error: state.error, loading: state.loading, reload: () => load(true) };
 }
 const MetaCtx = createContext(null);
 export function MetaProvider({ children }) {
@@ -115,7 +140,7 @@ export function Modal({ open, title, sub, onClose, children, footer, wide }) {
   }, [open]);
   if (!open) return null;
   // Rendered on <body> so a sticky or blurred parent (like the top bar) can't trap the fixed-position overlay.
-  const node = <div className="scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className={`modal ${wide ? "w720" : ""}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref} style={{ outline: "none" }}>
+  const node = <div className="scrim" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className={`modal ${wide === "x" ? "w1100" : wide ? "w720" : ""}`} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} ref={ref} style={{ outline: "none" }}>
     <div className="mh"><div className="tt"><h2>{title}</h2>{sub && <p className="sub">{sub}</p>}</div><Btn v="ghost" title="Close" onClick={onClose}>×</Btn></div>
     <div className="mb">{children}</div>{footer && <div className="mf">{footer}</div>}</div></div>;
   return typeof document === "undefined" ? node : createPortal(node, document.body);
@@ -148,7 +173,7 @@ export function statusBadge(e) {
 }
 // grade from the rubric's grade lines (default A 80, B 50)
 export const gradeOf = (t, bands) => { const b = [...(bands || [{ grade: "A", min: 80 }, { grade: "B", min: 50 }, { grade: "C", min: 0 }])].sort((x, y) => y.min - x.min).find(x => t >= x.min); return b ? b.grade : ""; };
-export function Art({ seed = 0, w = 40, h = 40 }) { return <div className={`art a${Math.abs(seed) % 6}`} style={{ width: w, height: h, maxWidth: "100%" }} role="img" aria-label="Entry" />; }
+export function Art({ seed = 0, w = 40, h = 40 }) { return <div className={`art a${Math.abs(seed) % 6}`} style={{ width: w, height: h, maxWidth: "100%" }} role="img" aria-label="Artwork" />; }
 export const seedOf = s => [...String(s || "")].reduce((a, c) => a + c.charCodeAt(0), 0);
 export function EntryCell({ e, sub }) {
   return <div className="cellp">{e.thumb ? <img src={e.thumb} alt="" width="40" height="40" style={{ borderRadius: 6, objectFit: "cover" }} /> : <Art seed={seedOf(e.code)} />}<div style={{ minWidth: 0 }}><b className="code">{e.code}</b><span style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{sub ?? e.title_en ?? "Untitled"}</span></div></div>;

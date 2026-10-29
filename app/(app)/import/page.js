@@ -52,20 +52,20 @@ export default function Import() {
   }
   const pw = rows ? Object.entries(rows.reduce((m, r) => { const k = r.ArtPathwayNameEn || "Not given"; m[k] = (m[k] || 0) + 1; return m; }, {})) : [];
   return <>
-    <PageHead title="Data import" sub="Upload the submissions export (.xlsx or .csv). New referenceIds become entries with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched." />
+    <PageHead title="Data import" sub="Upload the submissions export (.xlsx or .csv). New referenceIds become artworks with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched." />
     <Banner title={`Importing into ${meta?.data?.program?.name || "the current program"}`}>Switch program at the top to import into another one. Pathways are matched by name to this program's pathways; new subpathways found in the file are added to them.</Banner>
     {!run && <div className={`drop${drag ? " on" : ""}`} role="button" tabIndex={0} onClick={() => inp.current?.click()} onKeyDown={e => e.key === "Enter" && inp.current?.click()}
       onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) read(f); }}>
       <b className="strong">{file ? file.name : "Drop the export here, or click to choose"}</b><span className="small faint">The file is read in your browser and sent in batches of {CHUNK} rows.</span>
       <input ref={inp} type="file" accept=".xlsx,.xls,.csv" hidden onChange={e => e.target.files[0] && read(e.target.files[0])} /></div>}
     {err && <Banner tone="bad" title="This file can't be imported">{err}</Banner>}
-    {rows && !run && <Card title={`${fmt(rows.length)} rows ready`} sub="Sorted by submission date so entry codes follow the order schools submitted." right={<Btn v="primary" onClick={start}>Import {fmt(rows.length)} rows</Btn>}>
+    {rows && !run && <Card title={`${fmt(rows.length)} rows ready`} sub="Sorted by submission date so artwork codes follow the order schools submitted." right={<Btn v="primary" onClick={start}>Import {fmt(rows.length)} rows</Btn>}>
       <Table cols={["Pathway", { h: "Rows", cls: "r" }]} rows={pw.map(([k, n]) => [k, <span key="n" className="num">{n}</span>])} />
       <p className="x-note">First submission {String(rows[0]["Submission date"]).slice(0, 16)} · last {String(rows[rows.length - 1]["Submission date"]).slice(0, 16)}. Unknown subpathways are added to their pathway automatically and listed after the import.</p>
     </Card>}
     {run && <Card title={run.going ? `Importing… batch ${run.batch} of ${run.batches}` : `Import finished in ${run.seconds} s`} sub={run.going ? `${Math.round((Date.now() - run.started) / 1000)} s so far · ${CHUNK} rows per batch` : undefined} right={!run.going && <Btn onClick={() => { setRun(null); setRows(null); setFile(null); }}>Import another file</Btn>}>
       <Prog pct={run.done / rows.length * 100} label={`${fmt(run.done)} / ${fmt(rows.length)}`} />
-      <Kpis items={[["New entries", fmt(run.created), "", "ok"], ["Updated", fmt(run.updated), "details only"], ["Rows with errors", run.errors.length, "", run.errors.length ? "warn" : "ok"]]} />
+      <Kpis items={[["New artworks", fmt(run.created), "", "ok"], ["Updated", fmt(run.updated), "details only"], ["Rows with errors", run.errors.length, "", run.errors.length ? "warn" : "ok"]]} />
       {run.newSubs.length > 0 && <Banner tone="warn" title="New subpathways were added" action={<Btn sm href="/setup">Program setup</Btn>}>{[...new Set(run.newSubs.map(s => s.name || s))].join(", ")}. Give them a rubric before Round 1 opens.</Banner>}
       {run.errors.length > 0 && <Table cols={["Row", "Problem"]} rows={run.errors.slice(0, 50).map(e => [String(e.row), e.message])} />}
     </Card>}

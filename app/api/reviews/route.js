@@ -29,7 +29,7 @@ export const GET = route(["admin", "management", "coordinator", "leadership"], a
 });
 export const POST = route(["admin", "coordinator", "management"], async ({ session, request }) => {
   const b = await body(request);
-  const e = await q(db().from("nae_entries").select("*").eq("code", b.entry_code).maybeSingle()); if (!e) throw bad("Entry not found.");
+  const e = await q(db().from("nae_entries").select("*").eq("code", b.entry_code).maybeSingle()); if (!e) throw bad("Artwork not found.");
   if (!(await canWorkOnEntry(session, e))) throw forbidden();
   if (!String(b.reason || "").trim()) throw bad("Pick a reason.");
   const S = await loadStructure(); const r = roundOf(S, e.pathway_code, Number(b.round_no || e.current_round));

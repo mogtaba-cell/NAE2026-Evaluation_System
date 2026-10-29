@@ -68,7 +68,7 @@ function Top({ session, onMenu }) {
     <span className="sp" />
     {canSearch && <form className="hide-s search" style={{ width: 300 }} onSubmit={e => { e.preventDefault(); if (q.trim()) router.push(`/entries?q=${encodeURIComponent(q.trim())}`); }}>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="faint"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
-      <input className="input" value={q} onChange={e => setQ(e.target.value)} placeholder="Code, reference ID, student or school" aria-label="Search entries" /></form>}
+      <input className="input" value={q} onChange={e => setQ(e.target.value)} placeholder="Code, reference ID, student or school" aria-label="Search artworks" /></form>}
     <ViewAs session={session} />
   </header>;
 }
