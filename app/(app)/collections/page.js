@@ -1,4 +1,5 @@
 "use client";
+import LocPicker from "@/components/LocPicker";
 // Collections from schools, made for a phone: pick a collection, mark each artwork received / missing / not yet,
 // photograph the boxes (outside and inside) and the school contact's Emirates ID, enter who handed them over, confirm. Mistakes can be
 // corrected afterwards (received <-> missing), and every visit is kept with its photos.
@@ -55,9 +56,9 @@ function Submitted({ files, code }) {
       </div>}
     </Modal></>;
 }
-function LocSelect({ value, onChange, placeholder }) {
-  const locs = useApi("/api/locations"); const list = (locs.data?.locations || []).filter(l => l.active);
-  return <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{list.map(l => <option key={l.id} value={l.id}>{l.label} ({l.count} stored)</option>)}</select>;
+function LocSelect({ value, onChange, placeholder, pathway }) {
+
+  return <LocPicker value={value} onChange={onChange} pathway={pathway} allowEmpty emptyLabel={placeholder || "Choose…"} />;
 }
 const STATUS = c => c.status === "checked_in" ? (c.missing ? ["Checked in · " + c.missing + " missing", "warn"] : ["Checked in", "ok"]) : c.left < c.count ? [`${c.left} still to collect`, "info"] : ["To collect", ""];
 
@@ -77,7 +78,7 @@ export default function Collections() {
     .sort((a, b) => isTodo(a) !== isTodo(b) ? (isTodo(a) ? -1 : 1) : String(a.scheduled_on || "9").localeCompare(String(b.scheduled_on || "9")) || String(a.school?.name).localeCompare(String(b.school?.name)));
   const n = k => all.filter(k).length;
   return <>
-    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one received or missing, photograph the boxes and the school contact's Emirates ID, and confirm. Missing artworks stay in the collection for the next visit. One collection per school and subpathway." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
+    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one received or missing, photograph the boxes and the school contact's Emirates ID, and confirm. Missing artworks stay in the collection for the next visit. One collection per school; each pathway is stored in its own room, shelf and row." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
     {!all.length ? <Empty title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks are shortlisted for Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
       <section className="cl-list">
         <div className="cl-tools"><Search value={q} onChange={setQ} placeholder="School, eSIS, code" />
@@ -96,7 +97,7 @@ export default function Collections() {
 
 function Detail({ id, can, onBack, onChanged }) {
   const c = useApi(`/api/collections/${id}`, [], { live: 30000 }); const toast = useToast();
-  const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [where, setWhere] = useState(""); const [itemWhere, setItemWhere] = useState({});
+  const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [pwWhere, setPwWhere] = useState({}); const [itemWhere, setItemWhere] = useState({}); const [split, setSplit] = useState({});
   const [contact, setContact] = useState({ name: "", phone: "" }); const [newPhotos, setNewPhotos] = useState([]);
   const [conf, setConf] = useState(false); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [fix, setFix] = useState(null);
   const x = c.data;
@@ -109,7 +110,11 @@ function Detail({ id, can, onBack, onChanged }) {
   const eid = newPhotos.find(p => p.kind === "eid"); const boxNew = newPhotos.filter(p => p.kind === "box");
   const needs = [];
   if (laterN) needs.push(`mark ${laterN === todo.length ? "each artwork" : `${laterN} more artwork${laterN === 1 ? "" : "s"}`} received or missing`);
-  if (received && !where && todo.some(i => rec[i.entry.code] === "ok" && !itemWhere[i.entry.code])) needs.push("choose where they are stored");
+  // artworks grouped by pathway: each pathway's received artworks are stored together (or split by artwork)
+  const groups = Object.values(todo.reduce((m, i) => { const k = i.pathway_code || "?"; (m[k] ||= { code: k, name: i.pathway || "Other", items: [] }).items.push(i); return m; }, {})).sort((a, b) => a.name.localeCompare(b.name));
+  const recIn = g => g.items.filter(i => rec[i.entry.code] === "ok");
+  const unplaced = groups.filter(g => split[g.code] ? recIn(g).some(i => !itemWhere[i.entry.code]) : recIn(g).length && !pwWhere[g.code]);
+  if (unplaced.length) needs.push(`choose where ${unplaced.map(g => g.name).join(" and ")} ${unplaced.length === 1 ? "is" : "are"} stored`);
   if (received && !contact.name.trim()) needs.push("enter the contact's name");
   if (received && !/^\+?[0-9 ()-]{7,20}$/.test(contact.phone.trim())) needs.push("enter their phone number");
   if (received && !boxNew.length) needs.push("photograph the boxes");
@@ -119,8 +124,8 @@ function Detail({ id, can, onBack, onChanged }) {
   async function schedule(v) { try { await api(`/api/collections/${id}`, { body: { action: "schedule", scheduled_on: v } }); c.reload(); onChanged(); } catch (e) { toast(e.message, "err"); } }
   async function handover() {
     setBusy(true); setErr(null);
-    try { const r = await api(`/api/collections/${id}`, { body: { action: "handover", received: rec, conditions: cond, damaged: dmg, location_id: where || null, locations: itemWhere, contact_name: contact.name, contact_phone: contact.phone, photo_ids: newPhotos.map(p => p.id) } });
-      toast(r.note); setConf(false); setRec({}); setCond({}); setDmg({}); setItemWhere({}); setNewPhotos([]); setContact({ name: "", phone: "" }); c.reload(); onChanged(); }
+    try { const r = await api(`/api/collections/${id}`, { body: { action: "handover", received: rec, conditions: cond, damaged: dmg, location_id: null, pathway_locations: Object.fromEntries(Object.entries(pwWhere).filter(([k]) => !split[k])), locations: Object.fromEntries(Object.entries(itemWhere).filter(([code]) => { const it = todo.find(i => i.entry.code === code); return it && split[it.pathway_code]; })), contact_name: contact.name, contact_phone: contact.phone, photo_ids: newPhotos.map(p => p.id) } });
+      toast(r.note); setConf(false); setRec({}); setCond({}); setDmg({}); setItemWhere({}); setPwWhere({}); setSplit({}); setNewPhotos([]); setContact({ name: "", phone: "" }); c.reload(); onChanged(); }
     catch (e) { setErr(e.message); setConf(false); } setBusy(false);
   }
   async function correct() {
@@ -137,17 +142,18 @@ function Detail({ id, can, onBack, onChanged }) {
       <div className="cl-sec"><div className="cl-sh"><b>Collection date</b></div><input type="date" className="input" value={col.scheduled_on || ""} onChange={e => schedule(e.target.value)} /></div>
       <div className="cl-sec">
         <div className="cl-sh"><b>1. Artworks ({todo.length})</b><span className="sp" /><Btn sm onClick={() => setRec(Object.fromEntries(todo.map(i => [i.entry.code, "ok"])))}>All received</Btn></div>
-        {todo.map(i => { const code = i.entry.code; const v = rec[code]; return <div key={code} className={`cl-item${v === "ok" ? " ok" : v === "missing" ? " miss" : ""}`}>
-          <div className="cl-it"><span className="code">{code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="small faint">{[i.entry.size_text, i.entry.medium].filter(Boolean).join(" · ")}</span></div>
+        {groups.map(g => <div key={g.code} className="cl-pw">
+          <div className="cl-pwh"><b>{g.name}</b><span className="small faint">{g.items.length} artwork{g.items.length === 1 ? "" : "s"}</span><span className="sp" />{recIn(g).length > 0 && <Badge tone="ok">{recIn(g).length} received</Badge>}{g.items.some(i => rec[i.entry.code] === "missing") && <Badge tone="bad">{g.items.filter(i => rec[i.entry.code] === "missing").length} missing</Badge>}</div>
+        {g.items.map(i => { const code = i.entry.code; const v = rec[code]; return <div key={code} className={`cl-item${v === "ok" ? " ok" : v === "missing" ? " miss" : ""}`}>
+          <div className="cl-it"><span className="code">{code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="small faint">{[i.sub, i.entry.size_text, i.entry.medium].filter(Boolean).join(" · ")}</span></div>
           <Submitted files={i.files} code={code} />
           <div className="cl-3 two"><button type="button" className={v === "ok" ? "on ok" : ""} onClick={() => setRec({ ...rec, [code]: "ok" })}>Received</button><button type="button" className={v === "missing" ? "on miss" : ""} onClick={() => setRec({ ...rec, [code]: "missing" })}>Missing</button></div>
           {v === "missing" && <span className="small faint">Stays in this collection to pick up on a later visit.</span>}
           {v === "ok" && <div className="cl-more">
             <Check label="Damaged" checked={!!dmg[code]} onChange={on => setDmg({ ...dmg, [code]: on })} />
             {(dmg[code] || cond[code]) !== undefined && <input className="input" placeholder={dmg[code] ? "What's damaged?" : "Condition notes (optional)"} value={cond[code] || ""} onChange={e => setCond({ ...cond, [code]: e.target.value })} />}
-            <LocSelect value={itemWhere[code] || ""} onChange={v2 => setItemWhere({ ...itemWhere, [code]: v2 })} placeholder="Same place as the batch" />
           </div>}
-        </div>; })}
+        </div>; })}</div>)}
       </div>
       {received > 0 && <>
         <div className="cl-sec"><div className="cl-sh"><b>2. Photos of the boxes</b></div>
@@ -155,7 +161,14 @@ function Detail({ id, can, onBack, onChanged }) {
           <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}><PhotoButton collectionId={id} kind="box" onAdded={added} label={boxNew.length ? "Take more photos" : "Take photos"} primary={!boxNew.length} />{boxNew.length > 0 && <span className="small">{boxNew.length} photo{boxNew.length === 1 ? "" : "s"}</span>}</div>
           <Thumbs photos={boxNew} canRemove onRemove={removePhoto} />
         </div>
-        <div className="cl-sec"><div className="cl-sh"><b>3. Store the batch in</b></div><LocSelect value={where} onChange={setWhere} placeholder="Choose room and shelf…" /></div>
+        <div className="cl-sec"><div className="cl-sh"><b>3. Where each pathway is stored</b></div>
+          <span className="small faint">Each pathway's received artworks go together: choose the room, then the shelf, then the row.</span>
+          {groups.filter(g => recIn(g).length).map(g => <div key={g.code} className="cl-place">
+            <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}><b>{g.name}</b><span className="small faint">{recIn(g).length} received</span><span className="sp" /><Btn sm v="ghost" onClick={() => setSplit({ ...split, [g.code]: !split[g.code] })}>{split[g.code] ? "Store them together" : "Split by artwork"}</Btn></div>
+            {!split[g.code] ? <LocSelect value={pwWhere[g.code] || ""} pathway={g.code} onChange={v => setPwWhere({ ...pwWhere, [g.code]: v })} placeholder="Choose…" />
+              : recIn(g).map(i => <div key={i.entry.code} className="stack s4"><span className="code small">{i.entry.code}</span><LocSelect value={itemWhere[i.entry.code] || ""} pathway={g.code} onChange={v => setItemWhere({ ...itemWhere, [i.entry.code]: v })} placeholder="Choose…" /></div>)}
+          </div>)}
+        </div>
         <div className="cl-sec"><div className="cl-sh"><b>4. Handed over by (school contact)</b></div>
           <Field label="Full name"><input className="input" autoComplete="off" value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} placeholder="As on the Emirates ID" /></Field>
           <Field label="Mobile number"><input className="input" type="tel" inputMode="tel" autoComplete="off" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="050 123 4567" /></Field>

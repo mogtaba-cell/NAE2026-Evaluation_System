@@ -22,14 +22,14 @@ async function boardRows(S, s) {
   const phys = links.map(l => l.entry).filter(e => isPhysicalRound(S, e, r.round_no));
   const ids = phys.map(e => e.id);
   const [lg, res] = await Promise.all([
-    inChunks(ids, part => q(db().from("nae_logistics").select("entry_id, state, batch_no, damaged, condition, handed_at, returned_at, location, loc:nae_locations(room, shelf, sort)").in("entry_id", part))),
+    inChunks(ids, part => q(db().from("nae_logistics").select("entry_id, state, batch_no, damaged, condition, handed_at, returned_at, location, loc:nae_locations(room, shelf, label, sort)").in("entry_id", part))),
     inChunks(ids, part => q(db().from("nae_results").select("entry_id, complete, scored, needed").eq("round_id", r.id).in("entry_id", part)))
   ]);
   return phys.map(e => {
     const l = lg.find(x => x.entry_id === e.id) || {}; const x = res.find(y => y.entry_id === e.id);
     // an artwork back on the shelves that still needs scores is waiting again
     let lane = LANE(l.state); if (lane === "shelved" && !x?.complete) lane = "waiting";
-    return { code: e.code, title: e.title_en || e.title_ar || e.group_name || "", school: e.school?.name || "", sub: (S.P[e.pathway_code]?.subs.find(t => t.code === e.sub_code) || {}).name, size: e.size_text, state: l.state || null, lane, batch: l.batch_no || null, where: l.loc ? `${l.loc.room} · ${l.loc.shelf}` : l.location || null, sort: l.loc?.sort ?? 9999, damaged: !!l.damaged, scored: !!x?.complete, progress: x ? `${x.scored || 0}/${x.needed || 0}` : "", handed_at: l.handed_at, returned_at: l.returned_at };
+    return { code: e.code, title: e.title_en || e.title_ar || e.group_name || "", school: e.school?.name || "", sub: (S.P[e.pathway_code]?.subs.find(t => t.code === e.sub_code) || {}).name, size: e.size_text, state: l.state || null, lane, batch: l.batch_no || null, where: l.loc ? `${l.loc.label}` : l.location || null, sort: l.loc?.sort ?? 9999, damaged: !!l.damaged, scored: !!x?.complete, progress: x ? `${x.scored || 0}/${x.needed || 0}` : "", handed_at: l.handed_at, returned_at: l.returned_at };
   }).sort((a, b) => a.sort - b.sort || String(a.where || "").localeCompare(String(b.where || ""), undefined, { numeric: true }) || a.code.localeCompare(b.code));
 }
 

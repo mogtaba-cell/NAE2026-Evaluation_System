@@ -7,10 +7,12 @@ const hello = n => { const h = +new Date().toLocaleString("en-GB", { hour: "nume
 const today = () => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Dubai" });
 
 function Pathways({ d }) {
-  const router = useRouter();
   return <Card title="Pathways" flush right={<Btn sm v="ghost" href="/rounds">Rounds</Btn>}>
-    <Table cols={["Pathway", "Stage", { h: "Scoring", cls: "r" }]} onRow={i => router.push(`/entries?pathway=${d.pathways[i].code}`)}
-      rows={d.pathways.map(p => [<Two key="a" a={p.name} b={`${fmt(p.entries)} entries`} />, <Two key="b" a={p.round ? `Round ${p.round} open` : p.roundStatus === "between" ? "Between rounds" : "Setup"} b={p.closes_on ? `Closes ${dshort(p.closes_on)}` : ""} />, p.round ? <Prog key="c" pct={p.assigned ? p.submitted / p.assigned * 100 : 0} label={`${p.submitted}/${p.assigned}`} /> : <span key="c" className="small faint">Not scoring</span>])} />
+    <div className="pw-list">{d.pathways.map(p => <a key={p.code} className="pw-li" href={`/entries?pathway=${p.code}`}>
+      <span className="n"><b>{p.name}</b><span>{fmt(p.entries)} artworks</span></span>
+      <span className="st"><b>{p.round ? `Round ${p.round} open` : p.roundStatus === "between" ? "Between rounds" : "Setup"}</b><span>{p.round && p.closes_on ? `Closes ${dshort(p.closes_on)}` : ""}</span></span>
+      {p.round && p.assigned ? <span className="pg"><Prog pct={p.submitted / p.assigned * 100} label={`${p.submitted}/${p.assigned}`} /></span> : <span className="pg faint small">{p.round ? "Nothing assigned" : "Not scoring"}</span>}
+    </a>)}</div>
   </Card>;
 }
 function Todo({ items }) {
@@ -23,14 +25,12 @@ function Bars({ title, rows }) {
 }
 
 // Results so far, for every account: Shortlisted (passed Round 1), Selected in participation pathways, competition winners
-function Outcomes({ o }) {
-  if (!o) return null;
-  return <Kpis items={[
-    ["Shortlisted", fmt(o.shortlisted), "passed Round 1", "brand"],
-    ...(o.participation ? [["Selected", fmt(o.selectedParticipation), "participation pathways, passed Round 2", "ok"]] : []),
-    ...(o.competition ? [["Competition winners", fmt(o.winners), `${fmt(o.firsts)} first place${o.firsts === 1 ? "" : "s"} · ${fmt(o.selectedCompetition)} selected${o.ties ? ` · ${o.ties} in a tie` : ""}`, o.ties ? "warn" : "ok"]] : [])
-  ]} />;
-}
+const outcomeItems = (o, all = "") => !o ? [] : [
+  [`${all}Shortlisted`, fmt(o.shortlisted), "passed Round 1", "brand"],
+  ...(o.participation ? [[`${all}Selected`, fmt(o.selectedParticipation), "participation", "ok"]] : []),
+  ...(o.competition ? [[`${all}Winners`, fmt(o.winners), `competition · ${fmt(o.firsts)} first${o.ties ? ` · ${o.ties} tied` : ""}`, o.ties ? "warn" : "ok"]] : [])
+];
+const Outcomes = ({ o }) => o ? <Kpis items={outcomeItems(o)} dense /> : null;
 
 export default function Dashboard() {
   const d = useApi("/api/dashboard", [], { live: true }); const meta = useMeta(); const me = meta?.data?.me;
@@ -50,8 +50,7 @@ export default function Dashboard() {
     ];
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/reports">Reports</Btn><Btn v="primary" href="/entries">Find an artwork</Btn></>} />
-      <Kpis items={[["Artworks", fmt(x.total), `${fmt(x.schools)} schools · ${fmt(x.students)} students`], ["Scores submitted", fmt(x.pathways.reduce((s, p) => s + p.submitted, 0)), `of ${fmt(x.pathways.reduce((s, p) => s + p.assigned, 0))} assigned in open rounds`, "brand"], ["Reviews open", x.reviews.open, `${x.reviews.overdue} overdue`, x.reviews.overdue ? "warn" : "ok"], ["Physical artworks", lg?.total || 0, `${lg?.storage || 0} in storage · ${lg?.missing || 0} missing`]]} />
-      <Outcomes o={x.outcomes} />
+      <Kpis items={[["Artworks", fmt(x.total), `${fmt(x.schools)} schools · ${fmt(x.students)} students`], ["Scores submitted", fmt(x.pathways.reduce((s, p) => s + p.submitted, 0)), `of ${fmt(x.pathways.reduce((s, p) => s + p.assigned, 0))} assigned in open rounds`, "brand"], ["Reviews open", x.reviews.open, `${x.reviews.overdue} overdue`, x.reviews.overdue ? "warn" : "ok"], ["Physical artworks", lg?.total || 0, `${lg?.storage || 0} in storage · ${lg?.missing || 0} missing`], ...outcomeItems(x.outcomes)]} dense />
       <div className="x-side"><Todo items={todo} /><Pathways d={x} /></div>
       <Card title="Recent activity" flush right={<Btn sm v="ghost" href="/audit">Audit log</Btn>}><Table minw={700} cols={["What happened", "Item", "By", { h: "When", cls: "r" }]} rows={(x.activity || []).map(h => [<Two key="a" a={h.action} b={h.detail?.slice(0, 90)} />, h.entry_code ? <a key="b" className="code link" href={`/entries/${h.entry_code}`}>{h.entry_code}</a> : <span key="b" className="small faint">{h.object_type}</span>, <Two key="c" a={h.actor_name || "System"} b={h.actor_role} />, <span key="d" className="faint small">{when(h.at)}</span>])} /></Card>
     </>;
@@ -61,8 +60,7 @@ export default function Dashboard() {
     const mySessions = x.sessions.filter(s => s.mine && s.status !== "done");
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/entries?mine=1">My artworks</Btn><Btn v="primary" href="/sessions">Scoring sessions</Btn></>} />
-      <Kpis items={[["My artworks", m.entries, `${m.schools} schools`], ["To score", sum("to_score") + sum("in_progress"), "in open rounds", "brand"], ["Needs review", sum("review"), "with management", sum("review") ? "warn" : ""], ["My shortlisted", Object.entries(st).filter(([k]) => k.startsWith("2:")).reduce((a, [, n]) => a + n, 0), "so far", "ok"], ["My selected", m.r2passed || 0, "passed Round 2", "ok"]]} />
-      <Outcomes o={x.outcomes} />
+      <Kpis items={[["My artworks", m.entries, `${m.schools} schools`], ["To score", sum("to_score") + sum("in_progress"), "in open rounds", "brand"], ["Needs review", sum("review"), "with management", sum("review") ? "warn" : ""], ["My shortlisted", Object.entries(st).filter(([k]) => k.startsWith("2:")).reduce((a, [, n]) => a + n, 0), "so far", "ok"], ["My selected", m.r2passed || 0, "passed Round 2", "ok"], ...outcomeItems(x.outcomes, "All ")]} dense />
       <div className="x-side">
         {(lg?.toMe || lg?.withMe) ? <Card title="Artworks in your session room" right={<Btn sm v="primary" href="/pull-list">Session board</Btn>}><p className="muted">{lg.toMe + lg.withMe} artwork{lg.toMe + lg.withMe === 1 ? " is" : "s are"} in the room. Hand each batch back on the board when it's scored, and storage brings the next.</p></Card> : null}
         <Card title="My scoring sessions" right={<Btn sm v="ghost" href="/sessions">All sessions</Btn>}>{mySessions.length ? <div className="x-todo">{mySessions.map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} {s.time_text || ""} · {s.venue || ""} · {s.count} artworks</span></div><Btn sm v={s.status === "live" ? "primary" : "secondary"} href={`/sessions/${s.id}`}>{s.status === "live" ? "Continue" : "Open"}</Btn></div>)}</div> : <p className="muted">No sessions planned. Physical Round 2 artworks are scored in sessions you create.</p>}</Card>
@@ -86,8 +84,7 @@ export default function Dashboard() {
     ];
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/collections">Collections</Btn><Btn v="primary" href="/pull-list">Session boards</Btn></>} />
-      <Kpis items={[["Physical artworks", lg.total, "Round 2"], ["Waiting for sessions", n("requested") + n("picked"), `${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, n("requested") + n("picked") ? "brand" : ""], ["In session rooms", n("handed_over") + n("coordinator"), `${n("returning")} handed back`], ["In storage", lg.storage, `${lg.to_collect} still to collect`, "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"]]} />
-      <Outcomes o={x.outcomes} />
+      <Kpis items={[["Physical artworks", lg.total, "Round 2"], ["Waiting for sessions", n("requested") + n("picked"), `${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, n("requested") + n("picked") ? "brand" : ""], ["In session rooms", n("handed_over") + n("coordinator"), `${n("returning")} handed back`], ["In storage", lg.storage, `${lg.to_collect} still to collect`, "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"], ...outcomeItems(x.outcomes)]} dense />
       <div className="x-side">
         <Todo items={todo} />
         <Card title="Upcoming sessions" sub="Each one has a pull list">{x.sessions.filter(s => s.status !== "done").length ? <div className="x-todo">{x.sessions.filter(s => s.status !== "done").map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} · {s.venue || ""} · {s.count} artworks</span></div><Btn sm href={`/pull-list?session=${s.id}`}>Board</Btn></div>)}</div> : <p className="muted">No sessions planned.</p>}</Card>
@@ -99,8 +96,7 @@ export default function Dashboard() {
     const m = x.mine;
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews?mine=1">My reviews</Btn></>} />
-      <Kpis items={[["My open reviews", m.open.length, `${m.open.filter(r => Date.parse(r.due_at) < Date.now()).length} overdue`, m.open.some(r => Date.parse(r.due_at) < Date.now()) ? "warn" : ""], ["Decided", m.decided, `${m.overridden} overridden`], ["All open reviews", x.reviews.open, `${x.reviews.overdue} overdue`], ["Artworks", fmt(x.total), `${fmt(x.schools)} schools`]]} />
-      <Outcomes o={x.outcomes} />
+      <Kpis items={[["My open reviews", m.open.length, `${m.open.filter(r => Date.parse(r.due_at) < Date.now()).length} overdue`, m.open.some(r => Date.parse(r.due_at) < Date.now()) ? "warn" : ""], ["Decided", m.decided, `${m.overridden} overridden`], ["All open reviews", x.reviews.open, `${x.reviews.overdue} overdue`], ["Artworks", fmt(x.total), `${fmt(x.schools)} schools`], ...outcomeItems(x.outcomes)]} dense />
       <Card title="Waiting for your decision" flush>{m.open.length ? <Table cols={["Artwork", "Reason", { h: "Due", cls: "r" }]} rows={m.open.map(r => { const [t, tone] = dueTxt(r.due_at); return [<Two key="a" a={<span className="code">{r.entry?.code}</span>} b={r.entry?.title_en} />, r.reason, <Badge key="c" tone={tone}>{t}</Badge>]; })} onRow={i => location.assign(`/reviews/${m.open[i].id}`)} /> : <div style={{ padding: 20 }}><Empty title="No reviews waiting">Flagged artworks assigned to you appear here.</Empty></div>}</Card>
       <Pathways d={x} />
     </>;

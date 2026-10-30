@@ -26,7 +26,7 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
   const [scores, results, logistics, evs, reviews] = await Promise.all([
     ids.length ? q(db().from("nae_scores").select("*").eq("round_id", r.id).in("entry_id", ids)) : [],
     ids.length ? q(db().from("nae_results").select("*").in("entry_id", ids)) : [],
-    ids.length ? q(db().from("nae_logistics").select("*, loc:nae_locations(room, shelf)").in("entry_id", ids)) : [],
+    ids.length ? q(db().from("nae_logistics").select("*, loc:nae_locations(room, shelf, label)").in("entry_id", ids)) : [],
     q(db().from("nae_evaluators").select("id, name, account_id").in("id", s.evaluator_ids || [])),
     ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", r.round_no).in("entry_id", ids)) : []
   ]);
@@ -53,7 +53,7 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
       scores: scores.filter(x => x.entry_id === e.id),
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
-      logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.room} · ${lg.loc.shelf}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
+      logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.label}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
       files: null
     });
   }

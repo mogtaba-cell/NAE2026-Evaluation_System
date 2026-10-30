@@ -169,11 +169,43 @@ function Venues({ admin }) {
 }
 
 function Locations() {
-  const locs = useApi("/api/locations"); const toast = useToast(); const [nl, setNl] = useState({ room: "", shelf: "" });
-  async function addLoc() { try { await api("/api/locations", { body: { action: "add", ...nl } }); setNl({ room: "", shelf: "" }); locs.reload(); toast("Location added"); } catch (e) { toast(e.message, "err"); } }
-  async function locUpd(id, patch) { try { await api("/api/locations", { body: { action: "update", id, ...patch } }); locs.reload(); } catch (e) { toast(e.message, "err"); } }
-  return <Card title="Storage locations" sub="Rooms and shelves. Rename or add them here; artworks keep their place.">
-    <Table minw={520} cols={["Room", "Shelf or area", { h: "Stored", cls: "r" }, ""]} rows={(locs.data?.locations || []).map(l => [<input key="r" className="input" defaultValue={l.room} onBlur={e => e.target.value.trim() && e.target.value !== l.room && locUpd(l.id, { room: e.target.value })} />, <input key="s" className="input" defaultValue={l.shelf} onBlur={e => e.target.value.trim() && e.target.value !== l.shelf && locUpd(l.id, { shelf: e.target.value })} />, l.count, <Check key="a" label="In use" checked={l.active} onChange={v => locUpd(l.id, { active: v })} />])} />
-    <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><input className="input" style={{ width: 180 }} placeholder="Room" value={nl.room} onChange={e => setNl({ ...nl, room: e.target.value })} /><input className="input" style={{ width: 180 }} placeholder="Shelf or area" value={nl.shelf} onChange={e => setNl({ ...nl, shelf: e.target.value })} /><Btn onClick={addLoc} disabled={!nl.room.trim() || !nl.shelf.trim()}>Add location</Btn></div>
+  const locs = useApi("/api/locations"); const toast = useToast(); const meta = useMeta();
+  const pws = meta?.data?.pathways || [];
+  const [open, setOpen] = useState({}); const [nr, setNr] = useState(null); const [edit, setEdit] = useState(null);
+  const post = async (body, msg) => { try { const r = await api("/api/locations", { body }); toast(r.note || msg || "Saved"); return true; } catch (e) { toast(e.message, "err"); return false; } };
+  if (!locs.data) return <Loading error={locs.error} />;
+  const rooms = locs.data.rooms;
+  return <Card title="Storage locations" sub="Rooms hold shelves; shelves hold rows. Tag each room with the pathways stored there: check-in opens on that room, and storage can still pick another." right={<Btn onClick={() => setNr({ name: "", shelves: "6", rows: "3", pathways: [] })}>Add room</Btn>}>
+    {!rooms.length && <p className="muted">No rooms yet.</p>}
+    <div className="stack" style={{ gap: 10 }}>{rooms.map(r => { const isOpen = open[r.id] ?? rooms.length <= 3; return <div key={r.id} className="rm" style={r.active ? undefined : { opacity: .6 }}>
+      <div className="rm-h"><button type="button" className="link nm" onClick={() => setOpen({ ...open, [r.id]: !isOpen })}>{isOpen ? "▾" : "▸"} {r.name}</button>
+        <span className="rm-tags">{(r.pathways || []).map(c => <Badge key={c} tone="info">{pws.find(p => p.code === c)?.name || c}</Badge>)}</span>
+        <span className="small faint">{r.shelves.length} shelves · {r.count} stored{r.active ? "" : " · not in use"}</span><span className="sp" />
+        <Btn sm v="ghost" onClick={() => setEdit({ kind: "room", id: r.id, name: r.name, pathways: r.pathways || [], active: r.active })}>Edit</Btn>
+        <Btn sm v="ghost" onClick={async () => { if (await post({ action: "add_shelf", room_id: r.id })) setOpen({ ...open, [r.id]: true }); }}>Add shelf</Btn></div>
+      {isOpen && <div className="rm-shelves">{r.shelves.map(sh => <button type="button" key={sh.id} className={`rm-sh${sh.active ? "" : " off"}`} style={{ textAlign: "left", cursor: "pointer", font: "inherit" }} onClick={() => setEdit({ kind: "shelf", id: sh.id, name: sh.name, rows: String(sh.rows), active: sh.active, room: r.name })}>
+        <b>{sh.name}</b>
+        <span className="rm-rows">{sh.slots.filter(x => x.active || x.count).map(x => <span key={x.id} className={x.count ? "u" : ""} title={`Row ${x.row}: ${x.count} stored`}>{x.row}{x.count ? `·${x.count}` : ""}</span>)}</span>
+        <span className="small faint">{sh.count ? `${sh.count} stored` : "empty"}{sh.active ? "" : " · not in use"}</span>
+      </button>)}{!r.shelves.length && <span className="small faint">No shelves yet.</span>}</div>}
+    </div>; })}</div>
+    <p className="small faint" style={{ margin: 0 }}>Click a shelf to rename it, change its rows or take it out of use. "2·3" means row 2 holds 3 artworks.</p>
+    <Modal open={!!nr} title="Add a room" onClose={() => setNr(null)} footer={<><Btn onClick={() => setNr(null)}>Cancel</Btn><Btn v="primary" disabled={!nr?.name.trim()} onClick={async () => { if (await post({ action: "add_room", ...nr })) setNr(null); }}>Add room</Btn></>}>
+      {nr && <div className="stack" style={{ gap: 12 }}>
+        <Field label="Room name"><input className="input" value={nr.name} onChange={e => setNr({ ...nr, name: e.target.value })} placeholder="For example Room D" autoFocus /></Field>
+        <div className="row" style={{ gap: 12 }}><Field label="Shelves"><input className="input num" inputMode="numeric" value={nr.shelves} onChange={e => setNr({ ...nr, shelves: e.target.value.replace(/\D/g, "") })} /></Field><Field label="Rows on each shelf"><input className="input num" inputMode="numeric" value={nr.rows} onChange={e => setNr({ ...nr, rows: e.target.value.replace(/\D/g, "") })} /></Field></div>
+        <Field label="Pathways stored here" help="Check-in opens on this room for these pathways."><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{pws.map(p => <Check key={p.code} label={p.name} checked={nr.pathways.includes(p.code)} onChange={on => setNr({ ...nr, pathways: on ? [...nr.pathways, p.code] : nr.pathways.filter(c => c !== p.code) })} />)}</div></Field>
+      </div>}
+    </Modal>
+    <Modal open={!!edit} title={edit?.kind === "room" ? `Edit ${edit?.name}` : `${edit?.room} · ${edit?.name}`} onClose={() => setEdit(null)} footer={<><Btn onClick={() => setEdit(null)}>Cancel</Btn><Btn v="primary" onClick={async () => {
+        const ok = edit.kind === "room" ? await post({ action: "update_room", id: edit.id, name: edit.name, pathways: edit.pathways, active: edit.active }) : await post({ action: "update_shelf", id: edit.id, name: edit.name, rows: edit.rows, active: edit.active });
+        if (ok) setEdit(null); }}>Save</Btn></>}>
+      {edit && <div className="stack" style={{ gap: 12 }}>
+        <Field label="Name"><input className="input" value={edit.name} onChange={e => setEdit({ ...edit, name: e.target.value })} /></Field>
+        {edit.kind === "room" ? <Field label="Pathways stored here"><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{pws.map(p => <Check key={p.code} label={p.name} checked={edit.pathways.includes(p.code)} onChange={on => setEdit({ ...edit, pathways: on ? [...edit.pathways, p.code] : edit.pathways.filter(c => c !== p.code) })} />)}</div></Field>
+          : <Field label="Rows" help="Fewer rows: artworks on the removed rows keep their place until they are moved."><input className="input num" style={{ width: 100 }} inputMode="numeric" value={edit.rows} onChange={e => setEdit({ ...edit, rows: e.target.value.replace(/\D/g, "") })} /></Field>}
+        <Check label="In use" checked={edit.active} onChange={v => setEdit({ ...edit, active: v })} />
+      </div>}
+    </Modal>
   </Card>;
 }

@@ -1,4 +1,5 @@
 "use client";
+import LocPicker from "@/components/LocPicker";
 // Artwork movements in the browser: a list grouped into batches (a session, a collection, a shelf ...) where
 // people tick a whole batch or single artworks and apply the next step; and one artwork's details and history.
 import { useMemo, useState } from "react";
@@ -23,9 +24,9 @@ export const STEPS = {
   found:         ["Found: put in storage", ["missing"], ["admin", "storage"], "location"]
 };
 
-function LocationSelect({ value, onChange, placeholder = "Choose room and shelf…" }) {
-  const locs = useApi("/api/locations"); const list = (locs.data?.locations || []).filter(l => l.active);
-  return <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">{placeholder}</option>{list.map(l => <option key={l.id} value={l.id}>{l.label} ({l.count} stored)</option>)}</select>;
+function LocationSelect({ value, onChange, placeholder = "Choose…" }) {
+
+  return <LocPicker value={value} onChange={onChange} allowEmpty emptyLabel={placeholder || "Choose…"} />;
 }
 
 // rows: artworks from /api/logistics. groups: [{ key, title, sub, rows }] (optional). steps: which actions to offer.

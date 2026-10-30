@@ -16,7 +16,7 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
     const r = S.roundById[poolId]; if (!r || !has(r.pathway_code)) return { entries: [] };
     const pool = await sessionPool(S, r);
     const subName = c => (S.P[r.pathway_code].subs.find(x => x.code === c) || {}).name;
-    return { entries: pool.map(x => ({ id: x.entry_id, code: x.entry.code, title: x.entry.title_en, school_id: x.entry.school_id || "none", school: x.entry.school?.name || "No school", sub_code: x.entry.sub_code, sub: subName(x.entry.sub_code), online: !!x.online, where: x.loc ? `${x.loc.room} · ${x.loc.shelf}` : x.location || null, mine: x.entry.coordinator_id === session.sub }))
+    return { entries: pool.map(x => ({ id: x.entry_id, code: x.entry.code, title: x.entry.title_en, school_id: x.entry.school_id || "none", school: x.entry.school?.name || "No school", sub_code: x.entry.sub_code, sub: subName(x.entry.sub_code), online: !!x.online, where: x.loc ? `${x.loc.label}` : x.location || null, mine: x.entry.coordinator_id === session.sub }))
       .sort((a, b) => a.school.localeCompare(b.school) || a.code.localeCompare(b.code)) };
   }
   const sessions = (await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name), entries:nae_session_entries(entry_id, pulled)").order("session_date", { ascending: true }))).filter(s => has(S.roundById[s.round_id]?.pathway_code));

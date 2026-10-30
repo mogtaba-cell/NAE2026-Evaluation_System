@@ -25,7 +25,7 @@ export const GET = route("*", async ({ session, params, url }) => {
     entryFiles(e, { refresh: url.searchParams.get("refresh") === "1" }),
     q(db().from("nae_results").select("*").eq("entry_id", e.id)),
     full && showStaff ? q(db().from("nae_reviews").select("*").eq("entry_id", e.id).order("flagged_at", { ascending: false })) : [],
-    showStaff ? q(db().from("nae_logistics").select("*, collection:nae_collections(*), loc:nae_locations(room, shelf)").eq("entry_id", e.id).maybeSingle()) : null,
+    showStaff ? q(db().from("nae_logistics").select("*, collection:nae_collections(*), loc:nae_locations(room, shelf, label)").eq("entry_id", e.id).maybeSingle()) : null,
     showStaff ? q(db().from("nae_session_entries").select("session:nae_sessions(*)").eq("entry_id", e.id)) : [],
     full && showStaff ? q(db().from("nae_audit").select("*").in("object_id", [e.id, e.code]).order("at", { ascending: false }).limit(60)) : [],
     session.role === "admin" ? q(db().from("nae_score_history").select("*").eq("entry_id", e.id).order("at", { ascending: false })) : []
@@ -60,7 +60,7 @@ export const GET = route("*", async ({ session, params, url }) => {
     });
   }
   const sub = (S.P[e.pathway_code]?.subs || []).find(s => s.code === e.sub_code);
-  const lg = logistics ? { ...logistics, where: logistics.loc ? `${logistics.loc.room} · ${logistics.loc.shelf}` : logistics.location || null } : null;
+  const lg = logistics ? { ...logistics, where: logistics.loc ? `${logistics.loc.label}` : logistics.location || null } : null;
   return {
     access,
     entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code]?.name, sub: sub?.name, is_physical: !!sub?.is_physical, coordinator: accName(e.coordinator_id), mgmt_viewed_name: accName(e.mgmt_viewed_by) },

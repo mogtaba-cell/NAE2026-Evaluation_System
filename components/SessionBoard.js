@@ -1,4 +1,5 @@
 "use client";
+import LocPicker from "@/components/LocPicker";
 // The live board of one scoring session, shared by storage and the session's coordinator.
 //   Waiting on the shelves  ->  In the room (batch 1, 2, ...)  ->  Handed back  ->  Back on the shelves
 // Storage brings the next batch; the coordinator hands a batch back once it is scored; storage confirms it is back
@@ -7,8 +8,8 @@ import { useState } from "react";
 import { api, useApi, useToast, Btn, Badge, Banner, Loading, Modal, Field, Check, when } from "@/components/ui";
 
 function LocationSelect({ value, onChange }) {
-  const locs = useApi("/api/locations"); const list = (locs.data?.locations || []).filter(l => l.active);
-  return <select className="select" value={value} onChange={e => onChange(e.target.value)}><option value="">Back where each one was</option>{list.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}</select>;
+
+  return <LocPicker value={value} onChange={onChange} allowEmpty emptyLabel="Back where each one was" />;
 }
 
 export default function SessionBoard({ sessionId, role, compact, onChanged }) {

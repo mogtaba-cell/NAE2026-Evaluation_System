@@ -214,6 +214,17 @@ table.t{width:100%;border-collapse:collapse;min-width:640px}
 .strip .d{font-size:12px;line-height:16px;color:var(--ink3)}
 .strip .d.ok{color:var(--ok)} .strip .d.bad{color:var(--bad)} .strip .d.warn{color:var(--warn)} .strip .d.brand{color:var(--accent)}
 .strip .cell.bad .v{color:var(--bad)}
+.strip.dense{grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
+.strip.dense .cell{padding:var(--s3) var(--s4)}
+.strip.dense .v{font-size:22px;line-height:28px}
+.strip.dense .d{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pw-list{display:flex;flex-direction:column}
+.pw-li{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(90px,1fr);gap:var(--s3);align-items:center;padding:10px var(--s5);border-top:1px solid var(--rule);color:inherit;text-decoration:none}
+.pw-li:hover{background:var(--wash2)}
+.pw-li .n,.pw-li .st{display:flex;flex-direction:column;min-width:0}
+.pw-li .n span,.pw-li .st span{font-size:12px;line-height:16px;color:var(--ink3)}
+.pw-li .st b{font-weight:500}
+.pw-li .pg{text-align:right;min-width:0}
 
 /* ---------- misc ---------- */
 .av{width:28px;height:28px;border-radius:50%;background:var(--wash);color:var(--ink2);display:inline-grid;place-items:center;font-size:11px;font-weight:600;flex:none;border:1px solid var(--rule2)}
@@ -1025,3 +1036,31 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 .cl-big{display:flex;justify-content:center;align-items:center;background:var(--wash);border-radius:8px;min-height:200px;touch-action:pan-y}
 .cl-big img{max-width:100%;max-height:70vh;object-fit:contain;display:block}
 @media (max-width:900px){.cl-thumb.sm{width:64px;height:64px}}
+
+/* storage picker: room, shelf, row */
+.lp{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.lp-f{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lp-f small{font-size:11px;line-height:14px;color:var(--ink3)}
+.lp-f .select{width:100%}
+.lp-f.blank .select{color:var(--ink3)}
+/* collections grouped by pathway */
+.cl-pw{display:flex;flex-direction:column;gap:8px}
+.cl-pw+.cl-pw{margin-top:8px}
+.cl-pwh{display:flex;align-items:center;gap:8px;padding:8px 2px 0;border-top:1px solid var(--rule)}
+.cl-pw:first-of-type .cl-pwh{border-top:0;padding-top:0}
+.cl-pwh .sp{flex:1}
+.cl-place{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border:1px solid var(--rule);border-radius:12px;background:var(--wash2)}
+.cl-place .sp{flex:1}
+/* storage rooms */
+.rm{border:1px solid var(--rule);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.rm-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rm-h .sp{flex:1}
+.rm-h .nm{font-size:16px;font-weight:600}
+.rm-tags{display:flex;gap:4px;flex-wrap:wrap}
+.rm-shelves{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.rm-sh{border:1px solid var(--rule);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;background:var(--wash2)}
+.rm-sh.off{opacity:.55}
+.rm-rows{display:flex;gap:4px;flex-wrap:wrap}
+.rm-rows span{font:500 11px/14px var(--mono);padding:3px 6px;border-radius:6px;background:var(--sheet);border:1px solid var(--rule)}
+.rm-rows span.u{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink)}
+@media (max-width:600px){.lp.compact{grid-template-columns:1fr 1fr 1fr}}

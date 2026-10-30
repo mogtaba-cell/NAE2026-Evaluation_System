@@ -19,7 +19,7 @@ export const GET = route(["admin", "coordinator", "storage", "management", "lead
     const events = await q(db().from("nae_logistics_events").select("*").eq("entry_id", e.id).order("at", { ascending: false }).limit(200));
     return { events };
   }
-  let rows = await all(() => db().from("nae_logistics").select("*, loc:nae_locations(id, room, shelf, sort), entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, coordinator_id, size_text, medium, status, current_round, physical_override, school:nae_schools(id, name, esis)), collection:nae_collections(id, code, scheduled_on, status)"));
+  let rows = await all(() => db().from("nae_logistics").select("*, loc:nae_locations(id, room, shelf, label, sort), entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, coordinator_id, size_text, medium, status, current_round, physical_override, school:nae_schools(id, name, esis)), collection:nae_collections(id, code, scheduled_on, status)"));
   rows = rows.filter(r => r.entry && has(r.entry.pathway_code));
   if (session.role === "coordinator") { const mine = new Set(await mySessionEntryIds(session)); rows = rows.filter(r => r.entry.coordinator_id === session.sub || mine.has(r.entry_id)); }
   const res = await inChunks(rows.map(r => r.entry_id), ids => q(db().from("nae_results").select("entry_id, complete, passed, grade, final, locked").eq("round_no", 2).in("entry_id", ids)));
@@ -30,7 +30,7 @@ export const GET = route(["admin", "coordinator", "storage", "management", "lead
     states: STATES,
     rows: rows.map(r => {
       const x = res.find(y => y.entry_id === r.entry_id); const s = sessions.find(y => y.id === r.session_id);
-      return { ...r, where: r.loc ? `${r.loc.room} · ${r.loc.shelf}` : r.location || null, locSort: r.loc?.sort ?? 9999, scored: !!x?.complete, r2: x ? { passed: x.passed, grade: x.grade, final: x.final, locked: x.locked } : null, selected: !!(x?.complete && x.passed), sub: (S.P[r.entry.pathway_code]?.subs.find(t => t.code === r.entry.sub_code) || {}).name, pathway: S.P[r.entry.pathway_code]?.name, session: s ? { id: s.id, title: s.title, date: s.session_date, time: s.time_text, venue: s.venue, status: s.status, coordinator: s.coordinator?.display_name, coordinator_id: s.coordinator_id, mine: s.coordinator_id === session.sub } : null, coordinator: coords.find(c => c.id === r.entry.coordinator_id)?.display_name || null };
+      return { ...r, where: r.loc ? `${r.loc.label}` : r.location || null, locSort: r.loc?.sort ?? 9999, scored: !!x?.complete, r2: x ? { passed: x.passed, grade: x.grade, final: x.final, locked: x.locked } : null, selected: !!(x?.complete && x.passed), sub: (S.P[r.entry.pathway_code]?.subs.find(t => t.code === r.entry.sub_code) || {}).name, pathway: S.P[r.entry.pathway_code]?.name, session: s ? { id: s.id, title: s.title, date: s.session_date, time: s.time_text, venue: s.venue, status: s.status, coordinator: s.coordinator?.display_name, coordinator_id: s.coordinator_id, mine: s.coordinator_id === session.sub } : null, coordinator: coords.find(c => c.id === r.entry.coordinator_id)?.display_name || null };
     })
   };
 });
@@ -79,16 +79,17 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     const rows = (await all(() => db().from("nae_logistics").select("entry_id, entry:nae_entries(code, pathway_code, sub_code, school_id, school:nae_schools(esis))").eq("state", "to_collect").is("collection_id", null))).filter(r => r.entry && has(r.entry.pathway_code));
     const pick = Array.isArray(b.codes) && b.codes.length ? new Set(b.codes) : null;   // specific artworks
     const groups = {};
-    rows.filter(r => !pick || pick.has(r.entry.code)).forEach(r => { const k = [r.entry.school_id, r.entry.pathway_code, r.entry.sub_code].join("|"); (groups[k] = groups[k] || { school_id: r.entry.school_id, esis: r.entry.school?.esis || "NA", pathway: r.entry.pathway_code, sub: r.entry.sub_code, ids: [] }).ids.push(r.entry_id); });
+    rows.filter(r => !pick || pick.has(r.entry.code)).forEach(r => { const k = r.entry.school_id || "none"; (groups[k] = groups[k] || { school_id: r.entry.school_id, esis: r.entry.school?.esis || "NA", ids: [] }).ids.push(r.entry_id); });
     let n = 0, arts = 0;
     for (const g of Object.values(groups)) {
-      const code = `CB-${g.pathway}-${g.sub}-${g.esis}-${Date.now().toString(36).slice(-4)}${n}`;
-      const c = await q(db().from("nae_collections").insert({ code, school_id: g.school_id, pathway_code: g.pathway, sub_code: g.sub, scheduled_on: b.scheduled_on || null }).select("id").single());
+      // one collection per school: the school brings all its physical artworks; each pathway is stored apart at check-in
+      const code = `CB-${g.esis}-${Date.now().toString(36).slice(-4)}${n}`;
+      const c = await q(db().from("nae_collections").insert({ code, school_id: g.school_id, pathway_code: null, sub_code: null, scheduled_on: b.scheduled_on || null }).select("id").single());
       await q(db().from("nae_logistics").update({ collection_id: c.id, updated_at: new Date().toISOString() }).in("entry_id", g.ids)); n++; arts += g.ids.length;
       await logEvents(session, g.ids.map(id => ({ entry_id: id, action: "Collection scheduled", from_state: "to_collect", to_state: "to_collect", note: `${code}${b.scheduled_on ? ` on ${b.scheduled_on}` : ""}`, ref_type: "collection", ref_id: c.id })));
     }
     await audit(session, `Created ${n} collections`, "logistics", null, `${arts} artworks`);
-    return { ok: true, note: `${n} collection${n === 1 ? "" : "s"} created for ${arts} artwork${arts === 1 ? "" : "s"}, one per school and subpathway.` };
+    return { ok: true, note: `${n} collection${n === 1 ? "" : "s"} created for ${arts} artwork${arts === 1 ? "" : "s"}, one per school.` };
   }
 
   // ---------- condition and issues (several artworks at once) ----------

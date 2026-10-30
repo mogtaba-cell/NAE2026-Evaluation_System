@@ -79,8 +79,8 @@ export function Card({ title, sub, right, children, flush, className = "", id })
 export function PageHead({ title, sub, actions, back, badges }) {
   return <div className="stack s8">{back && <Link className="crumb" href={back[1]}>{back[0]}</Link>}<div className="ph"><div className="t"><div className="titlerow"><h1>{title}</h1>{badges}</div>{sub && <p className="sub">{sub}</p>}</div>{actions && <div className="acts">{actions}</div>}</div></div>;
 }
-export function Kpis({ items }) {
-  return <div className="strip">{items.map((k, i) => <div key={i} className={`cell${k[3] === "badv" ? " bad" : ""}`}><span className="lb">{k[0]}</span><span className="v">{k[1]}</span>{k[2] && <span className={`d ${k[3] === "badv" ? "bad" : k[3] || ""}`}>{k[2]}</span>}</div>)}</div>;
+export function Kpis({ items, dense }) {
+  return <div className={`strip${dense ? " dense" : ""}`}>{items.map((k, i) => <div key={i} className={`cell${k[3] === "badv" ? " bad" : ""}`}><span className="lb">{k[0]}</span><span className="v">{k[1]}</span>{k[2] && <span className={`d ${k[3] === "badv" ? "bad" : k[3] || ""}`}>{k[2]}</span>}</div>)}</div>;
 }
 export function Tabs({ items, value, onChange }) {
   return <div className="tabs" role="tablist">{items.map(([k, l, n]) => <button key={k} type="button" role="tab" className={k === value ? "on" : ""} onClick={() => onChange(k)}>{l}{n !== undefined && n !== null && <span className="n">{n}</span>}</button>)}</div>;
