@@ -7,7 +7,7 @@ import { entryFiles } from "@/lib/files";
 import { audit } from "@/lib/audit";
 import { fileView, loadEntry } from "@/lib/entryview";
 import { cycleOf, isCompetition, CYCLES } from "@/lib/winners";
-import { editDetails } from "@/lib/entryedit";
+import { editDetails, runsIt } from "@/lib/entryedit";
 
 export const GET = route("*", async ({ session, params, url }) => {
   const e = await loadEntry(params.code, session);
@@ -68,7 +68,7 @@ export const GET = route("*", async ({ session, params, url }) => {
     students: session.role === "evaluator" ? students.map(s => ({ position: s.position, grade: s.grade, gender: s.gender, nationality: s.nationality })) : students,
     cycle: isCompetition(S, e.pathway_code) && session.role !== "evaluator" ? { ...cycleOf([...students.map(s => s.grade), e.grades_text], e.cycle_choice), cycles: CYCLES } : null,
     files: files.map(fileView), rounds, logistics: lg, sessions: links.map(l => l.session).filter(Boolean), history, scoreHistory: scoreHist,
-    can: { editScore: can(session, "editScore") && full, flag: can(session, "flag") && full, allocate: can(session, "allocate"), download: true, markViewed: session.role !== "evaluator", admin: session.role === "admin", editDetails: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && full && e.coordinator_id === session.sub), cycle: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && e.coordinator_id === session.sub) }
+    can: { editScore: can(session, "editScore") && full, flag: can(session, "flag") && full, allocate: can(session, "allocate"), download: true, markViewed: session.role !== "evaluator", admin: session.role === "admin", editDetails: ["admin", "management"].includes(session.role) || await runsIt(session, e), cycle: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && e.coordinator_id === session.sub) }
   };
 });
 

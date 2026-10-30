@@ -47,7 +47,7 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
     const rv = reviews.filter(x => x.entry_id === e.id);
     const lg = logistics.find(x => x.entry_id === e.id) || null;
     entries.push({
-      position: l.position, code: e.code, title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
+      position: l.position, code: e.code, pathway_code: e.pathway_code, sub_code: e.sub_code, manual_fields: e.manual_fields || [], title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
       r1: r.round_no === 2 ? results.find(x => x.entry_id === e.id && x.round_no === 1) || null : null,
       rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
       scores: scores.filter(x => x.entry_id === e.id),
@@ -62,6 +62,7 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
   if (target) { const e = links.find(l => l.entry.code === target.code).entry; target.files = (await entryFiles(e)).map(fileView); }
   const bandsFor = x => x.rubric?.grade_bands || DEFAULT_BANDS;
   return {
+    canEditDetails: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && s.coordinator_id === session.sub && ["planned", "live"].includes(s.status)),
     session: { ...s, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code].name, round_no: r.round_no, round_status: r.status, mine: s.coordinator_id === session.sub },
     team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean),
     entries: entries.map(x => ({ ...x, flagLine: flagLine(r, bandsFor(x)), passMark: passThreshold(r.pass_rule, bandsFor(x)) })),

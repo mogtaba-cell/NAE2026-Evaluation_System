@@ -6,6 +6,7 @@ import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, 
 import FileViewer from "@/components/FileViewer";
 import SessionBoard from "@/components/SessionBoard";
 import EntryAbout from "@/components/EntryAbout";
+import EditDetails from "@/components/EditDetails";
 import { total, gradeFor } from "@/components/ScoreForm";
 import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/components/lang";
 
@@ -35,7 +36,7 @@ export default function Session({ params }) {
   const cur = sp.get("entry");
   const d = useApi(`/api/sessions/${id}${cur ? `?entry=${encodeURIComponent(cur)}` : ""}`, [], { live: 15000 });
   const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [abs, setAbs] = useState({}); const [cm, setCm] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
-  const [finishAsk, setFinishAsk] = useState(null);
+  const [finishAsk, setFinishAsk] = useState(null); const [editD, setEditD] = useState(false);
   const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null);
   const me = meta?.data?.me;
   const e = d.data?.entries.find(x => x.code === d.data.current);
@@ -154,7 +155,7 @@ export default function Session({ params }) {
         <div className="qb">{shown.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => go(x.code)} onKeyDown={k => k.key === "Enter" && go(x.code)}><div className="t"><b>{x.code}</b><span dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</span>{isNew(x) && <span className="room-chip new">Just arrived</span>}{x.logistics && <span className={`room-chip${inRoom(x) ? " in" : ""}`}>{inRoom(x) ? `In the room${x.logistics.batch ? ` · batch ${x.logistics.batch}` : ""}` : x.logistics.state === "returning" ? "Handed back" : x.logistics.state === "missing" ? "Missing" : "On the shelf"}</span>}</div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status !== "draft").length}/${team.length}`}{hasDraft(x.code) && !x.result?.complete ? " ·" : ""}</span></div>)}
           {!shown.length && <p className="small faint" style={{ padding: 12 }}>{filter === "room" ? "No artworks in the room right now. Logistics brings the next batch." : "No artworks."}</p>}</div></section>
       {e ? <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><span className="code" style={{ fontSize: 15, fontWeight: 600 }}>{e.code}</span><Badge>{e.sub}</Badge>{e.r1 && <Badge tone="ok">Round 1: {e.r1.final ?? e.r1.team} · {e.r1.grade}</Badge>}{e.logistics?.damaged && <Badge tone="warn">Damaged</Badge>}{e.logistics?.where && <Badge>{e.logistics.where}</Badge>}</div>
+        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><span className="code" style={{ fontSize: 15, fontWeight: 600 }}>{e.code}</span><Badge>{e.sub}</Badge>{e.r1 && <Badge tone="ok">Round 1: {e.r1.final ?? e.r1.team} · {e.r1.grade}</Badge>}{e.logistics?.damaged && <Badge tone="warn">Damaged</Badge>}{e.logistics?.where && <Badge>{e.logistics.where}</Badge>}{d.data?.canEditDetails && <Btn sm onClick={() => setEditD(true)} style={{ marginLeft: "auto" }}>Edit details</Btn>}</div>
         <FileViewer files={e.files || []} tall title="Photos for reference; judge the artwork in the room" />
       </div> : <Loading />}
       {e && <div className="stack" style={{ gap: 16, minWidth: 0 }}>
@@ -164,10 +165,13 @@ export default function Session({ params }) {
             {crit.map(c => { const ct = critIn(c, lang); return <tr key={c.key}><td><div className="cl"><b>{ct.label} <span className="w">{c.weight}%</span></b>{ct.desc && <span className="d">{ct.desc}</span>}{ct.missing && ar && <span className="d">{T.noAr}</span>}</div></td>
               {team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? <span className="faint small">{T.absent}</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setScore(t.id, c.key, x.target.value.replace(/\D/g, "").slice(0, 3))} />}</td>)}</tr>; })}
             {e.rubric.identity_required && <tr><td><div className="cl"><b>{T.identity}</b></div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : <span className="f3-yn"><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setId(t.id, true)}>{T.y}</button><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setId(t.id, false)}>{T.n}</button></span>}</td>)}</tr>}
-            <tr className="cmt"><td><div className="cl"><b>{T.comment}</b></div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : saved(t.id) ? <span className="small" dir="auto">{scoreOf(t.id).comment || <span className="faint">–</span>}</span> : <textarea className="sc-cm" dir="auto" rows={2} disabled={!editable} value={cm[t.id] || ""} placeholder={T.commentPh} onChange={x => setCom(t.id, x.target.value)} aria-label={`${t.name}, ${T.comment}`} />}</td>)}</tr>
             <tr className="tot"><td>{T.total}</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) || abs[t.id] ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
             {(editable || team.some(t => saved(t.id) || absent(t.id))) && <tr className="act"><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? <Badge>{T.absent}</Badge> : editable && (abs[t.id] ? <Btn sm v="ghost" onClick={() => setAb(t.id, false)}>{T.undo}</Btn> : <Btn sm v="ghost" onClick={() => setAb(t.id, true)}>{T.absent}</Btn>)}</td>)}</tr>}
           </tbody></table></div>}
+          {e.rubric && team.some(t => !(absent(t.id) || abs[t.id])) && <div className="sc-cms"><b className="small">{T.comment}</b>
+            {team.filter(t => !(absent(t.id) || abs[t.id])).map(t => <div key={t.id} className="sc-cmr"><span className="small">{t.name}</span>
+              {saved(t.id) ? <span className="small" dir="auto">{scoreOf(t.id).comment || <span className="faint">–</span>}</span> : <textarea className="sc-cm" dir="auto" rows={1} disabled={!editable} value={cm[t.id] || ""} placeholder={T.commentPh} onChange={x => setCom(t.id, x.target.value)} aria-label={`${t.name}, ${T.comment}`} />}</div>)}
+          </div>}
           {res && <div className="x-tot"><div className="stack s4"><span className="s">{T.teamResult}</span><span className="v">{res.team != null ? res.final ?? res.team : "–"}</span></div><div className="stack s4"><span className="s">{T.grade}</span><span style={{ fontSize: 18, fontWeight: 600 }}>{res.team != null ? res.grade || gradeFor(res.team, bands) : "–"}</span></div><span className="s" dir="ltr" style={{ marginInlineStart: "auto", textAlign: "end" }}>{resultText}</span></div>}
           {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
             <div className="stack s4"><Check label={T.needs} disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label={T.glass} disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
@@ -181,10 +185,11 @@ export default function Session({ params }) {
           </div>}
           {(!editable || !open_.length) && idx < entries.length - 1 && <div className="row" style={{ justifyContent: "flex-end" }}><Btn onClick={() => go((nextOpen() || entries[idx + 1]).code)}>{T.next}</Btn></div>}
         </section>
-        <EntryAbout e={{ ...e, id: e.code, pathway: s.pathway }} compact />
+        <EntryAbout e={{ ...e, id: e.code, pathway: s.pathway }} compact onEdit={d.data?.canEditDetails ? () => setEditD(true) : null} />
       </div>}
     </div>
 
+    {editD && e && <EditDetails e={e} onClose={() => setEditD(false)} onDone={() => { setEditD(false); d.reload(); }} />}
     <Modal open={!!finishAsk} title="Finish with artworks not fully scored?" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><Btn v="primary" busy={busy === "finish"} onClick={() => act("finish", { confirm: true })}>Finish anyway</Btn></>}>
       <p className="muted">{finishAsk?.note}</p>
     </Modal>

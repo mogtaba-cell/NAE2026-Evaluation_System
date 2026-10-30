@@ -1160,3 +1160,22 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
   .tw.stk td,.tw.stk td *{white-space:normal!important;overflow-wrap:break-word}
   .tw.stk td .badge{align-self:flex-start;width:fit-content}
 }
+/* session sheet: comments sit under the score table (one line per evaluator) so the table fits without scrolling */
+.sc-cms{display:flex;flex-direction:column;gap:8px}
+.sc-cmr{display:grid;grid-template-columns:minmax(90px,150px) minmax(0,1fr);gap:10px;align-items:start}
+.sc-cmr>.small:first-child{padding-top:5px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
+.sc-cmr .sc-cm{min-width:0;min-height:32px}
+@media (max-width:520px){.sc-cmr{grid-template-columns:minmax(0,1fr);gap:4px}.sc-cmr>.small:first-child{padding-top:0}}
+.x-cmp.sess-mx th:first-child,.x-cmp.sess-mx td:first-child{min-width:130px}
+.x-cmp.sess-mx th{min-width:70px}
+@media (max-width:520px){
+  .x-cmp.sess-mx th:first-child,.x-cmp.sess-mx td:first-child{min-width:0;padding-inline-start:10px;padding-inline-end:6px}
+  .x-cmp.sess-mx th:not(:first-child),.x-cmp.sess-mx td:not(:first-child){padding-left:3px;padding-right:3px}
+  .x-cmp.sess-mx th{min-width:52px;font-size:11px}
+  .x-cmp.sess-mx .sc-in{width:48px;height:34px}
+  .x-cmp.sess-mx .cl b{font-size:13px;line-height:18px}
+  .x-cmp.sess-mx .cl .d{display:none}
+  .x-cmp.sess-mx tr.act .btn{padding:0 6px;font-size:12px;height:28px}
+  .x-cmp.sess-mx .f3-yn button{min-width:22px;padding:0 5px}
+  .score-card{padding-left:14px;padding-right:14px}
+}
