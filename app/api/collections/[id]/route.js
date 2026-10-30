@@ -6,6 +6,7 @@ import { logEvents, applyMove } from "@/lib/movements";
 import { canWork } from "@/lib/collections";
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
+import { renamePhoto, writeVisitRecord, dayOf, timeOf } from "@/lib/photostore";
 
 const PHONE = /^\+?[0-9 ()-]{7,20}$/;
 export const GET = route(["admin", "coordinator", "storage"], async ({ session, params }) => {
@@ -115,6 +116,18 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   const visit = await q(db().from("nae_collection_visits").insert({ collection_id: c.id, by_id: session.sub, by_name: session.name, contact_name: contact || null, contact_phone: phone || null,
     received: marked.map(i => i.entry.code), missing: notIn.map(i => i.entry.code), later: [], location: [...new Set(marked.map(i => label(placeOf(i))))].join("; ") || null, note: String(b.note || "").trim() || null }).select("id").single());
   if ((b.photo_ids || []).length) await q(db().from("nae_collection_photos").update({ visit_id: visit.id }).eq("collection_id", c.id).is("visit_id", null).in("id", b.photo_ids));
+  // in the Shared Drive: name the Emirates ID photo after the contact, and leave a plain-text record of the visit
+  const vPhotos = (b.photo_ids || []).length ? await q(db().from("nae_collection_photos").select("kind, path").eq("visit_id", visit.id)) : [];
+  for (const p of vPhotos.filter(p => p.kind === "eid")) await renamePhoto(p.path, `Emirates ID - ${contact || "school contact"}`);
+  const school = (await q(db().from("nae_schools").select("name, esis").eq("id", c.school_id).maybeSingle())) || {};
+  const nowD = new Date();
+  await writeVisitRecord({ school, when: nowD, text: [
+    `Collection visit · ${school.name || ""} (eSIS ${school.esis || "–"})`, `Collection ${c.code}`, `Date ${dayOf(nowD)} ${timeOf(nowD).replace(/-/g, ":")} (UAE)`,
+    `Checked in by ${session.name}`, contact ? `Handed over by ${contact}${phone ? `, ${phone}` : ""}` : "Nothing handed over",
+    "", `Received (${marked.length}):`, ...marked.map(i => `  ${i.entry.code}  ${S.P[i.entry.pathway_code]?.name || ""}  stored in ${label(placeOf(i)) || "–"}${(b.damaged || {})[i.entry.code] ? "  DAMAGED" : ""}${String((b.conditions || {})[i.entry.code] || "").trim() ? `  (${String(b.conditions[i.entry.code]).trim()})` : ""}`),
+    "", `Missing, still to collect (${notIn.length}):`, ...notIn.map(i => `  ${i.entry.code}  ${S.P[i.entry.pathway_code]?.name || ""}`),
+    "", `Photos in this folder: ${vPhotos.filter(p => p.kind === "box").length} of the boxes, ${vPhotos.filter(p => p.kind === "eid").length} Emirates ID.`, b.note ? `Note: ${b.note}` : ""
+  ].join("\n") });
   await q(db().from("nae_collections").update({ status: left ? "scheduled" : "checked_in", location_id: b.location_id || Object.values(pwLoc)[0] || c.location_id || null, handed_by: contact || c.handed_by || null, checked_in_by: session.sub, checked_in_at: now }).eq("id", c.id));
   await audit(session, `Collection ${left ? (ok ? "partly " : "visit, nothing ") : ""}checked in (${ok} received${dmg ? `, ${dmg} damaged` : ""}${miss ? `, ${miss} missing: still to collect` : ""})`, "collection", c.id, `${c.code}${contact ? ` · handed over by ${contact}` : ""}${b.location_id ? ` · ${label(b.location_id)}` : ""}`);
   return { ok: true, note: `${ok ? `Checked in ${ok} artwork${ok === 1 ? "" : "s"}${b.location_id ? ` to ${label(b.location_id)}` : ""}` : "Visit recorded"}${miss ? `. ${miss} missing: still to collect on the next visit.` : "."}` };

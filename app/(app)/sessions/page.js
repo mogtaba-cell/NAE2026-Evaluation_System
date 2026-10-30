@@ -8,7 +8,7 @@ const LABEL = { live: ["In progress", "info"], done: ["Done", "ok"], planned: ["
 export default function Sessions() {
   const d = useApi("/api/sessions", [], { live: true }); const pl = useApi("/api/sessions?pools=1"); const meta = useMeta(); const toast = useToast(); const router = useRouter();
   const [f, setF] = useState(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState(null); const [show, setShow] = useState("active");
-  const [schoolScope, setSchoolScope] = useState("mine"); const [mode, setMode] = useState("schools"); const [pq, setPq] = useState("");
+  const [schoolScope, setSchoolScope] = useState("mine"); const [mode, setMode] = useState("count"); const [pq, setPq] = useState("");
   const pe = useApi(f && mode === "pick" && f.round_id ? `/api/sessions?pool=${f.round_id}` : null);
   if (!d.data) return <Loading error={d.error} />;
   const x = d.data; const me = meta?.data?.me;
@@ -21,17 +21,23 @@ export default function Sessions() {
   const pool = (f && pools[f.round_id]) || [];
   const shownPool = admin || schoolScope === "all" ? pool : pool.filter(g => g.mine);
   const chosen = pool.filter(g => f?.school_ids.includes(g.school_id || "none"));
-  const physN = mode === "pick" ? (pe.data?.entries || []).filter(x => (f?.entry_ids || []).includes(x.id) && !x.online).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + ((g.physSubs || {})[c] || 0), 0) : (g.physical || 0)), 0);
-  const count = mode === "pick" ? (f?.entry_ids || []).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + (g.subs[c] || 0), 0) : g.count), 0);
+  // "Number of artworks": what is waiting for the ticked subpathways, physical and online
+  const subSum = (g, key) => f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + ((key === "phys" ? g.physSubs : g.subs)[c] || 0), 0) : (key === "phys" ? (g.physical || 0) : g.count);
+  const availPhys = pool.reduce((a, g) => a + subSum(g, "phys"), 0), availAll = pool.reduce((a, g) => a + subSum(g, "all"), 0), availOnl = availAll - availPhys;
+  const kind = f?.kind || (availPhys ? "physical" : "online");
+  const avail = kind === "physical" ? availPhys : kind === "online" ? availOnl : availAll;
+  const want = Math.min(Number(f?.count) || 0, avail);
+  const physN = mode === "count" ? (kind === "online" ? 0 : Math.min(want, availPhys)) : mode === "pick" ? (pe.data?.entries || []).filter(x => (f?.entry_ids || []).includes(x.id) && !x.online).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + ((g.physSubs || {})[c] || 0), 0) : (g.physical || 0)), 0);
+  const count = mode === "count" ? want : mode === "pick" ? (f?.entry_ids || []).length : chosen.reduce((a, g) => a + (f?.sub_codes.length ? f.sub_codes.reduce((b, c) => b + (g.subs[c] || 0), 0) : g.count), 0);
   const list = x.sessions.filter(s => show === "all" || (show === "active" ? ["planned", "live"].includes(s.status) : s.status === show));
-  async function create() { setBusy(true); setErr(null); try { const r = await api("/api/sessions", { body: mode === "pick" ? { ...f, school_ids: [], sub_codes: [] } : { ...f, entry_ids: [] } }); toast(`Session created with ${r.count} artworks.`); router.push(`/sessions/${r.id}`); } catch (e) { setErr(e.message); } setBusy(false); }
+  async function create() { setBusy(true); setErr(null); try { const r = await api("/api/sessions", { body: mode === "count" ? { ...f, school_ids: [], entry_ids: [], count: want, kind, mine_first: f.mine_first !== false } : mode === "pick" ? { ...f, school_ids: [], sub_codes: [], count: 0 } : { ...f, entry_ids: [], count: 0 } }); toast(`Session created with ${r.count} artworks.`); router.push(`/sessions/${r.id}`); } catch (e) { setErr(e.message); } setBusy(false); }
   return <>
-    <PageHead title="Scoring sessions" sub="Coordinators run sessions with evaluators who have no login and type their scores: Round 1 and online Round 2 artworks from their files, physical Round 2 artworks in the room. Several sessions can run at once; each artwork is in one session at a time." actions={canCreate && <Btn v="primary" onClick={() => { setErr(null); setSchoolScope("mine"); setMode("schools"); setPq(""); setF({ entry_ids: [],  round_id: x.rounds[0]?.id || "", title: "", session_date: "", time_text: "09:00 to 13:00", venue_id: "", evaluator_ids: [], school_ids: [], sub_codes: [], coordinator_id: admin ? "" : undefined }); }}>New session</Btn>} />
+    <PageHead title="Scoring sessions" sub="Coordinators run sessions with evaluators who have no login and type their scores: Round 1 and online Round 2 artworks from their files, physical Round 2 artworks in the room. Several sessions can run at once; each artwork is in one session at a time." actions={canCreate && <Btn v="primary" onClick={() => { setErr(null); setSchoolScope("mine"); setMode("count"); setPq(""); setF({ entry_ids: [],  round_id: x.rounds[0]?.id || "", title: "", session_date: "", time_text: "09:00 to 13:00", venue_id: "", evaluator_ids: [], school_ids: [], sub_codes: [], coordinator_id: admin ? "" : undefined }); }}>New session</Btn>} />
     {pl.data?.ready > 0 && <Banner title={`${pl.data.ready} artworks are waiting for a session`}>Create a session and pick the schools to score.</Banner>}
     <div className="row" style={{ marginBottom: 12 }}><Seg value={show} onChange={setShow} items={[["active", "Planned and live"], ["done", "Done"], ["cancelled", "Cancelled"], ["all", "All"]]} /></div>
     <Card flush><Table minw={860} cols={["Session", "When", "Coordinator", "Team", "Progress", "Status"]} onRow={i => router.push(me?.role === "storage" ? `/pull-list?session=${list[i].id}` : `/sessions/${list[i].id}`)} empty="No sessions here."
       rows={list.map(s => [<Two key="t" a={s.title} b={s.pathway} />, <Two key="w" a={s.session_date ? dshort(s.session_date) : "Date not set"} b={[s.time_text, s.venue].filter(Boolean).join(" · ")} />, s.coordinator || "", <span key="e" className="small">{s.team.map(t => t.name).join(", ")}</span>, <Prog key="p" pct={s.count ? s.scored / s.count * 100 : 0} label={`${s.scored}/${s.count}`} />, <Badge key="s" tone={LABEL[s.status]?.[1]}>{LABEL[s.status]?.[0] || s.status}</Badge>])} /></Card>
-    <Modal open={!!f} wide title="New scoring session" onClose={() => setF(null)} footer={<><span className="small faint">{count ? `${count} artwork${count === 1 ? "" : "s"}: ${physN ? `${physN} physical (storage brings them to the room)` : "no physical ones"}${count - physN ? `, ${count - physN} online (scored from files)` : ""}` : mode === "pick" ? "Pick artworks" : "Pick schools"}</span><span className="sp" /><Btn onClick={() => setF(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!count} onClick={create}>Create session</Btn></>}>
+    <Modal open={!!f} wide title="New scoring session" onClose={() => setF(null)} footer={<><span className="small faint">{count ? `${count} artwork${count === 1 ? "" : "s"}: ${physN ? `${physN} physical (storage brings them to the room)` : "no physical ones"}${count - physN ? `, ${count - physN} online (scored from files)` : ""}` : mode === "count" ? "Enter how many artworks" : mode === "pick" ? "Pick artworks" : "Pick schools"}</span><span className="sp" /><Btn onClick={() => setF(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!count} onClick={create}>Create session</Btn></>}>
       {err && <Banner tone="bad" title={err} />}
       {f && <div className="stack" style={{ gap: 12 }}>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
@@ -44,8 +50,20 @@ export default function Sessions() {
           <Field label="Time"><input className="input" value={f.time_text} onChange={e => setF({ ...f, time_text: e.target.value })} /></Field>
           <Field label="Venue"><VenueSelect value={f.venue_id} onChange={v => setF({ ...f, venue_id: v })} /></Field>
         </div>
-        <Seg value={mode} onChange={setMode} items={[["schools", "Whole schools"], ["pick", "Pick artworks"]]} />
-        {mode === "schools" ? <>
+        <Seg value={mode} onChange={setMode} items={[["count", "Number of artworks"], ["schools", "Whole schools"], ["pick", "Pick artworks"]]} />
+        {mode === "count" ? <>
+          {rd?.subs?.length > 1 && <Field label="Subpathways" help="Leave all unticked for every subpathway."><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{rd.subs.map(s => <Check key={s.code} label={`${s.name}${s.physical ? " (physical)" : ""}`} checked={f.sub_codes.includes(s.code)} onChange={v => setF({ ...f, sub_codes: v ? [...f.sub_codes, s.code] : f.sub_codes.filter(c => c !== s.code) })} />)}</div></Field>}
+          {availPhys > 0 && availOnl > 0 && <Field label="Which artworks"><Seg value={kind} onChange={v => setF({ ...f, kind: v })} items={[["physical", `Physical, in the room (${availPhys})`], ["online", `Online, from files (${availOnl})`], ["both", "Both"]]} /></Field>}
+          <Field label="How many artworks" help={kind === "online" ? "Taken school by school." : "Physical artworks are taken in shelf order (room, shelf, row), so storage brings them from places close together."}>
+            <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <input className="input num" style={{ width: 110 }} inputMode="numeric" value={f.count || ""} placeholder="e.g. 20" onChange={e => setF({ ...f, count: e.target.value.replace(/\D/g, "").slice(0, 3) })} />
+              {[10, 20, 30].filter(n => n < avail).map(n => <Btn key={n} sm v="ghost" onClick={() => setF({ ...f, count: String(n) })}>{n}</Btn>)}
+              {avail > 0 && <Btn sm v="ghost" onClick={() => setF({ ...f, count: String(avail) })}>All {avail}</Btn>}
+              <span className="small faint">{pl.data ? `${avail} waiting` : "Counting…"}{Number(f.count) > avail && avail ? ` · only ${avail} can be added` : ""}</span>
+            </div>
+          </Field>
+          <Check label={admin ? "Start with the coordinator's own artworks, then others" : "Start with my artworks, then others"} checked={f.mine_first !== false} onChange={v => setF({ ...f, mine_first: v })} />
+        </> : mode === "schools" ? <>
           {rd?.subs?.length > 1 && <Field label="Subpathways" help="Leave all unticked to include every subpathway. Physical ones are scored in the room."><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{rd.subs.map(s => <Check key={s.code} label={`${s.name}${s.physical ? " (physical)" : ""}`} checked={f.sub_codes.includes(s.code)} onChange={v => setF({ ...f, sub_codes: v ? [...f.sub_codes, s.code] : f.sub_codes.filter(c => c !== s.code) })} />)}</div></Field>}
           <Field label="Schools" help="Every waiting artwork of the ticked schools: online artworks still to be scored, and physical artworks checked in to storage. Artworks in another session are left out.">
             {!admin && <div style={{ marginBottom: 8 }}><Seg value={schoolScope} onChange={setSchoolScope} items={[["mine", "My schools"], ["all", "All schools"]]} /></div>}

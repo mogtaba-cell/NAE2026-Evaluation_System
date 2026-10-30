@@ -65,7 +65,8 @@ const STATUS = c => c.status === "checked_in" ? (c.missing ? ["Checked in · " +
 export default function Collections() {
   const sp = useSearchParams(); const router = useRouter();
   const d = useApi("/api/collections", [], { live: true }); const meta = useMeta();
-  const [q, setQ] = useState(""); const [f, setF] = useState("todo");
+  const [q, setQ] = useState(""); const [f, setF] = useState("todo"); const [moving, setMoving] = useState(false); const toast = useToast();
+  async function copyToDrive() { setMoving(true); try { let r; do { r = await api("/api/collections/photos/backfill", { method: "POST" }); } while (r.moved && r.left); toast(r.left ? `${r.left} still to copy` : "All photos are in Google Drive"); d.reload(); } catch (e) { toast(e.message, "err"); } setMoving(false); }
   const sel = sp.get("c");
   const open = id => router.replace(id ? `/collections?c=${id}` : "/collections", { scroll: false });
   if (!d.data) return <Loading error={d.error} />;
@@ -78,7 +79,8 @@ export default function Collections() {
     .sort((a, b) => isTodo(a) !== isTodo(b) ? (isTodo(a) ? -1 : 1) : String(a.scheduled_on || "9").localeCompare(String(b.scheduled_on || "9")) || String(a.school?.name).localeCompare(String(b.school?.name)));
   const n = k => all.filter(k).length;
   return <>
-    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one received or missing, photograph the boxes and the school contact's Emirates ID, and confirm. Missing artworks stay in the collection for the next visit. One collection per school; each pathway is stored in its own room, shelf and row." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
+    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one received or missing, photograph the boxes and the school contact's Emirates ID, and confirm. Photos and a visit record are filed in the Shared Drive under 06 Uploads › Collections › school › date. Missing artworks stay in the collection for the next visit. One collection per school; each pathway is stored in its own room, shelf and row." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
+    {d.data.offDrive > 0 && <Banner tone="warn" title={`${d.data.offDrive} collection photo${d.data.offDrive === 1 ? " is" : "s are"} not in Google Drive yet`} action={<Btn sm busy={moving} onClick={copyToDrive}>Copy to Drive</Btn>}>Google Drive couldn't be reached when they were taken, so they were kept in the website for now.</Banner>}
     {!all.length ? <Empty title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks are shortlisted for Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
       <section className="cl-list">
         <div className="cl-tools"><Search value={q} onChange={setQ} placeholder="School, eSIS, code" />
@@ -172,7 +174,7 @@ function Detail({ id, can, onBack, onChanged }) {
         <div className="cl-sec"><div className="cl-sh"><b>4. Handed over by (school contact)</b></div>
           <Field label="Full name"><input className="input" autoComplete="off" value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} placeholder="As on the Emirates ID" /></Field>
           <Field label="Mobile number"><input className="input" type="tel" inputMode="tel" autoComplete="off" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="050 123 4567" /></Field>
-          <Field label="Emirates ID photo" help="Kept privately: only the storage team and admins can see it, and every view is recorded.">
+          <Field label="Emirates ID photo" help="Saved with the box photos in the school's folder in the Shared Drive. In the website only admins, storage and the school's coordinator can open it, and every view is recorded.">
             <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>{!eid && <PhotoButton collectionId={id} kind="eid" onAdded={added} label="Photograph Emirates ID" primary />}<Thumbs photos={eid ? [eid] : []} canRemove onRemove={removePhoto} /></div>
           </Field>
         </div>

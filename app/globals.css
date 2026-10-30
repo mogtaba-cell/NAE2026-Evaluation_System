@@ -1064,3 +1064,17 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 .rm-rows span{font:500 11px/14px var(--mono);padding:3px 6px;border-radius:6px;background:var(--sheet);border:1px solid var(--rule)}
 .rm-rows span.u{background:var(--accent-wash);border-color:var(--accent);color:var(--accent-ink)}
 @media (max-width:600px){.lp.compact{grid-template-columns:1fr 1fr 1fr}}
+
+/* allocation */
+.al-list{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.al-h,.al-row{display:grid;grid-template-columns:minmax(0,1fr) 110px auto;gap:12px;align-items:center;padding:8px 12px}
+.al-h{font-size:12px;color:var(--ink3);background:var(--wash2);border-bottom:1px solid var(--rule)}
+.al-row+.al-row{border-top:1px solid var(--rule)}
+.al-row.on{background:var(--accent-wash)}
+.al-n{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
+.al-h .r,.al-row .r,.al-sh .r,.al-sr .r{text-align:right}
+.al-split{display:flex;flex-direction:column}
+.al-sh,.al-sr{display:grid;grid-template-columns:minmax(0,1fr) 110px 120px;gap:12px;align-items:center;padding:10px var(--s5)}
+.al-sh{font-size:12px;color:var(--ink3);background:var(--wash2);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.al-sr+.al-sr{border-top:1px solid var(--rule)}
+.al-sr b.up{color:var(--ok)} .al-sr b.down{color:var(--bad)}

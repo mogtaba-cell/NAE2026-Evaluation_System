@@ -3,7 +3,7 @@ import { db, q, all } from "@/lib/db";
 import { audit } from "@/lib/audit";
 
 async function data(pathway) {
-  const ents = await all(() => db().from("nae_entries").select("id, sub_code, school_id, coordinator_id, school:nae_schools(name, esis)").eq("pathway_code", pathway));
+  const ents = await all(() => db().from("nae_entries").select("id, sub_code, school_id, coordinator_id, school:nae_schools(name, esis)").eq("pathway_code", pathway).order("id"));   // a fixed order: Preview and Confirm give the same split
   const coords = await q(db().from("nae_accounts").select("id, display_name, pathways").eq("role", "coordinator").eq("active", true).order("display_name"));
   return { ents, coords };
 }
@@ -42,9 +42,10 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const map = split(pool, chosen, b.mode === "counts" ? b.counts : null);
   const assign = e => map[e.school_id] !== undefined && pool.includes(e) ? map[e.school_id] : e.coordinator_id;
   const sel = coords.filter(c => chosen.includes(c.id) || ents.some(e => e.coordinator_id === c.id));
-  if (b.action === "preview") return { preview: summary(ents, assign, sel), moved: pool.length };
+  const changed = Object.keys(map).filter(sid => pool.some(e => e.school_id === sid && e.coordinator_id !== map[sid])).length;   // schools that change coordinator
+  if (b.action === "preview") return { preview: summary(ents, assign, sel), moved: pool.length, changed };
   const byCoord = {}; pool.forEach(e => { (byCoord[map[e.school_id]] = byCoord[map[e.school_id]] || []).push(e.id); });
   for (const [k, ids] of Object.entries(byCoord)) for (let i = 0; i < ids.length; i += 150) await q(db().from("nae_entries").update({ coordinator_id: k }).in("id", ids.slice(i, i + 150)));
   await audit(session, `Allocated ${pool.length} ${pathway} entries`, "pathway", pathway, sel.map(c => c.display_name).join(", "));
-  return { ok: true, note: `Allocated ${pool.length} artworks. Each school stays with one coordinator.` };
+  return { ok: true, note: `Saved: ${pool.length} artworks handed out, ${changed} school${changed === 1 ? "" : "s"} changed coordinator.` };
 });

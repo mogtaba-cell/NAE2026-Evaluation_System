@@ -2,7 +2,7 @@ import { venueFields } from "@/lib/venues";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q, all, inChunks } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
-import { sessionPool } from "@/lib/sessions";
+import { sessionPool, sessionOrder, takeNext } from "@/lib/sessions";
 import { requestForSession } from "@/lib/movements";
 import { recompute } from "@/lib/scoring";
 import { audit } from "@/lib/audit";
@@ -16,8 +16,8 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
     const r = S.roundById[poolId]; if (!r || !has(r.pathway_code)) return { entries: [] };
     const pool = await sessionPool(S, r);
     const subName = c => (S.P[r.pathway_code].subs.find(x => x.code === c) || {}).name;
-    return { entries: pool.map(x => ({ id: x.entry_id, code: x.entry.code, title: x.entry.title_en, school_id: x.entry.school_id || "none", school: x.entry.school?.name || "No school", sub_code: x.entry.sub_code, sub: subName(x.entry.sub_code), online: !!x.online, where: x.loc ? `${x.loc.label}` : x.location || null, mine: x.entry.coordinator_id === session.sub }))
-      .sort((a, b) => a.school.localeCompare(b.school) || a.code.localeCompare(b.code)) };
+    return { entries: sessionOrder(pool).map(x => ({ id: x.entry_id, code: x.entry.code, title: x.entry.title_en, school_id: x.entry.school_id || "none", school: x.entry.school?.name || "No school", sub_code: x.entry.sub_code, sub: subName(x.entry.sub_code), online: !!x.online, where: x.loc ? `${x.loc.label}` : x.location || null, mine: x.entry.coordinator_id === session.sub }))
+      .map((e, i) => ({ ...e, order: i })) };
   }
   const sessions = (await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name), entries:nae_session_entries(entry_id, pulled)").order("session_date", { ascending: true }))).filter(s => has(S.roundById[s.round_id]?.pathway_code));
   const lgs = await inChunks(sessions.map(s => s.id), part => q(db().from("nae_logistics").select("session_id, state").in("session_id", part)));
@@ -63,7 +63,12 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   // checked against the same pool
   const pool = await sessionPool(S, r);
   let picked;
-  if (Array.isArray(b.entry_ids) && b.entry_ids.length) {
+  if (Number(b.count) > 0) {
+    // a number of artworks: optionally one subpathway set and one kind (physical / online), the coordinator's own first
+    const subs = Array.isArray(b.sub_codes) && b.sub_codes.length ? new Set(b.sub_codes) : null;
+    const cand = pool.filter(x => (!subs || subs.has(x.entry.sub_code)) && (b.kind === "physical" ? !x.online : b.kind === "online" ? x.online : true));
+    picked = takeNext(cand, Math.min(500, Number(b.count)), { coordinatorId, mineFirst: b.mine_first !== false });
+  } else if (Array.isArray(b.entry_ids) && b.entry_ids.length) {
     const ok = new Set(pool.map(x => x.entry_id));
     if (b.entry_ids.some(id => !ok.has(id))) throw bad("Some of those artworks are not waiting for a session.");
     picked = pool.filter(x => b.entry_ids.includes(x.entry_id));
@@ -73,7 +78,7 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
     picked = pool.filter(x => schools.has(x.entry.school_id || "none") && (!subs || subs.has(x.entry.sub_code)));
   }
   if (!picked.length) throw bad("No waiting artworks match. Check the schools and subpathways.");
-  picked.sort((a, b) => String(a.entry.school?.name).localeCompare(String(b.entry.school?.name)) || a.entry.code.localeCompare(b.entry.code));
+  picked = sessionOrder(picked);
   const where = await venueFields(b.venue_id);
   const count = (await q(db().from("nae_sessions").select("id").eq("round_id", r.id))).length;
   const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, ...where, coordinator_id: coordinatorId, evaluator_ids: team }).select("*").single());
