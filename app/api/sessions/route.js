@@ -1,3 +1,4 @@
+import { venueFields } from "@/lib/venues";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q, all, inChunks } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
@@ -73,8 +74,9 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   }
   if (!picked.length) throw bad("No waiting artworks match. Check the schools and subpathways.");
   picked.sort((a, b) => String(a.entry.school?.name).localeCompare(String(b.entry.school?.name)) || a.entry.code.localeCompare(b.entry.code));
+  const where = await venueFields(b.venue_id);
   const count = (await q(db().from("nae_sessions").select("id").eq("round_id", r.id))).length;
-  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, venue: b.venue || null, coordinator_id: coordinatorId, evaluator_ids: team }).select("*").single());
+  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, ...where, coordinator_id: coordinatorId, evaluator_ids: team }).select("*").single());
   await q(db().from("nae_session_entries").insert(picked.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: i }))));
   const requested = await requestForSession(session, s, picked.filter(x => !x.online).map(x => x.entry_id));
   for (const x of picked) await recompute(x.entry_id, r.round_no, { S, quiet: true });

@@ -41,7 +41,7 @@ export default function Logistics() {
   const waitingCoord = rows.filter(is("handed_over"));
   const unbatched = rows.filter(r => r.state === "to_collect" && !r.collection_id);
   const scheduled = [...new Set(rows.filter(r => r.state === "to_collect" && r.collection_id).map(r => r.collection_id))];
-  const framing = rows.filter(r => r.needs_framing && (!onlyShort || r.shortlisted) && ["storage", "framer"].includes(r.state));
+  const framing = rows.filter(r => r.needs_framing && (!onlyShort || r.selected) && ["storage", "framer"].includes(r.state));
   const toMe = rows.filter(r => r.state === "handed_over" && r.session?.mine);
   const withMe = rows.filter(r => r.state === "coordinator" && r.session?.mine);
   const exc = rows.filter(r => r.state === "missing" || r.damaged || r.issue);
@@ -58,7 +58,7 @@ export default function Logistics() {
     ...(staff || coord ? [["todo", "To do", todoN]] : []),
     ["all", coord ? "My artworks" : "All artworks", rows.length],
     ...(coord ? [] : [["exceptions", "Exceptions", exc.length]]),
-    ...(staff ? [["locations", "Storage locations"]] : [])
+    ...(staff ? [["locations", "Storage locations"], ["venues", "Session venues"]] : [])
   ];
   const showState = st => { setF({ ...f, state: st }); setTab("all"); };
 
@@ -80,7 +80,7 @@ export default function Logistics() {
       <Sessions />
       {(unbatched.length > 0 || scheduled.length > 0) && <div className="mv-sec"><Card title="Collections from schools" right={<span className="row" style={{ gap: 8 }}>{unbatched.length > 0 && <Btn v="primary" sm onClick={() => setMk({ mode: "all", date: "", codes: [] })}>Schedule collections</Btn>}<Btn sm href="/collections">Open collections</Btn></span>}>
         <p className="muted">{unbatched.length ? `${unbatched.length} artwork${unbatched.length === 1 ? " is" : "s are"} not in a collection yet. ` : ""}{scheduled.length ? `${scheduled.length} collection${scheduled.length === 1 ? " is" : "s are"} scheduled and waiting to be checked in.` : ""}</p></Card></div>}
-      <div className="mv-sec"><Card flush title="Framing for the showcase" sub="Ticked during Round 2 scoring. Shortlisted means grade A and passed Round 2." right={<Check label="Shortlisted only" checked={onlyShort} onChange={setOnlyShort} />}>
+      <div className="mv-sec"><Card flush title="Framing for the showcase" sub="Ticked during Round 2 scoring. Selected means it passed Round 2." right={<Check label="Selected only" checked={onlyShort} onChange={setOnlyShort} />}>
         <ArtworkBatch rows={framing} role={role} steps={["to_framer", "from_framer"]} onDone={reload} onOpen={openRow} empty="No artworks waiting for framing."
           groups={[{ key: "s", title: "In storage, to send", rows: framing.filter(is("storage")) }, { key: "f", title: "At the framer", rows: framing.filter(is("framer")) }].filter(g => g.rows.length)} /></Card></div>
     </>}
@@ -98,6 +98,7 @@ export default function Logistics() {
         ].filter(g => g.rows.length)} /></Card>}
 
     {tab === "locations" && staff && <Locations />}
+    {tab === "venues" && staff && <Venues admin={role === "admin"} />}
 
     {open && <ArtworkDrawer row={open} role={role} onClose={() => setOpen(null)} onChanged={reload} />}
     {mk && <ScheduleCollections rows={unbatched} mk={mk} setMk={setMk} onDone={() => { setMk(null); reload(); }} toast={toast} />}
@@ -143,6 +144,28 @@ function ScheduleCollections({ rows, mk, setMk, onDone, toast }) {
       </div>}
     </div>
   </Modal>;
+}
+
+function Venues({ admin }) {
+  const v = useApi("/api/venues"); const toast = useToast(); const [nv, setNv] = useState({ name: "", notes: "", capacity: "" });
+  async function add() { try { const r = await api("/api/venues", { body: { action: "add", ...nv } }); setNv({ name: "", notes: "", capacity: "" }); toast(r.note); } catch (e) { toast(e.message, "err"); } }
+  async function upd(id, patch) { try { await api("/api/venues", { body: { action: "update", id, ...patch } }); } catch (e) { toast(e.message, "err"); v.reload(); } }
+  const list = v.data?.venues || [];
+  return <Card title="Session venues" sub={admin ? "The rooms and halls scoring sessions can be held in. Coordinators pick one of these when they plan a session. Renaming a venue updates its sessions; untick one that is no longer used." : "The rooms and halls scoring sessions can be held in. The admin keeps this list."}>
+    {!v.data ? <Loading error={v.error} /> : <Table minw={640} empty="No venues yet." cols={["Venue", "Where or notes", { h: "Seats", cls: "r" }, { h: "Sessions", cls: "r" }, ""]}
+      rows={list.map(x => admin ? [
+        <input key={`n${x.id}`} className="input" defaultValue={x.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== x.name && upd(x.id, { name: e.target.value })} aria-label="Venue name" />,
+        <input key={`o${x.id}`} className="input" defaultValue={x.notes || ""} placeholder="Building, floor, access…" onBlur={e => e.target.value.trim() !== (x.notes || "") && upd(x.id, { notes: e.target.value })} aria-label="Notes" />,
+        <input key={`c${x.id}`} className="input" style={{ width: 80, textAlign: "right" }} inputMode="numeric" defaultValue={x.capacity ?? ""} onBlur={e => String(e.target.value) !== String(x.capacity ?? "") && upd(x.id, { capacity: e.target.value })} aria-label="Seats" />,
+        <span key="s" className="small">{x.upcoming ? `${x.upcoming} coming up` : ""}{x.upcoming && x.sessions > x.upcoming ? " · " : ""}{x.sessions > x.upcoming ? `${x.sessions - x.upcoming} done` : ""}{!x.sessions ? "–" : ""}</span>,
+        <Check key="a" label="In use" checked={x.active} onChange={on => upd(x.id, { active: on })} />
+      ] : [<b key="n">{x.name}</b>, <span key="o" className="small">{x.notes || ""}</span>, x.capacity ?? "", x.upcoming ? `${x.upcoming} coming up` : "–", x.active ? <Badge key="a" tone="ok">In use</Badge> : <Badge key="a">Not in use</Badge>])} />}
+    {admin && <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+      <input className="input" style={{ width: 200 }} placeholder="Venue name (e.g. GVC Hall 3)" value={nv.name} onChange={e => setNv({ ...nv, name: e.target.value })} />
+      <input className="input" style={{ width: 220 }} placeholder="Where or notes (optional)" value={nv.notes} onChange={e => setNv({ ...nv, notes: e.target.value })} />
+      <input className="input" style={{ width: 90 }} inputMode="numeric" placeholder="Seats" value={nv.capacity} onChange={e => setNv({ ...nv, capacity: e.target.value.replace(/\D/g, "") })} />
+      <Btn onClick={add} disabled={!nv.name.trim()}>Add venue</Btn></div>}
+  </Card>;
 }
 
 function Locations() {

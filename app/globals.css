@@ -995,6 +995,7 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 .cl-it{display:flex;flex-direction:column;gap:2px;min-width:0}
 .cl-it .t{font-weight:500}
 .cl-3{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--rule2);border-radius:var(--r);overflow:hidden}
+.cl-3.two{grid-template-columns:repeat(2,1fr)}
 .cl-3 button{all:unset;text-align:center;padding:12px 4px;font-weight:500;cursor:pointer;background:var(--sheet);border-left:1px solid var(--rule2);font-size:14px}
 .cl-3 button:first-child{border-left:0}
 .cl-3 button.on{background:var(--ink);color:#fff}

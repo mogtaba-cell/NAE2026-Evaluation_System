@@ -163,11 +163,11 @@ export function dshort(dateStr) { if (!dateStr) return ""; const [Y, M, D] = Str
 export function dueTxt(due) { const h = Math.round((Date.parse(due) - Date.now()) / 36e5); return h < 0 ? [`Overdue by ${-h} h`, "bad"] : h < 12 ? [`Due in ${h} h`, "warn"] : [`Due in ${h} h`, ""]; }
 export const STATUS = {
   not_open: ["Round not open", ""], to_score: ["To score", ""], in_progress: ["In progress", "info"], review: ["Needs review", "warn"],
-  through: ["Through", "ok"], not_through: ["Not through", ""], final: ["Round 2 done", "ok"], withdrawn: ["Withdrawn", "bad"], not_scored: ["Not scored", "bad"]
+  through: ["Shortlisted", "ok"], not_through: ["Not shortlisted", ""], final: ["Round 2 done", "ok"], withdrawn: ["Withdrawn", "bad"], not_scored: ["Not scored", "bad"]
 };
 export function statusBadge(e) {
-  if (e.current_round === 2 && e.status === "not_open") return <Badge tone="ok">Through · Round 2 not open</Badge>;
-  if (e.status === "final") { const r2 = (e.results || []).find(r => r.round_no === 2); if (r2 && r2.passed != null) return <Badge tone={r2.passed ? "ok" : ""}>{r2.passed ? (r2.grade === "A" ? "Passed Round 2 · grade A" : "Passed Round 2") : "Did not pass Round 2"}</Badge>; }
+  if (e.current_round === 2 && e.status === "not_open") return <Badge tone="ok">Shortlisted · Round 2 not open</Badge>;
+  if (e.status === "final") { const r2 = (e.results || []).find(r => r.round_no === 2); if (r2 && r2.passed != null) return <Badge tone={r2.passed ? "ok" : ""}>{r2.passed ? (r2.grade === "A" ? "Selected · grade A" : "Selected") : "Not selected"}</Badge>; }
   const s = STATUS[e.status] || [e.status, ""];
   return <Badge tone={s[1]}>{e.current_round === 2 && !["final", "withdrawn", "not_scored"].includes(e.status) ? `Round 2 · ${s[0].toLowerCase()}` : s[0]}</Badge>;
 }

@@ -8,7 +8,7 @@ import { SHORT } from "@/components/Movements";
 const res = (e, n) => { if (e.limited) return <span className="faint small">Not your artwork</span>; const r = (e.results || []).find(x => x.round_no === n); if (!r) return <span className="faint small">–</span>; if (r.team == null) return <span className="faint small">{r.scored || 0} of {r.needed || 0} scores</span>; return <span className="small"><b>{r.final ?? r.team}</b> · {r.grade}{r.complete ? (r.passed ? " · passed" : " · not passed") : " · provisional"}</span>; };
 
 export function CatalogKpis({ s }) {
-  return <Kpis items={[["Artworks", fmt(s.artworks), s.withdrawn ? `${s.withdrawn} withdrawn` : ""], ["Students", fmt(s.students)], ["Through to Round 2", fmt(s.round2), s.artworks ? `${Math.round(s.round2 / s.artworks * 100)}%` : "", "brand"], ["Passed Round 2", fmt(s.passedR2), "", "ok"]]} />;
+  return <Kpis items={[["Artworks", fmt(s.artworks), s.withdrawn ? `${s.withdrawn} withdrawn` : ""], ["Students", fmt(s.students)], ["Shortlisted", fmt(s.round2), s.artworks ? `${Math.round(s.round2 / s.artworks * 100)}%` : "", "brand"], ["Selected", fmt(s.passedR2), "", "ok"]]} />;
 }
 
 export function ArtworkCatalog({ rows }) {
@@ -20,7 +20,7 @@ export function ArtworkCatalog({ rows }) {
     .sort((a, b) => (sort === "code" ? a.code.localeCompare(b.code) : (score(a, sort === "r1" ? 1 : 2) - score(b, sort === "r1" ? 1 : 2)) || a.code.localeCompare(b.code)) * (dir === "asc" ? 1 : -1));
   return <section className="card flush">
     <div className="row no-print" style={{ gap: 8, padding: 12, flexWrap: "wrap", borderBottom: "1px solid var(--rule)" }}>
-      <Seg value={f} onChange={setF} items={[["all", `All ${rows.length}`], ["open", "Still being judged"], ["r2", "Through to Round 2"], ["passed", "Passed Round 2"]]} />
+      <Seg value={f} onChange={setF} items={[["all", `All ${rows.length}`], ["open", "Still being judged"], ["r2", "Shortlisted"], ["passed", "Selected"]]} />
       <select className="select" style={{ width: 170 }} value={sort} onChange={e => { setSort(e.target.value); setDir(e.target.value === "code" ? "asc" : "desc"); }} aria-label="Sort by"><option value="code">Sort: code</option><option value="r1">Sort: Round 1 score</option><option value="r2">Sort: Round 2 score</option></select>
       <Btn onClick={() => setDir(dir === "asc" ? "desc" : "asc")}>{sort === "code" ? (dir === "asc" ? "A to Z ↑" : "Z to A ↓") : (dir === "asc" ? "Lowest first ↑" : "Highest first ↓")}</Btn>
       {pws.length > 1 && <select className="select" style={{ width: 200 }} value={pw} onChange={e => setPw(e.target.value)}><option value="">All pathways</option>{pws.map(p => <option key={p}>{p}</option>)}</select>}

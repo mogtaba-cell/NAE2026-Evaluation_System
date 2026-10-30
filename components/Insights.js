@@ -22,13 +22,13 @@ export default function Insights() {
     <Kpis items={[
       ["Artworks", fmt(k.entries), `${fmt(k.schools)} schools · ${fmt(k.students)} students`],
       ["Scores submitted", fmt(k.scores), "all rounds"],
-      ["Through to Round 2", fmt(k.r1through), `${pct(k.r1through, k.entries)} of artworks`, "ok"],
-      ["Passed Round 2", fmt(k.r2passed), `${fmt(k.shortlisted)} shortlisted (grade A)`, "ok"],
+      ["Shortlisted", fmt(k.r1through), `passed Round 1 · ${pct(k.r1through, k.entries)} of artworks`, "ok"],
+      ["Selected", fmt(k.r2passed), `passed Round 2 · ${fmt(k.gradeA)} with grade A`, "ok"],
       ["Reviews open", fmt(k.reviewsOpen), `${k.reviewsOverdue} overdue${k.avgReviewHours != null ? ` · decided in ${k.avgReviewHours < 1 ? "under 1 h" : `${k.avgReviewHours} h`} on average` : ""}`, k.reviewsOverdue ? "warn" : ""]
     ]} />
 
     <Card title="Where each pathway is" flush>
-      <Table cols={["Pathway", "Stage", { h: "Current round progress", cls: "r" }, { h: "Through to Round 2", cls: "r" }, { h: "Passed Round 2", cls: "r" }]}
+      <Table cols={["Pathway", "Stage", { h: "Current round progress", cls: "r" }, { h: "Shortlisted", cls: "r" }, { h: "Selected", cls: "r" }]}
         rows={x.pathways.map(p => [<Two key="a" a={p.name} b={`${fmt(p.entries)} entries`} />, <span key="b">{p.stage}</span>,
           p.progress ? <Prog key="c" pct={p.progress.total ? (p.progress.done / p.progress.total) * 100 : 0} label={`${p.progress.done}/${p.progress.total}`} /> : <span key="c" className="faint small">Not scoring</span>,
           <span key="d" className="num">{fmt(p.stages[2][1])}</span>, <span key="e" className="num">{fmt(p.stages[4][1])}</span>])} />
@@ -66,14 +66,14 @@ export default function Insights() {
         table={x.logistics.length ? { cols: ["State", "Artworks"], rows: x.logistics.map(r => [r.label, r.n]) } : null}>
         <HBars rows={x.logistics.filter(r => r.n || ["To collect", "In storage"].includes(r.label))} empty="No physical artworks in this view." />
       </ChartCard>
-      <ChartCard title="Schools with the most artworks through" sub="Artworks through to Round 2, with all artworks for comparison"
-        table={{ cols: ["School", "Through", "Artworks"], rows: x.topSchools.map(s => [s.name, s.through, s.entries]) }}>
+      <ChartCard title="Schools with the most artworks shortlisted" sub="Artworks shortlisted for Round 2, with all artworks for comparison"
+        table={{ cols: ["School", "Shortlisted", "Artworks"], rows: x.topSchools.map(s => [s.name, s.through, s.entries]) }}>
         <HBars rows={x.topSchools.map(s => ({ label: s.name, n: s.through, entries: s.entries }))} sub={r => `of ${r.entries}`} />
       </ChartCard>
     </div>
 
-    <Card title="Coordinators" sub="Artworks allocated, scored in their current round, and through to Round 2" flush>
-      <Table empty="No artworks allocated yet." cols={["Coordinator", "Pathways", { h: "Schools", cls: "r" }, { h: "Artworks", cls: "r" }, { h: "Scored", cls: "r" }, { h: "Through", cls: "r" }, { h: "In review", cls: "r" }]}
+    <Card title="Coordinators" sub="Artworks allocated, scored in their current round, and shortlisted" flush>
+      <Table empty="No artworks allocated yet." cols={["Coordinator", "Pathways", { h: "Schools", cls: "r" }, { h: "Artworks", cls: "r" }, { h: "Scored", cls: "r" }, { h: "Shortlisted", cls: "r" }, { h: "In review", cls: "r" }]}
         rows={x.coordinators.map(c => [c.name, <span key="p" className="small">{c.pathways.join(", ")}</span>, <span key="s" className="num">{c.schools}</span>, <span key="e" className="num">{c.entries}</span>, <Prog key="sc" pct={c.entries ? (c.scored / c.entries) * 100 : 0} label={`${c.scored}/${c.entries}`} />, <span key="t" className="num">{c.through}</span>, <span key="r" className="num">{c.review || ""}</span>])} />
     </Card>
 

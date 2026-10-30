@@ -5,14 +5,14 @@ import { audit } from "@/lib/audit";
 import { canWork } from "@/lib/collections";
 
 // Upload one photo for a collection: the raw image is the request body (the phone shrinks it first).
-// Headers: x-kind = item | eid | other, x-entry = artwork code (for item photos).
+// Headers: x-kind = box (the boxes handed over, outside and inside) | eid | item | other, x-entry = artwork code (for item photos).
 const MAX = 3 * 1024 * 1024;
 export const POST = route(["admin", "storage", "coordinator"], async ({ session, params, request }) => {
   const c = await q(db().from("nae_collections").select("id, code").eq("id", params.id).maybeSingle()); if (!c) throw bad("Collection not found.");
   await canWork(session, c.id);
   const mime = request.headers.get("content-type") || "";
   if (!/^image\/(jpeg|png|webp)$/.test(mime)) throw bad("Send a JPG, PNG or WebP photo.");
-  const kind = ["item", "eid", "other"].includes(request.headers.get("x-kind")) ? request.headers.get("x-kind") : "item";
+  const kind = ["box", "item", "eid", "other"].includes(request.headers.get("x-kind")) ? request.headers.get("x-kind") : "box";
   const buf = Buffer.from(await request.arrayBuffer());
   if (!buf.length) throw bad("The photo is empty.");
   if (buf.length > MAX) throw bad("The photo is too large (over 3 MB). Try again; the app shrinks photos before sending.");

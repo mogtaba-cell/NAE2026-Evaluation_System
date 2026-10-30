@@ -1,4 +1,5 @@
 "use client";
+import VenueSelect from "@/components/VenueSelect";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Field, Modal, Check, Seg, dshort } from "@/components/ui";
@@ -134,7 +135,7 @@ export default function Session({ params }) {
       badges={<Badge tone={s.status === "live" ? "info" : s.status === "done" ? "ok" : s.status === "cancelled" ? "bad" : ""}>{statusLabel}</Badge>}
       actions={<>
         {s.status === "planned" && <Btn v="primary" busy={busy === "start"} onClick={() => act("start")}>Start session</Btn>}
-        {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", time_text: s.time_text || "", venue: s.venue || "", evaluator_ids: team.map(t => t.id), remove: [] })}>Edit</Btn>}
+        {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", time_text: s.time_text || "", venue_id: s.venue_id || "", evaluator_ids: team.map(t => t.id), remove: [] })}>Edit</Btn>}
         {s.status === "live" && <Btn busy={busy === "finish"} onClick={() => act("finish")}>Finish session</Btn>}
         {s.status === "done" && admin && <Btn busy={busy === "reopen"} onClick={() => act("reopen")}>Reopen</Btn>}
         {physical && <Btn onClick={() => setBoard(true)}>Artworks board</Btn>}</>} />
@@ -191,7 +192,7 @@ export default function Session({ params }) {
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
           <Field label="Date"><input type="date" className="input" value={edit.session_date} onChange={x => setEdit({ ...edit, session_date: x.target.value })} /></Field>
           <Field label="Time"><input className="input" value={edit.time_text} onChange={x => setEdit({ ...edit, time_text: x.target.value })} /></Field>
-          <Field label="Venue"><input className="input" value={edit.venue} onChange={x => setEdit({ ...edit, venue: x.target.value })} /></Field>
+          <Field label="Venue"><VenueSelect value={edit.venue_id} current={s.venue} onChange={v => setEdit({ ...edit, venue_id: v })} /></Field>
         </div>
         <Field label="Evaluator team"><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{(meta?.data?.evaluators || []).filter(v => v.active).map(v => <Check key={v.id} label={v.name} checked={edit.evaluator_ids.includes(v.id)} onChange={on => setEdit({ ...edit, evaluator_ids: on ? [...edit.evaluator_ids, v.id] : edit.evaluator_ids.filter(x => x !== v.id) })} />)}</div></Field>
         <Field label="Artworks in this session" help="Untick an artwork to take it out of the session.">

@@ -1,4 +1,5 @@
 "use client";
+import VenueSelect from "@/components/VenueSelect";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Card, Table, Btn, Badge, Banner, Loading, Modal, Field, Check, Two, Prog, Seg, dshort } from "@/components/ui";
@@ -25,7 +26,7 @@ export default function Sessions() {
   const list = x.sessions.filter(s => show === "all" || (show === "active" ? ["planned", "live"].includes(s.status) : s.status === show));
   async function create() { setBusy(true); setErr(null); try { const r = await api("/api/sessions", { body: mode === "pick" ? { ...f, school_ids: [], sub_codes: [] } : { ...f, entry_ids: [] } }); toast(`Session created with ${r.count} artworks.`); router.push(`/sessions/${r.id}`); } catch (e) { setErr(e.message); } setBusy(false); }
   return <>
-    <PageHead title="Scoring sessions" sub="Coordinators run sessions with evaluators who have no login and type their scores: Round 1 and online Round 2 artworks from their files, physical Round 2 artworks in the room. Several sessions can run at once; each artwork is in one session at a time." actions={canCreate && <Btn v="primary" onClick={() => { setErr(null); setSchoolScope("mine"); setMode("schools"); setPq(""); setF({ entry_ids: [],  round_id: x.rounds[0]?.id || "", title: "", session_date: "", time_text: "09:00 to 13:00", venue: "", evaluator_ids: [], school_ids: [], sub_codes: [], coordinator_id: admin ? "" : undefined }); }}>New session</Btn>} />
+    <PageHead title="Scoring sessions" sub="Coordinators run sessions with evaluators who have no login and type their scores: Round 1 and online Round 2 artworks from their files, physical Round 2 artworks in the room. Several sessions can run at once; each artwork is in one session at a time." actions={canCreate && <Btn v="primary" onClick={() => { setErr(null); setSchoolScope("mine"); setMode("schools"); setPq(""); setF({ entry_ids: [],  round_id: x.rounds[0]?.id || "", title: "", session_date: "", time_text: "09:00 to 13:00", venue_id: "", evaluator_ids: [], school_ids: [], sub_codes: [], coordinator_id: admin ? "" : undefined }); }}>New session</Btn>} />
     {pl.data?.ready > 0 && <Banner title={`${pl.data.ready} artworks are waiting for a session`}>Create a session and pick the schools to score.</Banner>}
     <div className="row" style={{ marginBottom: 12 }}><Seg value={show} onChange={setShow} items={[["active", "Planned and live"], ["done", "Done"], ["cancelled", "Cancelled"], ["all", "All"]]} /></div>
     <Card flush><Table minw={860} cols={["Session", "When", "Coordinator", "Team", "Progress", "Status"]} onRow={i => router.push(me?.role === "storage" ? `/pull-list?session=${list[i].id}` : `/sessions/${list[i].id}`)} empty="No sessions here."
@@ -41,7 +42,7 @@ export default function Sessions() {
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
           <Field label="Date"><input type="date" className="input" value={f.session_date} onChange={e => setF({ ...f, session_date: e.target.value })} /></Field>
           <Field label="Time"><input className="input" value={f.time_text} onChange={e => setF({ ...f, time_text: e.target.value })} /></Field>
-          <Field label="Venue"><input className="input" value={f.venue} placeholder="Room or hall" onChange={e => setF({ ...f, venue: e.target.value })} /></Field>
+          <Field label="Venue"><VenueSelect value={f.venue_id} onChange={v => setF({ ...f, venue_id: v })} /></Field>
         </div>
         <Seg value={mode} onChange={setMode} items={[["schools", "Whole schools"], ["pick", "Pick artworks"]]} />
         {mode === "schools" ? <>

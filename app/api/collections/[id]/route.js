@@ -26,12 +26,13 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
     items: items.map((i, n) => ({ ...i, files: files[n].slice(0, 8).map(f => ({ name: f.name, kind: f.kind, thumb: f.thumb, big: f.kind === "video" ? f.url : `${f.thumb}?s=1600`, video: f.kind === "video" })), entry: { ...i.entry, source_path: undefined, drive_folder_id: undefined, reference_id: undefined }, where: i.loc ? `${i.loc.room} · ${i.loc.shelf}` : i.location, sub: (S.P[c.pathway_code]?.subs.find(s => s.code === i.entry?.sub_code) || {}).name, photos: ph.filter(p => p.kind === "item" && p.entry_id === i.entry_id) }))
       .sort((a, b) => a.entry.code.localeCompare(b.entry.code)),
     visits: visits.map(v => ({ ...v, contact_phone: staff ? v.contact_phone : null, photos: ph.filter(p => p.visit_id === v.id) })),
-    loosePhotos: ph.filter(p => !p.visit_id && p.kind !== "item")
+    loosePhotos: ph.filter(p => !p.visit_id && p.kind !== "item"),
+    boxPhotos: ph.filter(p => p.kind === "box")
   };
 });
 
 // schedule | handover (a visit: some artworks received, some missing, some not yet; who handed them over, their phone,
-// a photo of their Emirates ID and photos of the artworks) | correct (after check-in: received <-> missing)
+// a photo of their Emirates ID and photos of the boxes, outside and inside) | correct (after check-in: received <-> missing)
 export const POST = route(["admin", "storage", "coordinator"], async ({ session, params, request }) => {
   const b = await body(request);
   const c = await q(db().from("nae_collections").select("*").eq("id", params.id).single());
@@ -46,9 +47,12 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     if (!lg || lg.collection_id !== c.id) throw bad("That artwork is not in this collection.");
     const note = String(b.note || "").trim();
     if (b.to === "missing") {
+      // missing works like "not yet": the artwork goes back to be collected on a later visit
       if (!note) throw bad("Say what happened (for example: not in the box after all).");
-      const r = await applyMove(actor, "missing", [e.id], { note: `Correction after collection: ${note}`, ref_type: "collection", ref_id: c.id });
-      if (!r.done.length) throw bad(`It can't be marked missing now (${r.skipped[0]?.why || "it is in use"}).`);
+      if (lg.state !== "storage") throw bad("Only an artwork that is in storage can be put back to collect.");
+      await q(db().from("nae_logistics").update({ state: "to_collect", location_id: null, location: null, collected_on: null, collected_by: null, updated_at: new Date().toISOString() }).eq("entry_id", e.id));
+      await logEvents(session, [{ entry_id: e.id, action: "Not received after all: back to collect", from_state: "storage", to_state: "to_collect", note: `Correction after collection: ${note}`, ref_type: "collection", ref_id: c.id }]);
+      if (c.status !== "scheduled") await q(db().from("nae_collections").update({ status: "scheduled" }).eq("id", c.id));
     } else if (b.to === "received") {
       if (!b.location_id && !c.location_id) throw bad("Choose where it is stored.");
       if (lg.state === "to_collect") {   // not collected yet: receive it now
@@ -70,40 +74,43 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   if (c.status !== "scheduled") throw bad("This collection was already checked in.");
   const items = await q(db().from("nae_logistics").select("entry_id, state, entry:nae_entries(code)").eq("collection_id", c.id).eq("state", "to_collect"));
   const rec = b.received || {};
-  const marked = items.filter(i => rec[i.entry.code] === "ok" || rec[i.entry.code] === "missing");
-  if (!marked.length) throw bad("Mark at least one artwork as received or missing.");
-  const anyReceived = marked.some(i => rec[i.entry.code] === "ok");
+  // two choices per artwork: received, or missing; a missing one stays in the collection for the next visit
+  const marked = items.filter(i => rec[i.entry.code] === "ok");
+  const notIn = items.filter(i => rec[i.entry.code] !== "ok");
+  if (items.some(i => !["ok", "missing"].includes(rec[i.entry.code]))) throw bad("Mark every artwork as received or missing.");
+  const anyReceived = marked.length > 0;
   const contact = String(b.contact_name || "").trim(), phone = String(b.contact_phone || "").trim();
   if (anyReceived) {
     if (!contact) throw bad("Enter the name of the school contact who handed the artworks over.");
     if (!PHONE.test(phone)) throw bad("Enter the school contact's phone number (for example 050 123 4567).");
     const eid = await q(db().from("nae_collection_photos").select("id").eq("collection_id", c.id).eq("kind", "eid").is("visit_id", null).in("id", (b.photo_ids || []).length ? b.photo_ids : ["00000000-0000-0000-0000-000000000000"]));
     if (!eid.length) throw bad("Take a photo of the school contact's Emirates ID.");
+    const box = await q(db().from("nae_collection_photos").select("id").eq("collection_id", c.id).eq("kind", "box").is("visit_id", null).in("id", (b.photo_ids || []).length ? b.photo_ids : ["00000000-0000-0000-0000-000000000000"]));
+    if (!box.length) throw bad("Take at least one photo of the boxes (outside and inside).");
   }
   const locIds = [b.location_id, ...Object.values(b.locations || {})].filter(Boolean);
   const locs = locIds.length ? await q(db().from("nae_locations").select("id, room, shelf, active").in("id", [...new Set(locIds)])) : [];
-  if (anyReceived && !b.location_id && marked.some(i => rec[i.entry.code] === "ok" && !(b.locations || {})[i.entry.code])) throw bad("Choose where this batch is stored.");
+  if (anyReceived && !b.location_id && marked.some(i => !(b.locations || {})[i.entry.code])) throw bad("Choose where this batch is stored.");
   if (locIds.some(id => !locs.find(l => l.id === id && l.active))) throw bad("Pick an active storage location.");
   const label = id => { const l = locs.find(x => x.id === id); return l ? `${l.room} · ${l.shelf}` : null; };
   const today = new Date().toISOString().slice(0, 10), now = new Date().toISOString();
-  let ok = 0, miss = 0, dmg = 0; const events = [];
+  let ok = 0, dmg = 0; const events = [];
   for (const i of marked) {
     const code = i.entry.code;
-    const st = rec[code] === "missing" ? "missing" : "storage";
-    const where = st === "storage" ? ((b.locations || {})[code] || b.location_id) : null;
-    const damaged = st === "storage" && !!(b.damaged || {})[code];
-    const cond = String((b.conditions || {})[code] || "").trim() || (st === "missing" ? "Missing at collection" : damaged ? "Damaged" : "Good");
-    await q(db().from("nae_logistics").update({ state: st, location_id: where, location: label(where), damaged, condition: cond, collected_on: st === "storage" ? (b.collected_on || today) : null, collected_by: st === "storage" ? session.name : null, missing_outcome: null, updated_at: now }).eq("entry_id", i.entry_id));
-    events.push({ entry_id: i.entry_id, action: st === "missing" ? "Missing at collection" : "Collected and received in storage", from_state: "to_collect", to_state: st, location: label(where), handed_by: contact || null, received_by: session.name, note: cond !== "Good" ? cond : null, ref_type: "collection", ref_id: c.id });
-    if (st === "missing") miss++; else { ok++; if (damaged) dmg++; }
+    const where = (b.locations || {})[code] || b.location_id;
+    const damaged = !!(b.damaged || {})[code];
+    const cond = String((b.conditions || {})[code] || "").trim() || (damaged ? "Damaged" : "Good");
+    await q(db().from("nae_logistics").update({ state: "storage", location_id: where, location: label(where), damaged, condition: cond, collected_on: b.collected_on || today, collected_by: session.name, missing_outcome: null, updated_at: now }).eq("entry_id", i.entry_id));
+    events.push({ entry_id: i.entry_id, action: "Collected and received in storage", from_state: "to_collect", to_state: "storage", location: label(where), handed_by: contact || null, received_by: session.name, note: cond !== "Good" ? cond : null, ref_type: "collection", ref_id: c.id });
+    ok++; if (damaged) dmg++;
   }
+  notIn.forEach(i => events.push({ entry_id: i.entry_id, action: "Missing at collection: still to collect", from_state: "to_collect", to_state: "to_collect", handed_by: contact || null, note: String((b.conditions || {})[i.entry.code] || "").trim() || null, ref_type: "collection", ref_id: c.id }));
   await logEvents(session, events);
-  const left = items.length - marked.length;
+  const miss = notIn.length, left = notIn.length;
   const visit = await q(db().from("nae_collection_visits").insert({ collection_id: c.id, by_id: session.sub, by_name: session.name, contact_name: contact || null, contact_phone: phone || null,
-    received: marked.filter(i => rec[i.entry.code] === "ok").map(i => i.entry.code), missing: marked.filter(i => rec[i.entry.code] === "missing").map(i => i.entry.code),
-    later: items.filter(i => !marked.includes(i)).map(i => i.entry.code), location: label(b.location_id), note: String(b.note || "").trim() || null }).select("id").single());
+    received: marked.map(i => i.entry.code), missing: notIn.map(i => i.entry.code), later: [], location: label(b.location_id), note: String(b.note || "").trim() || null }).select("id").single());
   if ((b.photo_ids || []).length) await q(db().from("nae_collection_photos").update({ visit_id: visit.id }).eq("collection_id", c.id).is("visit_id", null).in("id", b.photo_ids));
   await q(db().from("nae_collections").update({ status: left ? "scheduled" : "checked_in", location_id: b.location_id || c.location_id || null, handed_by: contact || c.handed_by || null, checked_in_by: session.sub, checked_in_at: now }).eq("id", c.id));
-  await audit(session, `Collection ${left ? "partly " : ""}checked in (${ok} received${miss ? `, ${miss} missing` : ""}${dmg ? `, ${dmg} damaged` : ""}${left ? `, ${left} still to collect` : ""})`, "collection", c.id, `${c.code}${contact ? ` · handed over by ${contact}` : ""}${b.location_id ? ` · ${label(b.location_id)}` : ""}`);
-  return { ok: true, note: `Checked in ${ok} artwork${ok === 1 ? "" : "s"}${b.location_id ? ` to ${label(b.location_id)}` : ""}${miss ? `, ${miss} marked missing` : ""}${left ? `. ${left} still to collect in this batch.` : "."}` };
+  await audit(session, `Collection ${left ? (ok ? "partly " : "visit, nothing ") : ""}checked in (${ok} received${dmg ? `, ${dmg} damaged` : ""}${miss ? `, ${miss} missing: still to collect` : ""})`, "collection", c.id, `${c.code}${contact ? ` · handed over by ${contact}` : ""}${b.location_id ? ` · ${label(b.location_id)}` : ""}`);
+  return { ok: true, note: `${ok ? `Checked in ${ok} artwork${ok === 1 ? "" : "s"}${b.location_id ? ` to ${label(b.location_id)}` : ""}` : "Visit recorded"}${miss ? `. ${miss} missing: still to collect on the next visit.` : "."}` };
 });

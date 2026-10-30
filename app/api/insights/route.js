@@ -34,7 +34,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url, sc
   // headline numbers
   const r1through = E.filter(e => rOf(e.id, 1)?.complete && rOf(e.id, 1)?.passed).length;
   const r2passed = E.filter(e => rOf(e.id, 2)?.complete && rOf(e.id, 2)?.passed).length;
-  const shortlisted = E.filter(e => { const r = rOf(e.id, 2); return r?.complete && r.passed && r.grade === "A"; }).length;
+  const gradeA = E.filter(e => { const r = rOf(e.id, 2); return r?.complete && r.passed && r.grade === "A"; }).length;
   const Rv = reviews.filter(r => ids.has(r.entry_id));
   const open = Rv.filter(r => r.status === "open");
   const decided = Rv.filter(r => r.status !== "open" && r.decided_at);
@@ -47,7 +47,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url, sc
     const c = (no, f) => pe.filter(e => { const r = rOf(e.id, no); return r && f(r); }).length;
     const openR = Object.values(S.P[p.code].rounds).filter(r => r.status === "open").sort((a, b) => b.round_no - a.round_no)[0];
     return { code: p.code, name: p.name, entries: pe.length,
-      stages: [["Artworks", pe.length], ["Round 1 scored", c(1, r => r.complete)], ["Through to Round 2", c(1, r => r.complete && r.passed)], ["Round 2 scored", c(2, r => r.complete)], ["Passed Round 2", c(2, r => r.complete && r.passed)]],
+      stages: [["Artworks", pe.length], ["Round 1 scored", c(1, r => r.complete)], ["Shortlisted (passed Round 1)", c(1, r => r.complete && r.passed)], ["Round 2 scored", c(2, r => r.complete)], ["Selected (passed Round 2)", c(2, r => r.complete && r.passed)]],
       grades: [1, 2].map(no => ({ round: no, A: c(no, r => r.complete && r.grade === "A"), B: c(no, r => r.complete && r.grade === "B"), C: c(no, r => r.complete && r.grade === "C") })),
       stage: openR ? `Round ${openR.round_no} open` : Object.values(S.P[p.code].rounds).some(r => r.status === "closed") ? "Between rounds" : "Setup",
       progress: openR ? { round: openR.round_no, done: pe.filter(e => e.current_round === openR.round_no && rOf(e.id, openR.round_no)?.complete).length, total: pe.filter(e => e.current_round === openR.round_no && !["withdrawn"].includes(e.status)).length } : null };
@@ -68,7 +68,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url, sc
     return { name: c.display_name, pathways: c.pathways || [], entries: mine.length, schools: new Set(mine.map(e => e.school_id)).size, scored, through: mine.filter(e => rOf(e.id, 1)?.complete && rOf(e.id, 1)?.passed).length, review: mine.filter(e => e.status === "review").length };
   }).filter(c => c.entries).sort((a, b) => b.entries - a.entries);
 
-  // schools with the most entries through to Round 2
+  // schools with the most artworks shortlisted
   const bySchool = {}; E.forEach(e => { const k = e.school_id || "none"; const g = bySchool[k] = bySchool[k] || { name: schoolById[e.school_id]?.name || "No school", entries: 0, through: 0 }; g.entries++; if (rOf(e.id, 1)?.complete && rOf(e.id, 1)?.passed) g.through++; });
   const topSchools = Object.values(bySchool).sort((a, b) => b.through - a.through || b.entries - a.entries).slice(0, 8);
 
@@ -77,7 +77,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ url, sc
     pathway: pw,
     program: program ? { name: program.name } : null,
     pathwayOptions: S.pathways.filter(p => has(p.code)).map(p => ({ code: p.code, name: p.name })),
-    kpis: { entries: E.length, students: students.length, schools: new Set(E.map(e => e.school_id).filter(Boolean)).size, scores: scoresTotal, r1through, r2passed, shortlisted, reviewsOpen: open.length, reviewsOverdue: open.filter(r => Date.parse(r.due_at) < now).length, avgReviewHours: avgHours },
+    kpis: { entries: E.length, students: students.length, schools: new Set(E.map(e => e.school_id).filter(Boolean)).size, scores: scoresTotal, r1through, r2passed, gradeA, reviewsOpen: open.length, reviewsOverdue: open.filter(r => Date.parse(r.due_at) < now).length, avgReviewHours: avgHours },
     pathways, hist,
     daily: days.map(d => ({ day: d, n: perDay[d] })),
     reviews: { open: open.length, overdue: open.filter(r => Date.parse(r.due_at) < now).length, confirmed: Rv.filter(r => r.status === "confirmed").length, overridden: Rv.filter(r => r.status === "overridden").length },

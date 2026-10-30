@@ -6,6 +6,7 @@ import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
 import { sessionPool } from "@/lib/sessions";
+import { venueFields } from "@/lib/venues";
 import { requestForSession, releaseFromSession } from "@/lib/movements";
 
 async function loadSession(id, session) {
@@ -115,7 +116,8 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   if (action === "edit") {
     if (s.status !== "planned") throw bad("Only a planned session can be edited.");
     const patch = {};
-    ["title", "session_date", "time_text", "venue"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
+    ["title", "session_date", "time_text"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
+    if (b.venue_id !== undefined) Object.assign(patch, await venueFields(b.venue_id, s.venue_id));
     if (patch.title === null) delete patch.title;
     if (Array.isArray(b.evaluator_ids)) {
       const team = [...new Set(b.evaluator_ids)]; if (!team.length) throw bad("Pick at least one evaluator.");

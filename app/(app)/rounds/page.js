@@ -3,7 +3,7 @@ import { useState } from "react";
 import { api, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loading, Modal, Field, dshort, fmt, Table } from "@/components/ui";
 import Readiness from "@/components/Readiness";
 
-const ST = [["not_open", "Not open"], ["to_score", "To score"], ["in_progress", "In progress"], ["review", "In review"], ["through", "Through"], ["not_through", "Not through"], ["final", "Round 2 done"], ["not_scored", "Not scored"]];
+const ST = [["not_open", "Not open"], ["to_score", "To score"], ["in_progress", "In progress"], ["review", "In review"], ["through", "Shortlisted"], ["not_through", "Not shortlisted"], ["final", "Round 2 done"], ["not_scored", "Not scored"]];
 const UNFINISHED = ["to_score", "in_progress", "review", "not_open"];
 
 export default function Rounds() {

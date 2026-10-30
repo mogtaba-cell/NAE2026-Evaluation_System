@@ -43,8 +43,8 @@ export const POST = route(["admin", "management"], async ({ session, params, req
   else throw bad("Unknown action.");
   await q(db().from("nae_reviews").update(patch).eq("id", rv.id));
   const res = await recompute(rv.entry_id, rv.round_no);
-  await audit(session, patch.status === "overridden" ? `Overridden: ${patch.new_passed ? "goes through" : "does not go through"}${patch.new_result != null ? `, result ${patch.new_result}` : ""}` : "Result confirmed", "entry", rv.entry_id, b.note || "");
+  await audit(session, patch.status === "overridden" ? `Overridden: ${patch.new_passed ? (rv.round_no === 1 ? "shortlisted" : "selected") : (rv.round_no === 1 ? "not shortlisted" : "not selected")}${patch.new_result != null ? `, result ${patch.new_result}` : ""}` : "Result confirmed", "entry", rv.entry_id, b.note || "");
   const e = await q(db().from("nae_entries").select("code, current_round, status").eq("id", rv.entry_id).single());
   const next = await q(db().from("nae_reviews").select("id").eq("status", "open").eq("manager_id", session.sub).order("due_at").limit(1));
-  return { ok: true, result: res, next: next[0]?.id || null, note: `${patch.status === "overridden" ? "Overridden" : `Confirmed${res?.final != null ? ` ${res.final}` : ""}`}. ${e.code} ${!res?.complete ? "will be decided when its scores are complete" : rv.round_no === 1 ? (res?.passed ? "goes through to Round 2" : "stops after Round 1") : res?.passed ? "passes Round 2" : "does not pass Round 2"}.` };
+  return { ok: true, result: res, next: next[0]?.id || null, note: `${patch.status === "overridden" ? "Overridden" : `Confirmed${res?.final != null ? ` ${res.final}` : ""}`}. ${e.code} ${!res?.complete ? "will be decided when its scores are complete" : rv.round_no === 1 ? (res?.passed ? "is shortlisted for Round 2" : "is not shortlisted") : res?.passed ? "is selected" : "is not selected"}.` };
 });

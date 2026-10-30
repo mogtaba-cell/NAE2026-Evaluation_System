@@ -91,7 +91,7 @@ export function ArtworkDrawer({ row, onClose, role, onChanged }) {
     ["Handover", row.handed_at ? `${row.handed_by || ""} → ${row.received_by || ""}, ${when(row.handed_at)}` : "–"],
     ["Condition", `${row.condition || "Good"}${row.damaged ? " (damaged)" : ""}`],
     ["Framing", row.needs_framing ? `${row.glass_framing ? "Needs framing with protective glass" : "Needs framing"}${row.framed ? " · framed" : ""}` : "Not needed"],
-    ["Round 2", row.scored ? `${row.r2?.final ?? ""} · grade ${row.r2?.grade || ""}${row.shortlisted ? " · shortlisted" : ""}` : "Not scored yet"]
+    ["Round 2", row.scored ? `${row.r2?.final ?? ""} · grade ${row.r2?.grade || ""}${row.selected ? " · selected" : ""}` : "Not scored yet"]
   ];
   return <Modal open wide title={`${row.entry.code} · ${SHORT[row.state] || row.state}`} sub={[row.entry.title_en || row.entry.group_name, row.entry.school?.name, row.sub].filter(Boolean).join(" · ")} onClose={onClose} footer={<><Btn href={`/entries/${row.entry.code}`}>Open artwork</Btn><span className="sp" /><Btn onClick={onClose}>Close</Btn></>}>
     {err && <Banner tone="bad" title={err} />}

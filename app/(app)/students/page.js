@@ -25,7 +25,7 @@ export default function Students() {
       {sel("nationality", "All nationalities", fx.nationalities)}
       {sel("gender", "Any gender", fx.genders, 130)}
       {sel("consent", "Showcase consent: any", [{ v: "yes", l: "Consent given" }, { v: "no", l: "No consent" }], 200)}
-      {sel("r2", "Any round", [{ v: "yes", l: "Through to Round 2" }, { v: "no", l: "Still in Round 1" }], 180)}
+      {sel("r2", "Any round", [{ v: "yes", l: "Shortlisted (Round 2)" }, { v: "no", l: "Still in Round 1" }], 180)}
       <span className="row nowrap" style={{ gap: 6 }}><select className="select" style={{ width: 150 }} value={sort} onChange={e => { setSort(e.target.value); setPage(0); }} aria-label="Sort by"><option value="name">Sort: name</option><option value="grade">Sort: grade</option></select>
         <Btn onClick={() => { setDir(dir === "asc" ? "desc" : "asc"); setPage(0); }}>{sort === "name" ? (dir === "asc" ? "A to Z ↑" : "Z to A ↓") : (dir === "asc" ? "Lowest grade first ↑" : "Highest grade first ↓")}</Btn></span>
       {active && <Btn v="ghost" onClick={() => { setQ(""); setF(EMPTY); setPage(0); }}>Clear filters</Btn>}

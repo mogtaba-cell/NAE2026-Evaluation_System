@@ -21,7 +21,7 @@ function RoundCard({ r, d, me, onChanged }) {
   const assigned = r.evaluators || [];
   const missing = assigned.filter(a => !r.scores.find(s => s.evaluator_id === a.id && s.status === "submitted"));
   const unfinished = e.current_round === r.round_no && ["to_score", "in_progress", "review", "not_open"].includes(e.status);
-  const badge = openRv ? <Badge tone="warn">With management</Badge> : res?.complete && lastRv?.status === "overridden" ? <Badge tone="info">Overridden by management</Badge> : res?.passed === true ? <Badge tone="ok">{r.round_no === 1 ? "Through" : "Passed"}</Badge> : res?.passed === false ? <Badge>{r.round_no === 1 ? "Not through" : "Did not pass"}</Badge> : <Badge>{r.status === "open" ? "Scoring" : r.status}</Badge>;
+  const badge = openRv ? <Badge tone="warn">With management</Badge> : res?.complete && lastRv?.status === "overridden" ? <Badge tone="info">Overridden by management</Badge> : res?.passed === true ? <Badge tone="ok">{r.round_no === 1 ? "Shortlisted" : "Selected"}</Badge> : res?.passed === false ? <Badge>{r.round_no === 1 ? "Not shortlisted" : "Did not pass"}</Badge> : <Badge>{r.status === "open" ? "Scoring" : r.status}</Badge>;
   async function run(fn, done) { setBusy(true); setErr(null); try { const x = await fn(); toast(x?.note || done); setEdit(null); setEnter(null); setReas(null); setStop(false); setLock(null); setReason(""); onChanged(); } catch (x) { setErr(x.message); } setBusy(false); }
   const saveEdit = () => run(() => api("/api/scores/edit", { body: { score_id: edit.id, scores: edit.scores, national_identity: edit.national_identity, reason } }), "Score changed");
   const saveEnter = () => run(() => api("/api/scores", { body: { entry_code: e.code, round_no: r.round_no, evaluator_id: enter.evaluator_id, scores: enter.scores, national_identity: enter.national_identity, submit: true, reason } }), "Score entered");
@@ -39,7 +39,7 @@ function RoundCard({ r, d, me, onChanged }) {
       <tbody>{r.scores.map(s => <tr key={s.id}><td><Two a={s.evaluator} b={s.status === "absent" ? "Absent" : s.status === "submitted" ? (s.self ? `Submitted ${when(s.submitted_at)}` : `Entered by ${s.entered_by || "coordinator"}`) : "Draft"} /></td>{crit.map(c => <td key={c.key}>{s.scores?.[c.key] ?? ""}</td>)}{r.rubric?.identity_required && <td>{s.status === "submitted" ? yn(s.national_identity) : ""}</td>}<td>{s.status === "submitted" ? s.total : "–"}</td>{d.can.editScore && <td>{s.status === "submitted" && !res?.locked && <Btn sm v="ghost" onClick={() => { setErr(null); setEdit({ ...s, scores: { ...s.scores } }); }}>Change</Btn>}</td>}</tr>)}</tbody></table></div>
       : <p className="muted">{assigned.length ? `Waiting for ${assigned.map(x => x.name).join(" and ")}.` : r.physical ? "Scored in a session in the room." : r.status === "open" ? "No evaluators assigned yet." : "Scoring has not started."}</p>}
     {r.scores.length > 0 && missing.length > 0 && !r.physical && <p className="x-note">Waiting for {missing.map(x => x.name).join(", ")}.</p>}
-    {r.reviews.map(v => <Banner key={v.id} tone={v.status === "open" ? "warn" : ""} title={v.status === "open" ? `Review with ${v.manager || "management"} · ${dueTxt(v.due_at)[0]}` : v.status === "overridden" ? `Overridden by ${v.manager || "management"}: ${v.new_passed === true ? "goes through" : v.new_passed === false ? "does not go through" : `result ${v.new_result}`}${v.new_passed != null && v.new_result != null ? `, result ${v.new_result}` : ""}` : `Confirmed by ${v.manager || "management"}`}
+    {r.reviews.map(v => <Banner key={v.id} tone={v.status === "open" ? "warn" : ""} title={v.status === "open" ? `Review with ${v.manager || "management"} · ${dueTxt(v.due_at)[0]}` : v.status === "overridden" ? `Overridden by ${v.manager || "management"}: ${v.new_passed === true ? (v.round_no === 2 ? "selected" : "shortlisted") : v.new_passed === false ? (v.round_no === 2 ? "not selected" : "not shortlisted") : `result ${v.new_result}`}${v.new_passed != null && v.new_result != null ? `, result ${v.new_result}` : ""}` : `Confirmed by ${v.manager || "management"}`}
       action={v.status === "open" && ["admin", "management"].includes(me) ? <Btn sm href={`/reviews/${v.id}`}>Open review</Btn> : null}>{v.reason}{v.decision_note ? ` · ${v.decision_note}` : ""}</Banner>)}
     {admin && <div className="row" style={{ gap: 6, flexWrap: "wrap", borderTop: "1px solid var(--rule)", paddingTop: 12 }}>
       {!r.physical && missing.length > 0 && !res?.locked && <Btn sm onClick={() => { setErr(null); setEnter({ evaluator_id: missing[0].id, scores: {}, national_identity: null }); }}>Enter a missing score</Btn>}
@@ -107,6 +107,7 @@ export default function EntryPage({ params }) {
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <section className="card"><FileViewer files={files || d.data.files} canDownload={d.data.can.download} onRefresh={refresh} refreshing={refreshing} checkedAt={e.files_checked_at ? when(e.files_checked_at) : null} /></section>
         <EntryAbout e={e} students={students} showStudents={me !== "evaluator"} />
+        {d.data.cycle?.mixed && <CycleCard e={e} cy={d.data.cycle} can={d.data.can.cycle} onDone={d.reload} />}
       </div>
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <Tabs value={tab} onChange={setTab} items={[["rounds", "Scores"], ["details", "Details"], ...(me !== "evaluator" && access === "full" ? [["history", "History", history.length]] : [])]} />
@@ -131,4 +132,17 @@ export default function EntryPage({ params }) {
     </Modal>
     {lgEdit && logistics && <ArtworkDrawer row={{ ...logistics, entry: { code: e.code, title_en: e.title_en, group_name: e.group_name, school: e.school }, sub: e.sub }} role={me} onClose={() => setLgEdit(false)} onChanged={d.reload} />}
   </>;
+}
+
+// Competition pathways: a group whose students are in two cycles competes in the higher one unless someone chooses.
+function CycleCard({ e, cy, can, onDone }) {
+  const toast = useToast(); const name = n => cy.cycles.find(c => c.n === n);
+  async function choose(v) { try { const r = await api("/api/winners", { body: { action: "cycle", code: e.code, cycle: v ? Number(v) : null } }); toast(r.note); onDone(); } catch (x) { toast(x.message, "err"); } }
+  return <Card title="Competition cycle" sub={`Its students are in ${cy.options.map(n => `${name(n).name} (${name(n).grades})`).join(" and ")}.`}>
+    <p style={{ margin: "0 0 10px" }}>It competes in <b>{name(cy.cycle).name}</b>{cy.chosen ? "" : ", the higher one, unless someone chooses otherwise"}.</p>
+    {can ? <select className="select" style={{ maxWidth: 320 }} value={cy.chosen ? String(cy.cycle) : ""} onChange={x => choose(x.target.value)} aria-label="Cycle">
+      <option value="">Automatic: {name(Math.max(...cy.options)).name}</option>
+      {cy.options.map(n => <option key={n} value={n}>{name(n).name} · {name(n).grades}</option>)}
+    </select> : <span className="small faint">Its coordinator, management or the admin can change this.</span>}
+  </Card>;
 }

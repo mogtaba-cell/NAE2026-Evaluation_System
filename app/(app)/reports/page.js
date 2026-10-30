@@ -5,7 +5,7 @@ import { download } from "@/components/ui";
 
 const REPORTS = [
   ["entries", "Artworks by school", "Every artwork with school, group, students, status and coordinator."],
-  ["results", "Round results", "Round 1 and Round 2 results, grades and whether each artwork went through."],
+  ["results", "Round results", "Round 1 and Round 2 results, grades, shortlisted and selected, cycle and place."],
   ["participation", "Participation", "Artworks and students by pathway, region and school type."],
   ["reviews", "Management reviews", "Every flag with reason, scores, decision and who decided."],
   ["logistics", "Artwork logistics", "Physical entries: collection, shelf, condition, session."],

@@ -30,7 +30,7 @@ export const GET = route(["admin", "coordinator", "storage", "management", "lead
     states: STATES,
     rows: rows.map(r => {
       const x = res.find(y => y.entry_id === r.entry_id); const s = sessions.find(y => y.id === r.session_id);
-      return { ...r, where: r.loc ? `${r.loc.room} · ${r.loc.shelf}` : r.location || null, locSort: r.loc?.sort ?? 9999, scored: !!x?.complete, r2: x ? { passed: x.passed, grade: x.grade, final: x.final, locked: x.locked } : null, shortlisted: !!(x?.complete && x.passed && x.grade === "A"), sub: (S.P[r.entry.pathway_code]?.subs.find(t => t.code === r.entry.sub_code) || {}).name, pathway: S.P[r.entry.pathway_code]?.name, session: s ? { id: s.id, title: s.title, date: s.session_date, time: s.time_text, venue: s.venue, status: s.status, coordinator: s.coordinator?.display_name, coordinator_id: s.coordinator_id, mine: s.coordinator_id === session.sub } : null, coordinator: coords.find(c => c.id === r.entry.coordinator_id)?.display_name || null };
+      return { ...r, where: r.loc ? `${r.loc.room} · ${r.loc.shelf}` : r.location || null, locSort: r.loc?.sort ?? 9999, scored: !!x?.complete, r2: x ? { passed: x.passed, grade: x.grade, final: x.final, locked: x.locked } : null, selected: !!(x?.complete && x.passed), sub: (S.P[r.entry.pathway_code]?.subs.find(t => t.code === r.entry.sub_code) || {}).name, pathway: S.P[r.entry.pathway_code]?.name, session: s ? { id: s.id, title: s.title, date: s.session_date, time: s.time_text, venue: s.venue, status: s.status, coordinator: s.coordinator?.display_name, coordinator_id: s.coordinator_id, mine: s.coordinator_id === session.sub } : null, coordinator: coords.find(c => c.id === r.entry.coordinator_id)?.display_name || null };
     })
   };
 });

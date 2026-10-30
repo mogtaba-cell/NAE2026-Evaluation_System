@@ -1,6 +1,7 @@
 import { route } from "@/lib/api";
 import { db, q, qc, all } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
+import { outcomeCounts } from "@/lib/results";
 
 export const GET = route("*", async ({ session, scope }) => {
   const S = await loadStructure();
@@ -18,7 +19,8 @@ export const GET = route("*", async ({ session, scope }) => {
     return { code: p.code, name: p.name, entries: n, round: openR ? openR.round_no : null, roundStatus: openR ? "open" : (Object.values(S.P[p.code].rounds).some(r => r.status === "closed") ? "between" : "setup"), closes_on: openR?.closes_on, assigned: pr?.assigned || 0, submitted: pr?.submitted || 0, status: st };
   });
   const reviews = (await q(db().from("nae_reviews").select("id, entry_id, manager_id, status, due_at, reason, flagged_at, entry:nae_entries(code, title_en, pathway_code)").eq("status", "open").order("due_at"))).filter(r => has(r.entry?.pathway_code));
-  const out = { role: session.role, total, students, schools, pathways, reviews: { open: reviews.length, overdue: reviews.filter(r => Date.parse(r.due_at) < now).length } };
+  const outcomes = await outcomeCounts(S, has);
+  const out = { role: session.role, outcomes, total, students, schools, pathways, reviews: { open: reviews.length, overdue: reviews.filter(r => Date.parse(r.due_at) < now).length } };
   if (["admin", "storage", "coordinator", "leadership"].includes(session.role)) {
     const lg = (await all(() => db().from("nae_logistics").select("state, location, condition, damaged, needs_framing, collection_id, session_id, entry:nae_entries(coordinator_id, code, pathway_code)"))).filter(x => has(x.entry?.pathway_code));
     out.logistics = { total: lg.length, to_collect: lg.filter(x => x.state === "to_collect").length, unbatched: lg.filter(x => x.state === "to_collect" && !x.collection_id).length, storage: lg.filter(x => x.state === "storage").length, coordinator: lg.filter(x => x.state === "coordinator").length, missing: lg.filter(x => x.state === "missing").length, damaged: lg.filter(x => x.damaged).length, framer: lg.filter(x => x.state === "framer").length, framing: lg.filter(x => x.needs_framing).length, returned: lg.filter(x => x.state === "returned").length, by: lg.reduce((m, x) => { m[x.state] = (m[x.state] || 0) + 1; return m; }, {}), pullSessions: new Set(lg.filter(x => ["requested", "picked"].includes(x.state)).map(x => x.session_id)).size, shelves: lg.filter(x => x.state === "storage").reduce((m, x) => { m[x.location || "Not shelved"] = (m[x.location || "Not shelved"] || 0) + 1; return m; }, {}) };

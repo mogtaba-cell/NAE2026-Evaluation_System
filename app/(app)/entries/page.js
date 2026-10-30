@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useApi, useMeta, PageHead, Search, Table, Pager, Chips, EntryCell, statusBadge, Loading, Badge, Two, Btn, download, useToast, Check } from "@/components/ui";
 import { useState, useEffect } from "react";
 
-const STATUS_ORDER = [["to_score", "To score"], ["in_progress", "In progress"], ["review", "Needs review"], ["through", "Through"], ["not_through", "Not through"], ["final", "Done"], ["not_open", "Not open"], ["not_scored", "Not scored"], ["withdrawn", "Withdrawn"]];
+const STATUS_ORDER = [["to_score", "To score"], ["in_progress", "In progress"], ["review", "Needs review"], ["through", "Shortlisted"], ["not_through", "Not shortlisted"], ["final", "Done"], ["not_open", "Not open"], ["not_scored", "Not scored"], ["withdrawn", "Withdrawn"]];
 
 export default function Entries() {
   const router = useRouter(); const sp = useSearchParams(); const meta = useMeta(); const toast = useToast();
@@ -18,7 +18,7 @@ export default function Entries() {
   const chips = useMemo(() => { const c = d.data?.counts || []; const out = [["", "All", c.reduce((a, x) => a + x.n, 0)]]; [1, 2].forEach(r => STATUS_ORDER.forEach(([s, l]) => { const n = c.filter(x => x.current_round === r && x.status === s).reduce((a, x) => a + x.n, 0); if (n) out.push([`${r}:${s}`, `R${r} · ${l}`, n]); })); return out; }, [d.data]);
   const allScope = p.scope === "all" && me?.role === "coordinator";
   const coords = (meta?.data?.accounts || []).filter(a => a.role === "coordinator");
-  const res = e => { if (e.limited) return <span className="faint small">Not your artwork</span>; const r = (e.results || []).sort((a, b) => b.round_no - a.round_no)[0]; if (!r || r.team == null) return <span className="faint small">{r ? `${r.scored} of ${r.needed} scored` : ""}</span>; return <Two a={<span className="num">{r.final ?? r.team} · {r.grade}</span>} b={`Round ${r.round_no}${r.passed === true ? " · through" : r.passed === false ? " · not through" : ""}`} />; };
+  const res = e => { if (e.limited) return <span className="faint small">Not your artwork</span>; const r = (e.results || []).sort((a, b) => b.round_no - a.round_no)[0]; if (!r || r.team == null) return <span className="faint small">{r ? `${r.scored} of ${r.needed} scored` : ""}</span>; return <Two a={<span className="num">{r.final ?? r.team} · {r.grade}</span>} b={`Round ${r.round_no}${r.passed === true ? (r.round_no === 2 ? " · selected" : " · shortlisted") : r.passed === false ? (r.round_no === 2 ? " · not selected" : " · not shortlisted") : ""}`} />; };
   return <>
     <PageHead title={me?.role === "coordinator" ? (allScope ? "All artworks" : "My artworks") : "Artworks"} sub={allScope ? "Every artwork in the program, for reference. Results and actions show only for your own artworks." : "Search by artwork code, referenceId, RegistrationId, student name or ESIS, or school."} actions={["admin", "management", "leadership"].includes(me?.role) && <Btn onClick={() => download(`/api/reports?kind=entries&${sp.toString()}`).catch(e => toast(e.message, "err"))}>Export list</Btn>} />
     <section className="card">

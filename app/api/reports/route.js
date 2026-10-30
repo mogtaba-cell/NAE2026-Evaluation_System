@@ -1,5 +1,6 @@
 import { route, bad } from "@/lib/api";
-import { db, all } from "@/lib/db";
+import { db, all, q, inChunks } from "@/lib/db";
+import { cycleOf, places, isCompetition, PLACE } from "@/lib/winners";
 import { loadStructure } from "@/lib/structure";
 import { audit } from "@/lib/audit";
 import * as XLSX from "xlsx";
@@ -13,7 +14,8 @@ const FIELDS = {
   grades: ["Grades", e => e.grades_text], medium: ["Medium", e => e.medium], size: ["Size", e => e.size_text], files: ["Files", e => e.files_count],
   r1: ["Round 1 result", e => res(e, 1)?.final ?? res(e, 1)?.team ?? null], r1g: ["Round 1 grade", e => res(e, 1)?.grade || null], r2: ["Round 2 result", e => res(e, 2)?.final ?? res(e, 2)?.team ?? null], r2g: ["Round 2 grade", e => res(e, 2)?.grade || null],
   status: ["Status", e => `Round ${e.current_round} · ${e.status.replace(/_/g, " ")}`], coordinator: ["Coordinator", (e, S, x) => x.acc[e.coordinator_id] || null], description_en: ["Description (English)", e => e.description_en], description_ar: ["Description (Arabic)", e => e.description_ar],
-  r2p: ["Round 2 passed", e => res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No"], shortlist: ["Shortlisted (grade A, passed)", e => res(e, 2)?.passed && res(e, 2)?.grade === "A" ? "Yes" : "No"],
+  shortlist: ["Shortlisted (passed Round 1)", e => res(e, 1)?.passed == null ? null : res(e, 1).passed ? "Yes" : "No"], r2p: ["Selected (passed Round 2)", e => res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No"],
+  cycle: ["Cycle", e => { const c = cycleOf([e.grades_text]).cycle; return c ? `Cycle ${c}` : null; }],
   framing: ["Needs framing", e => lgOf(e)?.needs_framing ? "Yes" : "No"], glass: ["Protective glass", e => lgOf(e)?.glass_framing ? "Yes" : "No"],
   mgmt: ["Viewed by management", e => e.mgmt_viewed_at ? "Yes" : "No"], reg: ["Artwork type", e => e.registration_type || (e.group_name ? "Group" : "Individual")]
 };
@@ -42,7 +44,12 @@ export const GET = route(["admin", "management", "leadership"], async ({ session
     name = kind === "custom" ? "Custom export" : "Artworks by school";
   } else if (kind === "results") {
     const ents = await loadEntries();
-    rows = ents.filter(e => res(e, 1)?.complete || res(e, 2)?.complete).filter(e => !official || [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked)).map(e => ({ "Entry code": e.code, Title: e.title_en, School: e.school?.name, Pathway: S.P[e.pathway_code]?.name, Subpathway: (S.P[e.pathway_code]?.subs.find(s => s.code === e.sub_code) || {}).name, "Round 1 result": res(e, 1)?.final ?? null, "Round 1 grade": res(e, 1)?.grade || null, "Round 1 passed": res(e, 1)?.passed == null ? null : res(e, 1).passed ? "Yes" : "No", "Round 2 result": res(e, 2)?.final ?? null, "Round 2 grade": res(e, 2)?.grade || null, "Round 2 passed": res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No", Shortlisted: res(e, 2)?.passed && res(e, 2)?.grade === "A" ? "Yes" : "No", "Needs framing": lgOf(e)?.needs_framing ? (lgOf(e).glass_framing ? "Yes, with glass" : "Yes") : "No", Final: [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked) ? "Yes" : "No" }));
+    // cycles from the students' grades, and 1st to 3rd place per subpathway and cycle in competition pathways
+    const studs = await inChunks(ents.map(e => e.id), ids => q(db().from("nae_entry_students").select("entry_id, grade").in("entry_id", ids)));
+    const gr = {}; studs.forEach(s => (gr[s.entry_id] ||= []).push(s.grade));
+    const cyc = new Map(ents.map(e => [e.id, cycleOf([...(gr[e.id] || []), e.grades_text]).cycle]));
+    const won = places(ents.filter(e => isCompetition(S, e.pathway_code) && e.current_round === 2 && res(e, 2)?.complete).map(e => ({ entry_id: e.id, sub_code: e.sub_code, cycle: cyc.get(e.id), final: res(e, 2).final, selected: !!res(e, 2).passed })));
+    rows = ents.filter(e => res(e, 1)?.complete || res(e, 2)?.complete).filter(e => !official || [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked)).map(e => ({ "Entry code": e.code, Title: e.title_en, School: e.school?.name, Pathway: S.P[e.pathway_code]?.name, Subpathway: (S.P[e.pathway_code]?.subs.find(s => s.code === e.sub_code) || {}).name, "Round 1 result": res(e, 1)?.final ?? null, "Round 1 grade": res(e, 1)?.grade || null, Shortlisted: res(e, 1)?.passed == null ? null : res(e, 1).passed ? "Yes" : "No", "Round 2 result": res(e, 2)?.final ?? null, "Round 2 grade": res(e, 2)?.grade || null, Selected: res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No", Cycle: cyc.get(e.id) ? `Cycle ${cyc.get(e.id)}` : null, Place: won.get(e.id) ? `${PLACE[won.get(e.id).place]}${won.get(e.id).tie ? " (tie)" : ""}` : null, "Needs framing": lgOf(e)?.needs_framing ? (lgOf(e).glass_framing ? "Yes, with glass" : "Yes") : "No", Final: [1, 2].every(n => !res(e, n)?.complete || res(e, n).locked) ? "Yes" : "No" }));
     name = "Round results";
   } else if (kind === "participation") {
     const ents = await loadEntries(); const by = {};
@@ -50,7 +57,7 @@ export const GET = route(["admin", "management", "leadership"], async ({ session
     rows = Object.values(by).sort((a, b) => b.Entries - a.Entries); name = "Participation"; draft = false;
   } else if (kind === "reviews") {
     const rv = (await all(() => db().from("nae_reviews").select("*, entry:nae_entries(code, title_en, pathway_code)").order("flagged_at"))).filter(r => pathway ? r.entry?.pathway_code === pathway : has(r.entry?.pathway_code));
-    rows = rv.filter(r => !official || r.status !== "open").map(r => ({ Entry: r.entry?.code, Title: r.entry?.title_en, Round: r.round_no, Reason: r.reason, "Flagged at": r.flagged_at, Manager: acc[r.manager_id] || null, Status: r.status, "Team at flag": r.team_at_flag, "New result": r.new_result, "Override outcome": r.new_passed == null ? null : r.new_passed ? "Goes through" : "Does not go through", Note: r.decision_note, "Decided at": r.decided_at }));
+    rows = rv.filter(r => !official || r.status !== "open").map(r => ({ Entry: r.entry?.code, Title: r.entry?.title_en, Round: r.round_no, Reason: r.reason, "Flagged at": r.flagged_at, Manager: acc[r.manager_id] || null, Status: r.status, "Team at flag": r.team_at_flag, "New result": r.new_result, "Override outcome": r.new_passed == null ? null : r.new_passed ? (r.round_no === 2 ? "Selected" : "Shortlisted") : (r.round_no === 2 ? "Not selected" : "Not shortlisted"), Note: r.decision_note, "Decided at": r.decided_at }));
     name = "Review log";
   } else if (kind === "logistics") {
     const lg = (await all(() => db().from("nae_logistics").select("*, entry:nae_entries(code, title_en, pathway_code, school:nae_schools(name)), collection:nae_collections(code, scheduled_on, status)"))).filter(x => pathway ? x.entry?.pathway_code === pathway : has(x.entry?.pathway_code));
