@@ -15,8 +15,8 @@ export const GET = route("*", async ({ session, params, url }) => {
   const full = access === "full";
   const S = await loadStructure();
   const me = await myEvaluatorId(session);
-  // a manager opening an entry counts as "viewed by management"
-  if (session.role === "management" && !e.mgmt_viewed_at) {
+  // opening an artwork counts as "viewed by management" only for the management accounts set to do so (People and logins)
+  if (session.role === "management" && !e.mgmt_viewed_at && (await q(db().from("nae_accounts").select("auto_mark_viewed").eq("id", session.sub).maybeSingle()))?.auto_mark_viewed) {
     await q(db().from("nae_entries").update({ mgmt_viewed_at: new Date().toISOString(), mgmt_viewed_by: session.sub, mgmt_viewed_how: "opened" }).eq("id", e.id));
     e.mgmt_viewed_at = new Date().toISOString(); e.mgmt_viewed_by = session.sub; e.mgmt_viewed_how = "opened";
   }
