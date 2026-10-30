@@ -5,11 +5,11 @@ import { audit } from "@/lib/audit";
 import { canWork } from "@/lib/collections";
 
 // Show one collection photo to signed-in staff (from the Shared Drive, or Supabase for older ones). Emirates ID photos:
-// storage team, admins and the school's coordinator only, and every view in the website is recorded in the audit log. Nothing is cached by the browser.
+// Logistics, admins and the school's coordinator only, and every view in the website is recorded in the audit log. Nothing is cached by the browser.
 export const GET = route(["admin", "storage", "coordinator", "management", "leadership"], async ({ session, params }) => {
   const p = await q(db().from("nae_collection_photos").select("*").eq("id", params.pid).maybeSingle()); if (!p) throw bad("Photo not found.");
   if (p.kind === "eid") {
-    if (!["admin", "storage", "coordinator"].includes(session.role)) throw forbidden("Emirates ID photos are visible to the storage team, admins and the school's coordinator only.");
+    if (!["admin", "storage", "coordinator"].includes(session.role)) throw forbidden("Emirates ID photos are visible to the Logistics team, admins and the school's coordinator only.");
     await audit(session, "Viewed an Emirates ID photo", "collection", p.collection_id, "");
   }
   if (session.role === "coordinator") await canWork(session, p.collection_id);

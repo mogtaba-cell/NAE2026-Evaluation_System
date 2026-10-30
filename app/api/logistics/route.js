@@ -94,7 +94,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
 
   // ---------- condition and issues (several artworks at once) ----------
   if (b.action === "damage" || b.action === "issue") {
-    if (!staff) throw forbidden("Only the storage team and admins can change artwork records.");
+    if (!staff) throw forbidden("Only the Logistics team and admins can change artwork records.");
     const ids = await targets(); const now = new Date().toISOString();
     const patch = b.action === "damage"
       ? { damaged: !!b.damaged, condition: String(b.condition || "").trim() || (b.damaged ? "Damaged" : "Good"), updated_at: now }
@@ -118,7 +118,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     await audit(session, `Framing: ${b.needs ? (b.glass ? "needs framing with protective glass" : "needs framing") : "no framing"}`, "entry", e.id);
     return { ok: true };
   }
-  if (!staff) throw forbidden("Only the storage team and admins can change artwork records.");
+  if (!staff) throw forbidden("Only the Logistics team and admins can change artwork records.");
   if (b.action === "missing_outcome") {
     if (lg.state !== "missing") throw bad("This artwork isn't marked missing.");
     const reason = String(b.reason || "").trim();

@@ -1,5 +1,5 @@
 "use client";
-// Artwork logistics: one shared chain for the storage team and coordinators (plan, slide 13).
+// Artwork logistics: one shared chain for the Logistics team and coordinators (plan, slide 13).
 // "To do" shows each team only what is waiting on them, grouped in batches (a session, a collection); any step
 // can be done for a whole batch or for ticked artworks. "All artworks" is the full list with filters.
 import { useMemo, useState } from "react";
@@ -49,7 +49,7 @@ export default function Logistics() {
   const sessMap = {}; rows.filter(r => r.session && ["requested", "picked", "handed_over", "coordinator", "returning"].includes(r.state)).forEach(r => { const g = sessMap[r.session.id] = sessMap[r.session.id] || { s: r.session, waiting: 0, room: 0, back: 0 }; if (["requested", "picked"].includes(r.state)) g.waiting++; else if (r.state === "returning") g.back++; else g.room++; });
   const sessList = Object.values(sessMap).filter(g => !coord || g.s.mine).sort((a, b) => (a.s.status === "live" ? 0 : 1) - (b.s.status === "live" ? 0 : 1) || String(a.s.date || "9").localeCompare(String(b.s.date || "9")));
   const todoN = staff ? pull.length + back.length + (count.to_collect || 0) : coord ? sessList.reduce((a, g) => a + g.room, 0) : 0;
-  const Sessions = () => <div className="mv-sec"><Card flush title="Scoring sessions" sub={staff ? "Bring each session's artworks into the room in batches, take each batch back when it's scored. Open a board to work on it." : "Storage brings your artworks in batches. Hand a batch back on the board when it's scored."}>
+  const Sessions = () => <div className="mv-sec"><Card flush title="Scoring sessions" sub={staff ? "Bring each session's artworks into the room in batches, take each batch back when it's scored. Open a board to work on it." : "Logistics brings your artworks in batches. Hand a batch back on the board when it's scored."}>
     {sessList.length ? <div className="x-todo" style={{ padding: "4px 16px 12px" }}>{sessList.map(g => <div className="it" key={g.s.id}><div className="tx"><b>{g.s.title} {g.s.status === "live" && <Badge tone="info">In progress</Badge>}</b><span>{[g.s.date && dshort(g.s.date), g.s.time, g.s.venue, g.s.coordinator].filter(Boolean).join(" · ")}</span><span>{[g.waiting && `${g.waiting} waiting on the shelves`, g.room && `${g.room} in the room`, g.back && `${g.back} handed back`].filter(Boolean).join(" · ")}</span></div>
       <Btn sm v={(staff && (g.back || (g.s.status === "live" && g.waiting && !g.room))) || (coord && g.room) ? "primary" : "secondary"} href={`/pull-list?session=${g.s.id}`}>Open board</Btn></div>)}</div> : <p className="muted" style={{ padding: 16 }}>No session has artworks to move right now.</p>}
   </Card></div>;
@@ -64,7 +64,7 @@ export default function Logistics() {
 
   return <>
     <PageHead title="Artwork logistics"
-      sub={coord ? "Physical artworks of your schools and sessions. During a session, storage brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from collection to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
+      sub={coord ? "Physical artworks of your schools and sessions. During a session, Logistics brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from collection to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
       actions={<>{staff && <Btn href="/collections">Collections</Btn>}{(staff || coord) && <Btn v="primary" href="/pull-list">Session boards</Btn>}</>} />
 
     <div className="mv-pipe">
@@ -175,7 +175,7 @@ function Locations() {
   const post = async (body, msg) => { try { const r = await api("/api/locations", { body }); toast(r.note || msg || "Saved"); return true; } catch (e) { toast(e.message, "err"); return false; } };
   if (!locs.data) return <Loading error={locs.error} />;
   const rooms = locs.data.rooms;
-  return <Card title="Storage locations" sub="Rooms hold shelves; shelves hold rows. Tag each room with the pathways stored there: check-in opens on that room, and storage can still pick another." right={<Btn onClick={() => setNr({ name: "", shelves: "6", rows: "3", pathways: [] })}>Add room</Btn>}>
+  return <Card title="Storage locations" sub="Rooms hold shelves; shelves hold rows. Tag each room with the pathways stored there: check-in opens on that room, and Logistics can still pick another." right={<Btn onClick={() => setNr({ name: "", shelves: "6", rows: "3", pathways: [] })}>Add room</Btn>}>
     {!rooms.length && <p className="muted">No rooms yet.</p>}
     <div className="stack" style={{ gap: 10 }}>{rooms.map(r => { const isOpen = open[r.id] ?? rooms.length <= 3; return <div key={r.id} className="rm" style={r.active ? undefined : { opacity: .6 }}>
       <div className="rm-h"><button type="button" className="link nm" onClick={() => setOpen({ ...open, [r.id]: !isOpen })}>{isOpen ? "▾" : "▸"} {r.name}</button>

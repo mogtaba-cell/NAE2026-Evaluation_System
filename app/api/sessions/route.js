@@ -85,6 +85,6 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   await q(db().from("nae_session_entries").insert(picked.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: i }))));
   const requested = await requestForSession(session, s, picked.filter(x => !x.online).map(x => x.entry_id));
   for (const x of picked) await recompute(x.entry_id, r.round_no, { S, quiet: true });
-  await audit(session, `Created ${s.title}`, "session", s.id, `${picked.length} artworks${requested ? ` · ${requested} physical, on storage's session board` : ""}`);
+  await audit(session, `Created ${s.title}`, "session", s.id, `${picked.length} artworks${requested ? ` · ${requested} physical, on the Logistics session board` : ""}`);
   return { id: s.id, count: picked.length, physical: requested, online: picked.filter(x => x.online).length };
 });

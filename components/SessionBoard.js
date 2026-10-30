@@ -1,8 +1,8 @@
 "use client";
 import LocPicker from "@/components/LocPicker";
-// The live board of one scoring session, shared by storage and the session's coordinator.
+// The live board of one scoring session, shared by Logistics and the session's coordinator.
 //   Waiting on the shelves  ->  In the room (batch 1, 2, ...)  ->  Handed back  ->  Back on the shelves
-// Storage brings the next batch; the coordinator hands a batch back once it is scored; storage confirms it is back
+// Logistics brings the next batch; the coordinator hands a batch back once it is scored; Logistics confirms it is back
 // on the shelves and brings the next one. It refreshes itself every few seconds, so both sides see the same thing.
 import { useState } from "react";
 import { api, useApi, useToast, Btn, Badge, Banner, Loading, Modal, Field, Check, when } from "@/components/ui";
@@ -56,7 +56,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
             : <><span className="small">Bring the next</span><select className="select sb-n" value={count} onChange={e => setCount(+e.target.value)}>{[5, 8, 10, 12, 15, 20, 30].map(n => <option key={n} value={n}>{n}</option>)}</select><Btn sm v="primary" busy={busy === "bring"} onClick={() => go("bring", { action: "bring", count })}>as batch {nextBatch}</Btn></>}
           <span className="sp" /><Check label="All" checked={sel.waiting.size > 0 && sel.waiting.size === waiting.length} onChange={v => setAll("waiting", waiting.map(r => r.code), v)} />
         </div>}
-        {!staff && waiting.length > 0 && <p className="small faint sb-note">Storage brings these in batches.</p>}
+        {!staff && waiting.length > 0 && <p className="small faint sb-note">Logistics brings these in batches.</p>}
         <div className="sb-list">{waiting.map(r => <Row key={r.code} r={r} k="waiting" />)}{!waiting.length && <p className="small faint sb-note">Nothing waiting.</p>}</div>
       </section>
 
@@ -72,7 +72,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
       </section>
 
       <section className="sb-lane">
-        <div className="sb-lh"><div><b>Handed back</b><span className="small faint">{staff ? "Check them and put them back" : "Storage takes them back"}</span></div><span className="n">{back.length}</span></div>
+        <div className="sb-lh"><div><b>Handed back</b><span className="small faint">{staff ? "Check them and put them back" : "Logistics takes them back"}</span></div><span className="n">{back.length}</span></div>
         {staff && back.length > 0 && <div className="sb-act"><Btn sm v="primary" busy={busy === "shelve"} onClick={() => setAsk({ shelve: true, codes: sel.back.size ? [...sel.back] : null })}>{sel.back.size ? `Back on shelves (${sel.back.size})` : `All ${back.length} back on shelves`}</Btn><span className="sp" /><Check label="All" checked={sel.back.size > 0 && sel.back.size === back.length} onChange={v => setAll("back", back.map(r => r.code), v)} /></div>}
         <div className="sb-list">{back.map(r => <Row key={r.code} r={r} k="back" />)}{!back.length && <p className="small faint sb-note">Nothing to put back.</p>}</div>
         {done.length > 0 && <details className="sb-done"><summary className="small">{done.length} scored and back on the shelves</summary>{done.map(r => <Row key={r.code} r={r} />)}</details>}
@@ -83,7 +83,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
 
     <Modal open={!!ask} title={ask?.shelve ? "Back on the shelves" : `Hand back batch ${ask?.batch || ""}?`} onClose={() => setAsk(null)} footer={<><Btn onClick={() => setAsk(null)}>Cancel</Btn><Btn v="primary" busy={!!busy} onClick={() => ask.shelve ? go("shelve", { action: "shelve", codes: ask.codes || undefined, location_id: loc || null }) : go(`back${ask.batch}`, { action: "back", batch: ask.batch })}>Confirm</Btn></>}>
       {ask?.shelve ? <Field label="Put them" help="Leave as is to put each artwork back on the shelf it came from."><LocationSelect value={loc} onChange={setLoc} /></Field>
-        : ask && <Banner tone="warn" title={`${ask.left} artwork${ask.left === 1 ? " isn't" : "s aren't"} fully scored yet`}>They go back to storage and wait on the shelves again; storage can bring them in a later batch.</Banner>}
+        : ask && <Banner tone="warn" title={`${ask.left} artwork${ask.left === 1 ? " isn't" : "s aren't"} fully scored yet`}>They go back to storage and wait on the shelves again; Logistics can bring them in a later batch.</Banner>}
     </Modal>
   </div>;
 }

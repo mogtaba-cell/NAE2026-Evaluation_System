@@ -102,7 +102,7 @@ export default function EntryPage({ params }) {
       <Check label="Viewed by management" checked={!!e.mgmt_viewed_at} disabled={me === "management" && e.mgmt_viewed_how === "opened"} onChange={markViewed} />
       {e.mgmt_viewed_at && <span className="small faint">{e.mgmt_viewed_how === "opened" ? `Opened by ${e.mgmt_viewed_name || "management"}` : `Marked by ${e.mgmt_viewed_name || "someone"}`} · {when(e.mgmt_viewed_at)}</span>}
     </div>}
-    {access === "view" && <Banner title="View only">{me === "storage" ? "Scores and results are not shown to the storage team." : "This artwork isn't allocated to you. You can see its files and details; scores and actions are for its coordinator."}</Banner>}
+    {access === "view" && <Banner title="View only">{me === "storage" ? "Scores and results are not shown to the Logistics team." : "This artwork isn't allocated to you. You can see its files and details; scores and actions are for its coordinator."}</Banner>}
     <div className="x-side x-rec">
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <section className="card"><FileViewer files={files || d.data.files} canDownload={d.data.can.download} onRefresh={refresh} refreshing={refreshing} checkedAt={e.files_checked_at ? when(e.files_checked_at) : null} /></section>

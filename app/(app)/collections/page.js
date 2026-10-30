@@ -174,7 +174,7 @@ function Detail({ id, can, onBack, onChanged }) {
         <div className="cl-sec"><div className="cl-sh"><b>4. Handed over by (school contact)</b></div>
           <Field label="Full name"><input className="input" autoComplete="off" value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} placeholder="As on the Emirates ID" /></Field>
           <Field label="Mobile number"><input className="input" type="tel" inputMode="tel" autoComplete="off" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="050 123 4567" /></Field>
-          <Field label="Emirates ID photo" help="Saved with the box photos in the school's folder in the Shared Drive. In the website only admins, storage and the school's coordinator can open it, and every view is recorded.">
+          <Field label="Emirates ID photo" help="Saved with the box photos in the school's folder in the Shared Drive. In the website only admins, Logistics and the school's coordinator can open it, and every view is recorded.">
             <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>{!eid && <PhotoButton collectionId={id} kind="eid" onAdded={added} label="Photograph Emirates ID" primary />}<Thumbs photos={eid ? [eid] : []} canRemove onRemove={removePhoto} /></div>
           </Field>
         </div>

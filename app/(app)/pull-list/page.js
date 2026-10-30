@@ -24,7 +24,7 @@ export default function SessionBoards() {
   const rows = board.data?.rows || [];
   const waiting = rows.filter(r => r.lane === "waiting");
   return <>
-    <PageHead title="Session boards" sub="Storage brings each session's artworks into the room in batches and takes each batch back when it's scored. The coordinator sees the same board." actions={<>{s && role !== "storage" && <Btn className="no-print" href={`/sessions/${id}`}>Score sheet</Btn>}<Btn className="no-print" onClick={() => window.print()}>Print pull list</Btn></>} />
+    <PageHead title="Session boards" sub="Logistics brings each session's artworks into the room in batches and takes each batch back when it's scored. The coordinator sees the same board." actions={<>{s && role !== "storage" && <Btn className="no-print" href={`/sessions/${id}`}>Score sheet</Btn>}<Btn className="no-print" onClick={() => window.print()}>Print pull list</Btn></>} />
     <div className="sess-tabs no-print">{active.map(x => { const a = x.artworks || {}; const room = (a.coordinator || 0) + (a.handed_over || 0), back = a.returning || 0, wait = (a.requested || 0) + (a.picked || 0); return <button key={x.id} type="button" className={`sess-tab${x.id === id ? " on" : ""}`} onClick={() => router.replace(`/pull-list?session=${x.id}`)}>
       <span className="row nowrap" style={{ gap: 6 }}><b>{x.title}</b><Badge tone={STATUS[x.status]?.[1]}>{STATUS[x.status]?.[0]}</Badge></span>
       <span className="small faint">{[x.session_date && dshort(x.session_date), x.time_text, x.venue, x.coordinator].filter(Boolean).join(" · ")}</span>

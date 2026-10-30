@@ -16,7 +16,7 @@ async function loadSession(id, session) {
   return s;
 }
 
-// The session's score sheet: only its coordinator and admins (the storage team uses the pull list).
+// The session's score sheet: only its coordinator and admins (the Logistics team uses the pull list).
 export const GET = route(["admin", "coordinator"], async ({ session, params, url }) => {
   const S = await loadStructure();
   const s = await loadSession(params.id, session);
@@ -92,7 +92,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} artwork${open.length === 1 ? " is" : "s are"} not fully scored. They can go into another session. Artworks still with you are handed back to storage.` };
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
     // artworks still out go back: never handed over → straight back to storage; with the coordinator → handed
-    // back (storage confirms receipt and the shelf)
+    // back (Logistics confirms receipt and the shelf)
     await releaseFromSession(session, s, ids, "session finished");
     for (const id of open) await recompute(id, r.round_no, { S, quiet: true });
     await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored` : "");

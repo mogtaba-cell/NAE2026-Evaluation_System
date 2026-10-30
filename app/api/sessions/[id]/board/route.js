@@ -4,10 +4,10 @@ import { loadStructure, isPhysicalRound } from "@/lib/structure";
 import { applyMove } from "@/lib/movements";
 import { audit } from "@/lib/audit";
 
-// The live board of one scoring session, shared by its coordinator and the storage team.
+// The live board of one scoring session, shared by its coordinator and the Logistics team.
 // Lanes: waiting on the shelves -> in the room (batch 1, 2, ...) -> handed back -> back on the shelves.
-// Storage brings the next batch (a number of artworks in shelf order, or ticked ones); the coordinator hands a batch
-// back when it is scored; storage confirms it is back on the shelves. Every move is recorded on each artwork.
+// Logistics brings the next batch (a number of artworks in shelf order, or ticked ones); the coordinator hands a batch
+// back when it is scored; Logistics confirms it is back on the shelves. Every move is recorded on each artwork.
 async function load(id, session) {
   const s = await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name)").eq("id", id).maybeSingle());
   if (!s) throw bad("Session not found.");
@@ -54,7 +54,7 @@ export const POST = route(["admin", "coordinator", "storage"], async ({ session,
   const ids = async list => list.length ? (await inChunks(list.map(x => x.code), part => q(db().from("nae_entries").select("id, code").in("code", part)))).map(x => x.id) : [];
   let action, list, opts = { ref_type: "session", ref_id: s.id }, what;
   if (b.action === "bring") {
-    if (!staff) throw forbidden("The storage team brings artworks to the room.");
+    if (!staff) throw forbidden("The Logistics team brings artworks to the room.");
     if (s.status === "done") throw bad("This session is finished.");
     list = pickCodes("waiting");
     if (!b.codes?.length) list = list.slice(0, Math.max(1, Math.min(200, Number(b.count) || 10)));
@@ -67,7 +67,7 @@ export const POST = route(["admin", "coordinator", "storage"], async ({ session,
     list = pickCodes("room", b.batch ? x => x.batch === Number(b.batch) : null);
     action = "return_room"; what = b.batch ? `Batch ${b.batch} handed back to storage` : "Artworks handed back to storage";
   } else if (b.action === "shelve") {
-    if (!staff) throw forbidden("The storage team confirms artworks are back on the shelves.");
+    if (!staff) throw forbidden("The Logistics team confirms artworks are back on the shelves.");
     list = [...pickCodes("back"), ...(b.from_room ? pickCodes("room", b.batch ? x => x.batch === Number(b.batch) : null) : [])];
     action = "receive_back"; opts = { ...opts, location_id: b.location_id || null }; what = "Back on the shelves";
   } else if (b.action === "missing") {

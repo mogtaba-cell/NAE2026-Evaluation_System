@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useApi } from "@/components/ui";
 
 // Storage place: room, then shelf, then row. value/onChange carry the row's location id.
-// pathway: open on a room tagged with that pathway (storage can still pick any room).
+// pathway: open on a room tagged with that pathway (Logistics can still pick any room).
 export default function LocPicker({ value, onChange, pathway, allowEmpty, emptyLabel = "Same place", compact }) {
   const d = useApi("/api/locations");
   const rooms = useMemo(() => (d.data?.rooms || []).filter(r => r.active).map(r => ({ ...r, shelves: r.shelves.filter(s => s.active).map(s => ({ ...s, slots: s.slots.filter(x => x.active) })).filter(s => s.slots.length) })).filter(r => r.shelves.length), [d.data]);
