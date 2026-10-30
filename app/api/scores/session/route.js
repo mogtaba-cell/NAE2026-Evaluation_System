@@ -43,7 +43,7 @@ export const POST = route(["coordinator", "admin"], async ({ session, request })
     const v = await validateScores(version.criteria, i.scores);
     if (v.error) throw bad(`${nameOf(i.evaluator_id)}: ${v.error}`);
     if (version.identity_required && typeof i.national_identity !== "boolean") throw bad(`${nameOf(i.evaluator_id)}: choose yes or no for national identity.`);
-    rows.push({ evaluator_id: i.evaluator_id, status: "submitted", scores: v.scores, total: weightedTotal(version.criteria, v.scores), national_identity: typeof i.national_identity === "boolean" ? i.national_identity : null, submitted_at: now });
+    rows.push({ evaluator_id: i.evaluator_id, status: "submitted", scores: v.scores, total: weightedTotal(version.criteria, v.scores), national_identity: typeof i.national_identity === "boolean" ? i.national_identity : null, comment: i.comment ? String(i.comment).trim().slice(0, 1000) || null : null, submitted_at: now });
   }
   await q(db().from("nae_scores").upsert(rows.map(r => ({ round_id: round.id, entry_id: e.id, rubric_version_id: pin.version_id, entered_by: session.sub, session_id: sess.id, updated_at: now, comment: null, ...r })), { onConflict: "round_id,entry_id,evaluator_id" }));
   const saved = rows.filter(r => r.status === "submitted"), abs = rows.filter(r => r.status === "absent");

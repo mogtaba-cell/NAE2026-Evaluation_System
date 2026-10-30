@@ -117,9 +117,11 @@ export function Radio({ name, label, checked, onChange }) {
 export function Switch({ checked, onChange, label }) {
   return <label className="switch"><input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} /><span className="tr" />{label && <span>{label}</span>}</label>;
 }
-export function Table({ cols, rows, onRow, minw, empty = "Nothing here", sel, footer }) {
-  return <div className="tw"><table className="t" style={minw ? { minWidth: minw } : undefined}><thead><tr>{cols.map((c, i) => { const C = typeof c === "string" ? { h: c } : c; return <th key={i} className={C.cls || ""}>{C.h}</th>; })}</tr></thead>
-    <tbody>{rows.length ? rows.map((r, i) => <tr key={i} className={`${onRow ? "clickable" : ""}${sel === i ? " selrow" : ""}`} onClick={onRow ? () => onRow(i) : undefined}>{r.map((cell, j) => { const C = typeof cols[j] === "string" ? {} : cols[j] || {}; return <td key={j} className={C.cls || ""}>{cell}</td>; })}</tr>) : <tr><td colSpan={cols.length} style={{ textAlign: "center", color: "var(--ink3)", height: 72 }}>{empty}</td></tr>}</tbody></table>{footer}</div>;
+export function Table({ cols, rows, onRow, minw, empty = "Nothing here", sel, footer, lead = 0, flat }) {
+  // On phones (flat off) each row turns into a small card: the lead cell on top, the others labelled underneath.
+  const C = j => typeof cols[j] === "string" ? { h: cols[j] } : cols[j] || {};
+  return <div className={`tw${flat ? "" : " stk"}`}><table className="t" style={minw ? { minWidth: minw } : undefined}><thead><tr>{cols.map((c, i) => <th key={i} className={C(i).cls || ""}>{C(i).h}</th>)}</tr></thead>
+    <tbody>{rows.length ? rows.map((r, i) => <tr key={i} className={`${onRow ? "clickable" : ""}${sel === i ? " selrow" : ""}`} onClick={onRow ? () => onRow(i) : undefined}>{r.map((cell, j) => { const h = C(j).label || C(j).h; return <td key={j} className={`${C(j).cls || ""}${j === lead ? " lead" : ""}${cell === "" || cell === null || cell === undefined || cell === false ? " nil" : ""}`} data-h={typeof h === "string" && h && j !== lead ? h : undefined}>{cell}</td>; })}</tr>) : <tr><td colSpan={cols.length} className="lead" style={{ textAlign: "center", color: "var(--ink3)", height: 72 }}>{empty}</td></tr>}</tbody></table>{footer}</div>;
 }
 export function Pager({ page, per, count, onPage }) {
   const from = count ? page * per + 1 : 0, to = Math.min(count, (page + 1) * per);

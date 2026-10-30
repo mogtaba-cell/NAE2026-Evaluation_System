@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
+    "exceljs": "^4.4.0",
     "jose": "^5.10.0",
     "next": "^15.0.0",
     "react": "^18.3.1",

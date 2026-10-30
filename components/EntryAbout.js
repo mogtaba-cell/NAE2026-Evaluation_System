@@ -16,18 +16,18 @@ function Block({ en, ar, lang, big, stack }) {
   return lang === "ar" ? AR : EN;
 }
 
-export default function EntryAbout({ e, compact, showStudents, students = [] }) {
+export default function EntryAbout({ e, compact, showStudents, students = [], onEdit }) {
   const [lang, setLang] = useLang(e);
   const refl = Q.filter(([k]) => e.reflections?.[k]);
-  const details = [["Pathway", [e.pathway, e.sub].filter(Boolean).join(" · ")], ["Medium", e.medium], ["Size", e.size_text], ["Artwork type", e.registration_type === "Group" || e.group_name ? `Group${e.group_name ? `: ${e.group_name}` : ""}` : "Individual"], ["Students", e.students_count ? `${e.students_count}${e.grades_text ? ` · ${e.grades_text}` : ""}` : e.grades_text]].filter(x => x[1]);
+  const group = e.registration_type === "Group" || (!e.registration_type && e.group_name);
+  const details = [["Pathway", e.pathway], ["Subpathway", e.sub], ["Size", e.size_text], ["Medium", e.medium], ["Artwork type", group ? "Group" : "Individual"], ["Group name", group ? e.group_name : null], ["Students", e.students_count ? `${e.students_count} student${e.students_count === 1 ? "" : "s"}` : null], ["Grade", e.grades_text]].filter(x => x[1]);
   return <section className="card x-about">
-    <div className="card-h"><div className="tt"><h3>About the artwork</h3><span className="sub">As submitted by the school</span></div><LangToggle lang={lang} onChange={setLang} /></div>
+    <div className="card-h"><div className="tt"><h3>About the artwork</h3><span className="sub">{(e.manual_fields || []).length ? "As submitted by the school, with corrections" : "As submitted by the school"}</span></div>{onEdit && <button type="button" className="btn ghost sm" onClick={onEdit}>Edit details</button>}<LangToggle lang={lang} onChange={setLang} /></div>
     <div className="stack" style={{ gap: 16 }}>
       <Block en={e.title_en} ar={e.title_ar} lang={lang} big stack={compact} />
       <div className="stack s8"><span className="label">Description</span><Block en={e.description_en} ar={e.description_ar} lang={lang} stack={compact} /></div>
       {refl.length > 0 && <div className="x-qa">{refl.map(([k, q]) => <div key={k}><b>{q}</b><p dir="auto" className={/[؀-ۿ]/.test(e.reflections[k]) ? "rtl" : ""} style={{ whiteSpace: "pre-wrap" }}>{e.reflections[k]}</p></div>)}</div>}
-      {!compact && details.length > 0 && <dl className="kv">{details.flatMap(([k, v]) => [<dt key={k + "t"}>{k}</dt>, <dd key={k + "d"}>{v}</dd>])}</dl>}
-      {compact && details.length > 0 && <div className="f3-meta">{details.map(([k, v]) => <span key={k}><span className="faint">{k}:</span> <span className="muted">{v}</span></span>)}</div>}
+      {details.length > 0 && <div className={`x-facts${compact ? " sm" : ""}`}>{details.map(([k, v]) => <div key={k}><span>{k}</span><b dir="auto">{v}</b></div>)}</div>}
       {showStudents && students.length > 0 && <div className="x-stu">{students.map((s, i) => <div key={i}><div className="who">
         <b dir="auto">{lang === "ar" ? s.name_ar || s.name_en : s.name_en || s.name_ar || `Student ${i + 1}`}</b>
         <span>{[s.grade, s.nationality, s.consent === false ? "No showcase consent" : null].filter(Boolean).join(" · ")}</span></div></div>)}</div>}

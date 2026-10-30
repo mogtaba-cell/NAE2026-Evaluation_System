@@ -17,7 +17,7 @@ export default function Schools() {
       && (!f.region || s.region === f.region) && (!f.type || s.school_type === f.type) && (!f.pathway || s.pathways.includes(f.pathway))
       && (!f.r2 || (f.r2 === "some" ? s.round2 > 0 : f.r2 === "none" ? s.round2 === 0 : f.r2 === "passed" ? s.passedR2 > 0 : true)))
     .sort((a, b) => (sort === "name" ? a.name.localeCompare(b.name) : val(a, sort) - val(b, sort) || a.name.localeCompare(b.name)) * (dir === "asc" ? 1 : -1));
-  const head = (k, label, cls) => ({ h: <button type="button" className={`th-sort${sort === k ? " on" : ""}`} onClick={() => { if (sort === k) setDir(dir === "asc" ? "desc" : "asc"); else { setSort(k); setDir(k === "name" ? "asc" : "desc"); } }}>{label}{sort === k ? (dir === "asc" ? " ↑" : " ↓") : ""}</button>, cls });
+  const head = (k, label, cls) => ({ h: <button type="button" className={`th-sort${sort === k ? " on" : ""}`} onClick={() => { if (sort === k) setDir(dir === "asc" ? "desc" : "asc"); else { setSort(k); setDir(k === "name" ? "asc" : "desc"); } }}>{label}{sort === k ? (dir === "asc" ? " ↑" : " ↓") : ""}</button>, cls, label });
   const active = Object.values(f).some(Boolean) || t;
   return <>
     <PageHead title="Schools" sub="Every school with artworks in this program. Open a school to see its catalog: each artwork, where it stands, and its students." />

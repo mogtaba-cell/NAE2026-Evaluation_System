@@ -5,6 +5,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Modal, Field, Card, Table, Tabs, Check, Seg, Search, dshort } from "@/components/ui";
+import Framing from "@/components/Framing";
 import { ArtworkBatch, ArtworkDrawer, bySession, SHORT } from "@/components/Movements";
 
 const CHAIN = ["to_collect", "storage", "requested", "coordinator", "returning"];
@@ -58,13 +59,14 @@ export default function Logistics() {
     ...(staff || coord ? [["todo", "To do", todoN]] : []),
     ["all", coord ? "My artworks" : "All artworks", rows.length],
     ...(coord ? [] : [["exceptions", "Exceptions", exc.length]]),
+    ...(staff || role === "management" ? [["framing", "Framing"]] : []),
     ...(staff ? [["locations", "Storage locations"], ["venues", "Session venues"]] : [])
   ];
   const showState = st => { setF({ ...f, state: st }); setTab("all"); };
 
   return <>
     <PageHead title="Artwork logistics"
-      sub={coord ? "Physical artworks of your schools and sessions. During a session, Logistics brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from collection to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
+      sub={coord ? "Physical artworks of your schools and sessions. During a session, Logistics brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from school delivery to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
       actions={<>{staff && <Btn href="/collections">Collections</Btn>}{(staff || coord) && <Btn v="primary" href="/pull-list">Session boards</Btn>}</>} />
 
     <div className="mv-pipe">
@@ -78,11 +80,9 @@ export default function Logistics() {
     {tab === "todo" && staff && <>
       
       <Sessions />
-      {(unbatched.length > 0 || scheduled.length > 0) && <div className="mv-sec"><Card title="Collections from schools" right={<span className="row" style={{ gap: 8 }}>{unbatched.length > 0 && <Btn v="primary" sm onClick={() => setMk({ mode: "all", date: "", codes: [] })}>Schedule collections</Btn>}<Btn sm href="/collections">Open collections</Btn></span>}>
+      {(unbatched.length > 0 || scheduled.length > 0) && <div className="mv-sec"><Card title="Deliveries from schools" right={<span className="row" style={{ gap: 8 }}>{unbatched.length > 0 && <Btn v="primary" sm onClick={() => setMk({ mode: "all", date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dubai" }), codes: [] })}>Prepare deliveries</Btn>}<Btn sm href="/collections">Open collections</Btn></span>}>
         <p className="muted">{unbatched.length ? `${unbatched.length} artwork${unbatched.length === 1 ? " is" : "s are"} not in a collection yet. ` : ""}{scheduled.length ? `${scheduled.length} collection${scheduled.length === 1 ? " is" : "s are"} scheduled and waiting to be checked in.` : ""}</p></Card></div>}
-      <div className="mv-sec"><Card flush title="Framing for the showcase" sub="Ticked during Round 2 scoring. Selected means it passed Round 2." right={<Check label="Selected only" checked={onlyShort} onChange={setOnlyShort} />}>
-        <ArtworkBatch rows={framing} role={role} steps={["to_framer", "from_framer"]} onDone={reload} onOpen={openRow} empty="No artworks waiting for framing."
-          groups={[{ key: "s", title: "In storage, to send", rows: framing.filter(is("storage")) }, { key: "f", title: "At the framer", rows: framing.filter(is("framer")) }].filter(g => g.rows.length)} /></Card></div>
+      {framing.length > 0 && <div className="mv-sec"><Card title="Framing for the showcase" right={<Btn sm v="primary" onClick={() => setTab("framing")}>Open framing</Btn>}><p className="muted" style={{ margin: 0 }}>{framing.filter(r => r.state === "storage").length} selected artwork{framing.filter(r => r.state === "storage").length === 1 ? "" : "s"} to send to the framer{framing.filter(r => r.state === "framer").length ? `, ${framing.filter(r => r.state === "framer").length} at the framer` : ""}. Open Framing for photos, the checklist export and sending them.</p></Card></div>}
     </>}
 
     {tab === "todo" && coord && <Sessions />}
@@ -92,12 +92,13 @@ export default function Logistics() {
     {tab === "exceptions" && <Card flush title="Exceptions" sub="Missing, damaged, or needing a fix. Each artwork is handled on its own so the rest of its batch carries on. Open an artwork to decide what happens to a missing one.">
       <ArtworkBatch rows={exc} role={role} steps={["found", "missing"]} onDone={reload} onOpen={openRow} empty="No exceptions."
         groups={[
-          { key: "m", title: "Missing", sub: "Collect later, score from its files (admin) or withdraw (admin)", rows: exc.filter(is("missing")) },
+          { key: "m", title: "Missing", sub: "School delivers later, score from its files (admin) or withdraw (admin)", rows: exc.filter(is("missing")) },
           { key: "d", title: "Damaged", rows: exc.filter(r => r.state !== "missing" && r.damaged) },
           { key: "i", title: "Needs a fix", rows: exc.filter(r => r.state !== "missing" && !r.damaged && r.issue) }
         ].filter(g => g.rows.length)} /></Card>}
 
     {tab === "locations" && staff && <Locations />}
+    {tab === "framing" && <Framing canAct={staff} />}
     {tab === "venues" && staff && <Venues admin={role === "admin"} />}
 
     {open && <ArtworkDrawer row={open} role={role} onClose={() => setOpen(null)} onChanged={reload} />}
@@ -132,10 +133,10 @@ function ScheduleCollections({ rows, mk, setMk, onDone, toast }) {
   const sel = new Set(mk.codes); const set = (codes, on) => { const s = new Set(sel); codes.forEach(c => on ? s.add(c) : s.delete(c)); setMk({ ...mk, codes: [...s] }); };
   const n = mk.mode === "all" ? rows.length : sel.size;
   async function go() { setBusy(true); try { const r = await api("/api/logistics", { body: { action: "create_collections", scheduled_on: mk.date || null, codes: mk.mode === "all" ? undefined : mk.codes } }); toast(r.note); onDone(); } catch (e) { toast(e.message, "err"); } setBusy(false); }
-  return <Modal open wide title="Schedule collections" sub="One collection per school, pathway and subpathway. You can change each date later." onClose={() => setMk(null)} footer={<><span className="small faint">{n} artwork{n === 1 ? "" : "s"}</span><span className="sp" /><Btn onClick={() => setMk(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!n} onClick={go}>Create collections</Btn></>}>
+  return <Modal open wide title="Prepare school deliveries" sub="One collection per school: everything that school brings to the office. Set the date the school is expected; you can change it later." onClose={() => setMk(null)} footer={<><span className="small faint">{n} artwork{n === 1 ? "" : "s"}</span><span className="sp" /><Btn onClick={() => setMk(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!n} onClick={go}>Create collections</Btn></>}>
     <div className="stack" style={{ gap: 12 }}>
       <Seg value={mk.mode} onChange={v => setMk({ ...mk, mode: v })} items={[["all", `All ${rows.length} not scheduled`], ["pick", "Choose schools or artworks"]]} />
-      <Field label="Collection date (optional)"><input type="date" className="input" style={{ maxWidth: 220 }} value={mk.date} onChange={e => setMk({ ...mk, date: e.target.value })} /></Field>
+      <Field label="Expected delivery date (optional)"><input type="date" className="input" style={{ maxWidth: 220 }} value={mk.date} onChange={e => setMk({ ...mk, date: e.target.value })} /></Field>
       {mk.mode === "pick" && <div className="stack s4" style={{ maxHeight: 340, overflow: "auto", border: "1px solid var(--rule)", borderRadius: "var(--r)", padding: 8 }}>
         {schools.map(g => { const codes = g.rows.map(r => r.entry.code); const all = codes.every(c => sel.has(c)); return <details key={g.key}>
           <summary className="row nowrap" style={{ gap: 8, cursor: "pointer", padding: "4px 0" }}><span onClick={e => e.stopPropagation()}><Check label="" checked={all} onChange={v => set(codes, v)} /></span><b style={{ fontWeight: 500 }}>{g.name}</b><span className="small faint">{codes.filter(c => sel.has(c)).length}/{codes.length}</span></summary>
@@ -152,14 +153,18 @@ function Venues({ admin }) {
   async function upd(id, patch) { try { await api("/api/venues", { body: { action: "update", id, ...patch } }); } catch (e) { toast(e.message, "err"); v.reload(); } }
   const list = v.data?.venues || [];
   return <Card title="Session venues" sub={admin ? "The rooms and halls scoring sessions can be held in. Coordinators pick one of these when they plan a session. Renaming a venue updates its sessions; untick one that is no longer used." : "The rooms and halls scoring sessions can be held in. The admin keeps this list."}>
-    {!v.data ? <Loading error={v.error} /> : <Table minw={640} empty="No venues yet." cols={["Venue", "Where or notes", { h: "Seats", cls: "r" }, { h: "Sessions", cls: "r" }, ""]}
-      rows={list.map(x => admin ? [
-        <input key={`n${x.id}`} className="input" defaultValue={x.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== x.name && upd(x.id, { name: e.target.value })} aria-label="Venue name" />,
-        <input key={`o${x.id}`} className="input" defaultValue={x.notes || ""} placeholder="Building, floor, access…" onBlur={e => e.target.value.trim() !== (x.notes || "") && upd(x.id, { notes: e.target.value })} aria-label="Notes" />,
-        <input key={`c${x.id}`} className="input" style={{ width: 80, textAlign: "right" }} inputMode="numeric" defaultValue={x.capacity ?? ""} onBlur={e => String(e.target.value) !== String(x.capacity ?? "") && upd(x.id, { capacity: e.target.value })} aria-label="Seats" />,
-        <span key="s" className="small">{x.upcoming ? `${x.upcoming} coming up` : ""}{x.upcoming && x.sessions > x.upcoming ? " · " : ""}{x.sessions > x.upcoming ? `${x.sessions - x.upcoming} done` : ""}{!x.sessions ? "–" : ""}</span>,
-        <Check key="a" label="In use" checked={x.active} onChange={on => upd(x.id, { active: on })} />
-      ] : [<b key="n">{x.name}</b>, <span key="o" className="small">{x.notes || ""}</span>, x.capacity ?? "", x.upcoming ? `${x.upcoming} coming up` : "–", x.active ? <Badge key="a" tone="ok">In use</Badge> : <Badge key="a">Not in use</Badge>])} />}
+    {!v.data ? <Loading error={v.error} /> : admin ? <div className="vn-list">
+      <div className="vn-h"><span>Venue</span><span>Where or notes</span><span className="r">Seats</span><span>Sessions</span><span /></div>
+      {list.map(x => <div key={x.id} className="vn-row">
+        <input className="input vn-n" defaultValue={x.name} onBlur={e => e.target.value.trim() && e.target.value.trim() !== x.name && upd(x.id, { name: e.target.value })} aria-label="Venue name" />
+        <input className="input vn-o" defaultValue={x.notes || ""} placeholder="Building, floor, access…" onBlur={e => e.target.value.trim() !== (x.notes || "") && upd(x.id, { notes: e.target.value })} aria-label="Notes" />
+        <label className="vn-c"><small>Seats</small><input className="input num" inputMode="numeric" defaultValue={x.capacity ?? ""} onBlur={e => String(e.target.value) !== String(x.capacity ?? "") && upd(x.id, { capacity: e.target.value })} aria-label="Seats" /></label>
+        <span className="small vn-s">{x.upcoming ? `${x.upcoming} coming up` : ""}{x.upcoming && x.sessions > x.upcoming ? " · " : ""}{x.sessions > x.upcoming ? `${x.sessions - x.upcoming} done` : ""}{!x.sessions ? "No sessions" : ""}</span>
+        <Check label="In use" checked={x.active} onChange={on => upd(x.id, { active: on })} />
+      </div>)}
+      {!list.length && <p className="muted" style={{ margin: 0 }}>No venues yet.</p>}
+    </div> : <Table minw={480} empty="No venues yet." cols={["Venue", "Where or notes", { h: "Seats", cls: "r" }, { h: "Sessions", cls: "r" }, ""]}
+      rows={list.map(x => [<b key="n">{x.name}</b>, <span key="o" className="small">{x.notes || ""}</span>, x.capacity ?? "", x.upcoming ? `${x.upcoming} coming up` : "–", x.active ? <Badge key="a" tone="ok">In use</Badge> : <Badge key="a">Not in use</Badge>])} />}
     {admin && <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 12 }}>
       <input className="input" style={{ width: 200 }} placeholder="Venue name (e.g. GVC Hall 3)" value={nv.name} onChange={e => setNv({ ...nv, name: e.target.value })} />
       <input className="input" style={{ width: 220 }} placeholder="Where or notes (optional)" value={nv.notes} onChange={e => setNv({ ...nv, notes: e.target.value })} />

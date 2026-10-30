@@ -77,14 +77,14 @@ export default function Dashboard() {
     const todo = [
       ...(n("requested") + n("picked") ? [[`${n("requested") + n("picked")} artwork${n("requested") + n("picked") === 1 ? "" : "s"} waiting for ${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, "Bring them into the room in batches from the session board", <Btn key="p" sm v="primary" href="/pull-list">Session boards</Btn>]] : []),
       ...(n("returning") ? [[`${n("returning")} handed back from sessions`, "Put them back on the shelves", <Btn key="r" sm href="/pull-list">Session boards</Btn>]] : []),
-      ...(lg.unbatched ? [[`${lg.unbatched} artwork${lg.unbatched === 1 ? "" : "s"} not in a collection`, "Schedule collections from the schools", <Btn key="c" sm href="/logistics">Schedule</Btn>]] : []),
+      ...(lg.unbatched ? [[`${lg.unbatched} artwork${lg.unbatched === 1 ? "" : "s"} not in a collection`, "Group them by school, ready for each school's delivery", <Btn key="c" sm href="/logistics">Schedule</Btn>]] : []),
       ...(lg.to_collect - lg.unbatched > 0 ? [[`${lg.to_collect - lg.unbatched} artworks in scheduled collections`, "Check them in as they arrive", <Btn key="cc" sm href="/collections">Collections</Btn>]] : []),
 
       ...(lg.missing + lg.damaged ? [[`${lg.missing} missing · ${lg.damaged} damaged`, "Decide what happens to each", <Btn key="x" sm href="/logistics?tab=exceptions">Exceptions</Btn>]] : [])
     ];
     return <>
       <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/collections">Collections</Btn><Btn v="primary" href="/pull-list">Session boards</Btn></>} />
-      <Kpis items={[["Physical artworks", lg.total, "Round 2"], ["Waiting for sessions", n("requested") + n("picked"), `${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, n("requested") + n("picked") ? "brand" : ""], ["In session rooms", n("handed_over") + n("coordinator"), `${n("returning")} handed back`], ["In storage", lg.storage, `${lg.to_collect} still to collect`, "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"], ...outcomeItems(x.outcomes)]} dense />
+      <Kpis items={[["Physical artworks", lg.total, "Round 2"], ["Waiting for sessions", n("requested") + n("picked"), `${lg.pullSessions} session${lg.pullSessions === 1 ? "" : "s"}`, n("requested") + n("picked") ? "brand" : ""], ["In session rooms", n("handed_over") + n("coordinator"), `${n("returning")} handed back`], ["In storage", lg.storage, `${lg.to_collect} still to be delivered`, "ok"], ["Exceptions", lg.missing + lg.damaged, `${lg.missing} missing · ${lg.damaged} damaged`, lg.missing + lg.damaged ? "warn" : "ok"], ...outcomeItems(x.outcomes)]} dense />
       <div className="x-side">
         <Todo items={todo} />
         <Card title="Upcoming sessions" sub="Each one has a pull list">{x.sessions.filter(s => s.status !== "done").length ? <div className="x-todo">{x.sessions.filter(s => s.status !== "done").map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} · {s.venue || ""} · {s.count} artworks</span></div><Btn sm href={`/pull-list?session=${s.id}`}>Board</Btn></div>)}</div> : <p className="muted">No sessions planned.</p>}</Card>

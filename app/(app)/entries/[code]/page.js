@@ -38,6 +38,7 @@ function RoundCard({ r, d, me, onChanged }) {
     {r.scores.length > 0 ? <div className="tw"><table className="x-cmp"><thead><tr><th>Evaluator</th>{crit.map(c => <th key={c.key} title={c.label}>{c.label.split(" ")[0]} {c.weight}%</th>)}{r.rubric?.identity_required && <th>ID</th>}<th>Total</th>{d.can.editScore && <th></th>}</tr></thead>
       <tbody>{r.scores.map(s => <tr key={s.id}><td><Two a={s.evaluator} b={s.status === "absent" ? "Absent" : s.status === "submitted" ? (s.self ? `Submitted ${when(s.submitted_at)}` : `Entered by ${s.entered_by || "coordinator"}`) : "Draft"} /></td>{crit.map(c => <td key={c.key}>{s.scores?.[c.key] ?? ""}</td>)}{r.rubric?.identity_required && <td>{s.status === "submitted" ? yn(s.national_identity) : ""}</td>}<td>{s.status === "submitted" ? s.total : "–"}</td>{d.can.editScore && <td>{s.status === "submitted" && !res?.locked && <Btn sm v="ghost" onClick={() => { setErr(null); setEdit({ ...s, scores: { ...s.scores } }); }}>Change</Btn>}</td>}</tr>)}</tbody></table></div>
       : <p className="muted">{assigned.length ? `Waiting for ${assigned.map(x => x.name).join(" and ")}.` : r.physical ? "Scored in a session in the room." : r.status === "open" ? "No evaluators assigned yet." : "Scoring has not started."}</p>}
+    {r.scores.some(s => s.comment) && <div className="stack s4">{r.scores.filter(s => s.comment).map(s => <div key={s.id} className="x-quote small"><b>{s.evaluator}:</b> <span dir="auto">{s.comment}</span></div>)}</div>}
     {r.scores.length > 0 && missing.length > 0 && !r.physical && <p className="x-note">Waiting for {missing.map(x => x.name).join(", ")}.</p>}
     {r.reviews.map(v => <Banner key={v.id} tone={v.status === "open" ? "warn" : ""} title={v.status === "open" ? `Review with ${v.manager || "management"} · ${dueTxt(v.due_at)[0]}` : v.status === "overridden" ? `Overridden by ${v.manager || "management"}: ${v.new_passed === true ? (v.round_no === 2 ? "selected" : "shortlisted") : v.new_passed === false ? (v.round_no === 2 ? "not selected" : "not shortlisted") : `result ${v.new_result}`}${v.new_passed != null && v.new_result != null ? `, result ${v.new_result}` : ""}` : `Confirmed by ${v.manager || "management"}`}
       action={v.status === "open" && ["admin", "management"].includes(me) ? <Btn sm href={`/reviews/${v.id}`}>Open review</Btn> : null}>{v.reason}{v.decision_note ? ` · ${v.decision_note}` : ""}</Banner>)}
@@ -85,7 +86,7 @@ export default function EntryPage({ params }) {
   const meta = useMeta(); const toast = useToast(); const me = meta?.data?.me?.role;
   const [flag, setFlag] = useState(false); const [fr, setFr] = useState({ reason: "", note: "" }); const [busy, setBusy] = useState(false);
   const [coord, setCoord] = useState(false); const [tab, setTab] = useState("rounds"); const [refreshing, setRefreshing] = useState(false); const [files, setFiles] = useState(null);
-  const [lgEdit, setLgEdit] = useState(false);
+  const [lgEdit, setLgEdit] = useState(false); const [editD, setEditD] = useState(false);
   if (!d.data) return <Loading error={d.error} />;
   const { entry: e, students, rounds, logistics, sessions, history, access } = d.data;
   const curRound = rounds.find(r => r.round_no === e.current_round);
@@ -106,7 +107,7 @@ export default function EntryPage({ params }) {
     <div className="x-side x-rec">
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <section className="card"><FileViewer files={files || d.data.files} canDownload={d.data.can.download} onRefresh={refresh} refreshing={refreshing} checkedAt={e.files_checked_at ? when(e.files_checked_at) : null} /></section>
-        <EntryAbout e={e} students={students} showStudents={me !== "evaluator"} />
+        <EntryAbout e={e} students={students} showStudents={me !== "evaluator"} onEdit={d.data.can.editDetails ? () => setEditD(true) : null} />
         {d.data.cycle?.mixed && <CycleCard e={e} cy={d.data.cycle} can={d.data.can.cycle} onDone={d.reload} />}
       </div>
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
@@ -122,6 +123,7 @@ export default function EntryPage({ params }) {
         {tab === "history" && <Card flush><div className="tl" style={{ padding: 16 }}>{history.length ? history.map(h => <div key={h.id} className="stack s4" style={{ padding: "8px 0", borderTop: "1px solid var(--rule)" }}><span className="strong">{h.action}</span><span className="small faint">{h.actor_name || "System"} · {when(h.at)}</span>{h.detail && <span className="small muted" style={{ overflowWrap: "anywhere" }}>{h.detail}</span>}</div>) : <p className="muted">Nothing recorded yet.</p>}</div></Card>}
       </div>
     </div>
+    {editD && <EditDetails e={e} onClose={() => setEditD(false)} onDone={() => { setEditD(false); d.reload(); }} />}
     <Modal open={flag} title="Flag for management review" sub={`${e.code} · Round ${e.current_round}`} onClose={() => setFlag(false)} footer={<><Btn onClick={() => setFlag(false)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={!fr.reason} onClick={doFlag}>Flag</Btn></>}>
       <Field label="Reason"><select className="select" value={fr.reason} onChange={x => setFr({ ...fr, reason: x.target.value })}><option value="">Choose…</option>{REASONS.map(r => <option key={r}>{r}</option>)}</select></Field>
       <Field label="Note for the manager"><textarea className="textarea" rows={3} value={fr.note} onChange={x => setFr({ ...fr, note: x.target.value })} /></Field>
@@ -145,4 +147,51 @@ function CycleCard({ e, cy, can, onDone }) {
       {cy.options.map(n => <option key={n} value={n}>{name(n).name} · {name(n).grades}</option>)}
     </select> : <span className="small faint">Its coordinator, management or the admin can change this.</span>}
   </Card>;
+}
+
+// Correct an artwork's details (pathway and subpathway when submitted in the wrong place, size, medium, texts).
+// Competition pathways have no size, medium or reflections, so those fields are hidden for them.
+const REFL = [["influence", "Did anyone or anything influence your idea?"], ["enjoy", "What was the most enjoyable part of creating your work?"], ["focus", "What elements did you focus on, and why?"]];
+function EditDetails({ e, onClose, onDone }) {
+  const meta = useMeta(); const toast = useToast();
+  const pws = meta?.data?.pathways || [];
+  const [f, setF] = useState({ pathway_code: e.pathway_code, sub_code: e.sub_code, title_en: e.title_en || "", title_ar: e.title_ar || "", description_en: e.description_en || "", description_ar: e.description_ar || "", registration_type: e.registration_type === "Group" || (!e.registration_type && e.group_name) ? "Group" : "Individual", group_name: e.group_name || "", size_text: e.size_text || "", medium: e.medium || "", reflections: { influence: e.reflections?.influence || "", enjoy: e.reflections?.enjoy || "", focus: e.reflections?.focus || "" }, reason: "" });
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
+  const P = pws.find(p => p.code === f.pathway_code); const comp = P?.eval_type === "Competition";
+  const moved = f.pathway_code !== e.pathway_code || f.sub_code !== e.sub_code;
+  const set = (k, v) => setF({ ...f, [k]: v });
+  async function save() {
+    setBusy(true); setErr(null);
+    try { const body = { ...f }; if (comp) { delete body.size_text; delete body.medium; delete body.reflections; } const r = await api(`/api/entries/${encodeURIComponent(e.code)}`, { method: "PATCH", body: { details: body } }); toast(r.note); onDone(); }
+    catch (x) { setErr(x.message); } setBusy(false);
+  }
+  return <Modal open wide title={`Edit details · ${e.code}`} sub="Changes are recorded in the history with who made them. A re-import keeps these corrections." onClose={onClose} footer={<><Btn onClick={onClose}>Cancel</Btn><Btn v="primary" busy={busy} onClick={save}>Save changes</Btn></>}>
+    {err && <Banner tone="bad" title={err} />}
+    <div className="stack" style={{ gap: 14 }}>
+      <div className="x-grid2" style={{ gap: 12 }}>
+        <Field label="Pathway"><select className="select" value={f.pathway_code} onChange={x => { const np = pws.find(p => p.code === x.target.value); setF({ ...f, pathway_code: x.target.value, sub_code: np?.subs?.[0]?.code || "" }); }}>{pws.map(p => <option key={p.code} value={p.code}>{p.name}{p.eval_type === "Competition" ? " (competition)" : ""}</option>)}</select></Field>
+        <Field label="Subpathway"><select className="select" value={f.sub_code} onChange={x => set("sub_code", x.target.value)}>{(P?.subs || []).map(s => <option key={s.code} value={s.code}>{s.name}</option>)}</select></Field>
+      </div>
+      {moved && <Banner tone="warn" title="Moving the artwork">Only possible before any score is saved. The artwork code stays {e.code}.{f.pathway_code !== e.pathway_code ? " It leaves its current round and sessions in the old pathway, and may need a new coordinator and evaluators." : ""}</Banner>}
+      <div className="x-grid2" style={{ gap: 12 }}>
+        <Field label="Title (English)"><input className="input" value={f.title_en} onChange={x => set("title_en", x.target.value)} /></Field>
+        <Field label="Title (Arabic)"><input className="input" dir="rtl" value={f.title_ar} onChange={x => set("title_ar", x.target.value)} /></Field>
+      </div>
+      <div className="x-grid2" style={{ gap: 12 }}>
+        <Field label="Description (English)"><textarea className="textarea" rows={3} value={f.description_en} onChange={x => set("description_en", x.target.value)} /></Field>
+        <Field label="Description (Arabic)"><textarea className="textarea" rows={3} dir="rtl" value={f.description_ar} onChange={x => set("description_ar", x.target.value)} /></Field>
+      </div>
+      <div className="x-grid2" style={{ gap: 12 }}>
+        <Field label="Artwork type"><select className="select" value={f.registration_type} onChange={x => set("registration_type", x.target.value)}><option>Individual</option><option>Group</option></select></Field>
+        {f.registration_type === "Group" && <Field label="Group name"><input className="input" value={f.group_name} onChange={x => set("group_name", x.target.value)} /></Field>}
+      </div>
+      {!comp && <div className="x-grid2" style={{ gap: 12 }}>
+        <Field label="Size" help="For example 40 × 60 cm"><input className="input" value={f.size_text} onChange={x => set("size_text", x.target.value)} /></Field>
+        <Field label="Medium"><input className="input" value={f.medium} onChange={x => set("medium", x.target.value)} placeholder="For example Acrylic paint" /></Field>
+      </div>}
+      {!comp && <div className="stack" style={{ gap: 10 }}>{REFL.map(([k, q]) => <Field key={k} label={q}><textarea className="textarea" rows={2} dir="auto" value={f.reflections[k]} onChange={x => setF({ ...f, reflections: { ...f.reflections, [k]: x.target.value } })} /></Field>)}</div>}
+      {comp && <p className="small faint" style={{ margin: 0 }}>{P?.name} is a competition pathway: it has no size, medium or reflection questions.</p>}
+      <Field label="Why (optional)"><input className="input" value={f.reason} onChange={x => set("reason", x.target.value)} placeholder="For example: the teacher submitted it under Photography by mistake" /></Field>
+    </div>
+  </Modal>;
 }

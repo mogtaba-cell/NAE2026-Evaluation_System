@@ -89,7 +89,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
       await logEvents(session, g.ids.map(id => ({ entry_id: id, action: "Collection scheduled", from_state: "to_collect", to_state: "to_collect", note: `${code}${b.scheduled_on ? ` on ${b.scheduled_on}` : ""}`, ref_type: "collection", ref_id: c.id })));
     }
     await audit(session, `Created ${n} collections`, "logistics", null, `${arts} artworks`);
-    return { ok: true, note: `${n} collection${n === 1 ? "" : "s"} created for ${arts} artwork${arts === 1 ? "" : "s"}, one per school.` };
+    return { ok: true, note: `${n} collection${n === 1 ? "" : "s"} created for ${arts} artwork${arts === 1 ? "" : "s"}, one per school, ready for each school's delivery.` };
   }
 
   // ---------- condition and issues (several artworks at once) ----------

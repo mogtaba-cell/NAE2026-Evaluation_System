@@ -5,9 +5,9 @@ import LocPicker from "@/components/LocPicker";
 import { useMemo, useState } from "react";
 import { api, useApi, useToast, Btn, Badge, Banner, Modal, Field, Check, Loading, when, dshort } from "@/components/ui";
 
-export const SHORT = { to_collect: "To collect", storage: "In storage", requested: "Waiting for its session", picked: "Picked", handed_over: "Handed over", coordinator: "In the session room", returning: "Handed back", framer: "At the framer", showcase: "Showcase", returned: "Returned to school", missing: "Missing" };
+export const SHORT = { to_collect: "Awaiting delivery", storage: "In storage", requested: "Waiting for its session", picked: "Picked", handed_over: "Handed over", coordinator: "In the session room", returning: "Handed back", framer: "At the framer", showcase: "Showcase", returned: "Returned to school", missing: "Missing" };
 const TONE = { to_collect: "", storage: "ok", requested: "info", picked: "info", handed_over: "warn", coordinator: "info", returning: "warn", framer: "", showcase: "ok", returned: "", missing: "bad" };
-export const MISSING = { collect_later: "Collect later", score_online: "Scored from its files", withdrawn: "Withdrawn" };
+export const MISSING = { collect_later: "School delivers later", score_online: "Scored from its files", withdrawn: "Withdrawn" };
 export const StateBadge = ({ s }) => <Badge tone={TONE[s]}>{SHORT[s] || s}</Badge>;
 
 // label, from states, roles, needs (location | framer | note), primary
@@ -88,7 +88,7 @@ export function ArtworkDrawer({ row, onClose, role, onChanged }) {
   const facts = [
     ["Where", row.state === "framer" ? `${row.framing_vendor || "Framer"}${row.framing_due ? `, due ${dshort(row.framing_due)}` : ""}` : row.where || "Not shelved"],
     ["Session", row.session ? `${row.session.title}${row.session.date ? `, ${dshort(row.session.date)}` : ""} (${row.session.coordinator || ""})` : "None"],
-    ["Collected", row.collected_on ? `${dshort(row.collected_on)}${row.collected_by ? ` by ${row.collected_by}` : ""}` : row.collection ? `Batch ${row.collection.code}${row.collection.scheduled_on ? `, ${dshort(row.collection.scheduled_on)}` : ""}` : "Not yet"],
+    ["Delivered", row.collected_on ? `${dshort(row.collected_on)}${row.collected_by ? ` · received by ${row.collected_by}` : ""}` : row.collection ? `Batch ${row.collection.code}${row.collection.scheduled_on ? `, ${dshort(row.collection.scheduled_on)}` : ""}` : "Not yet"],
     ["Handover", row.handed_at ? `${row.handed_by || ""} → ${row.received_by || ""}, ${when(row.handed_at)}` : "–"],
     ["Condition", `${row.condition || "Good"}${row.damaged ? " (damaged)" : ""}`],
     ["Framing", row.needs_framing ? `${row.glass_framing ? "Needs framing with protective glass" : "Needs framing"}${row.framed ? " · framed" : ""}` : "Not needed"],

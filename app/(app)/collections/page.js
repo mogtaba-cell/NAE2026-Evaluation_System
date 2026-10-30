@@ -1,8 +1,8 @@
 "use client";
 import LocPicker from "@/components/LocPicker";
 // Collections from schools, made for a phone: pick a collection, mark each artwork received / missing / not yet,
-// photograph the boxes (outside and inside) and the school contact's Emirates ID, enter who handed them over, confirm. Mistakes can be
-// corrected afterwards (received <-> missing), and every visit is kept with its photos.
+// photograph the boxes (outside and inside) and the representative's Emirates ID, enter who handed them over, confirm. Mistakes can be
+// corrected afterwards (received <-> missing), and every delivery is kept with its photos.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StateBadge } from "@/components/Movements";
@@ -60,7 +60,7 @@ function LocSelect({ value, onChange, placeholder, pathway }) {
 
   return <LocPicker value={value} onChange={onChange} pathway={pathway} allowEmpty emptyLabel={placeholder || "Choose…"} />;
 }
-const STATUS = c => c.status === "checked_in" ? (c.missing ? ["Checked in · " + c.missing + " missing", "warn"] : ["Checked in", "ok"]) : c.left < c.count ? [`${c.left} still to collect`, "info"] : ["To collect", ""];
+const STATUS = c => c.status === "checked_in" ? (c.missing ? ["Checked in · " + c.missing + " missing", "warn"] : ["Checked in", "ok"]) : c.left < c.count ? [`${c.left} still to be delivered`, "info"] : ["Awaiting delivery", ""];
 
 export default function Collections() {
   const sp = useSearchParams(); const router = useRouter();
@@ -79,12 +79,12 @@ export default function Collections() {
     .sort((a, b) => isTodo(a) !== isTodo(b) ? (isTodo(a) ? -1 : 1) : String(a.scheduled_on || "9").localeCompare(String(b.scheduled_on || "9")) || String(a.school?.name).localeCompare(String(b.school?.name)));
   const n = k => all.filter(k).length;
   return <>
-    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Collect artworks from schools: mark each one received or missing, photograph the boxes and the school contact's Emirates ID, and confirm. Photos and a visit record are filed in the Shared Drive under 06 Uploads › Collections › school › date. Missing artworks stay in the collection for the next visit. One collection per school; each pathway is stored in its own room, shelf and row." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
+    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Schools deliver their artworks to the GVC office. Mark each one received or missing, photograph the boxes and the representative's Emirates ID, choose where each pathway is stored, and confirm. Photos are filed in the Shared Drive by school and date." actions={<Btn href="/logistics">Artwork logistics</Btn>} /></div>
     {d.data.offDrive > 0 && <Banner tone="warn" title={`${d.data.offDrive} collection photo${d.data.offDrive === 1 ? " is" : "s are"} not in Google Drive yet`} action={<Btn sm busy={moving} onClick={copyToDrive}>Copy to Drive</Btn>}>Google Drive couldn't be reached when they were taken, so they were kept in the website for now.</Banner>}
-    {!all.length ? <Empty title="No collections yet">Schedule them from Artwork logistics (To do) once physical artworks are shortlisted for Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
+    {!all.length ? <Empty title="No collections yet">Prepare them from Artwork logistics (To do → Deliveries from schools) once physical artworks are shortlisted for Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
       <section className="cl-list">
         <div className="cl-tools"><Search value={q} onChange={setQ} placeholder="School, eSIS, code" />
-          <Seg value={f} onChange={setF} items={[["todo", `To collect ${n(isTodo)}`], ["part", `Partly in ${n(isPart)}`], ["done", `Checked in ${n(c => !isTodo(c))}`], ["all", "All"]]} /></div>
+          <Seg value={f} onChange={setF} items={[["todo", `Awaiting ${n(isTodo)}`], ["part", `Partly in ${n(isPart)}`], ["done", `Checked in ${n(c => !isTodo(c))}`], ["all", "All"]]} /></div>
         {list.map(c => { const [st, tone] = STATUS(c); return <button key={c.id} type="button" className={`cl-card${c.id === sel ? " on" : ""}`} onClick={() => open(c.id)}>
           <span className="cl-c1"><b>{c.school?.name}</b><Badge tone={tone}>{st}</Badge></span>
           <span className="small faint">{[c.sub || c.pathway, c.school?.esis && `eSIS ${c.school.esis}`, c.coordinator].filter(Boolean).join(" · ")}</span>
@@ -101,6 +101,7 @@ function Detail({ id, can, onBack, onChanged }) {
   const c = useApi(`/api/collections/${id}`, [], { live: 30000 }); const toast = useToast();
   const [rec, setRec] = useState({}); const [cond, setCond] = useState({}); const [dmg, setDmg] = useState({}); const [pwWhere, setPwWhere] = useState({}); const [itemWhere, setItemWhere] = useState({}); const [split, setSplit] = useState({});
   const [contact, setContact] = useState({ name: "", phone: "" }); const [newPhotos, setNewPhotos] = useState([]);
+  const [dDate, setDDate] = useState(() => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dubai" }));   // delivery date: today (UAE)
   const [conf, setConf] = useState(false); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [fix, setFix] = useState(null);
   const x = c.data;
   const photosByEntry = useMemo(() => { const m = {}; (x?.items || []).forEach(i => { m[i.entry.code] = [...(i.photos || []), ...newPhotos.filter(p => p.entry_id === i.entry_id)]; }); return m; }, [x, newPhotos]);
@@ -117,7 +118,7 @@ function Detail({ id, can, onBack, onChanged }) {
   const recIn = g => g.items.filter(i => rec[i.entry.code] === "ok");
   const unplaced = groups.filter(g => split[g.code] ? recIn(g).some(i => !itemWhere[i.entry.code]) : recIn(g).length && !pwWhere[g.code]);
   if (unplaced.length) needs.push(`choose where ${unplaced.map(g => g.name).join(" and ")} ${unplaced.length === 1 ? "is" : "are"} stored`);
-  if (received && !contact.name.trim()) needs.push("enter the contact's name");
+  if (received && !contact.name.trim()) needs.push("enter the representative's name");
   if (received && !/^\+?[0-9 ()-]{7,20}$/.test(contact.phone.trim())) needs.push("enter their phone number");
   if (received && !boxNew.length) needs.push("photograph the boxes");
   if (received && !eid) needs.push("photograph their Emirates ID");
@@ -126,7 +127,7 @@ function Detail({ id, can, onBack, onChanged }) {
   async function schedule(v) { try { await api(`/api/collections/${id}`, { body: { action: "schedule", scheduled_on: v } }); c.reload(); onChanged(); } catch (e) { toast(e.message, "err"); } }
   async function handover() {
     setBusy(true); setErr(null);
-    try { const r = await api(`/api/collections/${id}`, { body: { action: "handover", received: rec, conditions: cond, damaged: dmg, location_id: null, pathway_locations: Object.fromEntries(Object.entries(pwWhere).filter(([k]) => !split[k])), locations: Object.fromEntries(Object.entries(itemWhere).filter(([code]) => { const it = todo.find(i => i.entry.code === code); return it && split[it.pathway_code]; })), contact_name: contact.name, contact_phone: contact.phone, photo_ids: newPhotos.map(p => p.id) } });
+    try { const r = await api(`/api/collections/${id}`, { body: { action: "handover", collected_on: dDate, received: rec, conditions: cond, damaged: dmg, location_id: null, pathway_locations: Object.fromEntries(Object.entries(pwWhere).filter(([k]) => !split[k])), locations: Object.fromEntries(Object.entries(itemWhere).filter(([code]) => { const it = todo.find(i => i.entry.code === code); return it && split[it.pathway_code]; })), contact_name: contact.name, contact_phone: contact.phone, photo_ids: newPhotos.map(p => p.id) } });
       toast(r.note); setConf(false); setRec({}); setCond({}); setDmg({}); setItemWhere({}); setPwWhere({}); setSplit({}); setNewPhotos([]); setContact({ name: "", phone: "" }); c.reload(); onChanged(); }
     catch (e) { setErr(e.message); setConf(false); } setBusy(false);
   }
@@ -137,11 +138,11 @@ function Detail({ id, can, onBack, onChanged }) {
   }
   return <div className="cl-d">
     <button type="button" className="cl-back link" onClick={onBack}>‹ All collections</button>
-    <div className="cl-dh"><div><h2>{col.school?.name}</h2><p className="small faint">{[col.pathway, col.sub, col.code, col.school?.esis && `eSIS ${col.school.esis}`].filter(Boolean).join(" · ")}</p></div>{scheduled ? <Badge>{todo.length < x.items.length ? `${todo.length} still to collect` : "To collect"}</Badge> : <Badge tone="ok">Checked in{col.where ? ` · ${col.where}` : ""}</Badge>}</div>
+    <div className="cl-dh"><div><h2>{col.school?.name}</h2><p className="small faint">{[col.pathway, col.sub, col.code, col.school?.esis && `eSIS ${col.school.esis}`].filter(Boolean).join(" · ")}</p></div>{scheduled ? <Badge>{todo.length < x.items.length ? `${todo.length} still to be delivered` : "Awaiting delivery"}</Badge> : <Badge tone="ok">Checked in{col.where ? ` · ${col.where}` : ""}</Badge>}</div>
     {err && <Banner tone="bad" title={err} />}
 
     {can && scheduled && todo.length > 0 && <>
-      <div className="cl-sec"><div className="cl-sh"><b>Collection date</b></div><input type="date" className="input" value={col.scheduled_on || ""} onChange={e => schedule(e.target.value)} /></div>
+      <div className="cl-sec"><div className="cl-sh"><b>Delivery date</b>{col.scheduled_on && col.scheduled_on !== dDate && <span className="small faint">expected {dshort(col.scheduled_on)}</span>}</div><input type="date" className="input" value={dDate} onChange={e => setDDate(e.target.value)} /></div>
       <div className="cl-sec">
         <div className="cl-sh"><b>1. Artworks ({todo.length})</b><span className="sp" /><Btn sm onClick={() => setRec(Object.fromEntries(todo.map(i => [i.entry.code, "ok"])))}>All received</Btn></div>
         {groups.map(g => <div key={g.code} className="cl-pw">
@@ -150,7 +151,7 @@ function Detail({ id, can, onBack, onChanged }) {
           <div className="cl-it"><span className="code">{code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="small faint">{[i.sub, i.entry.size_text, i.entry.medium].filter(Boolean).join(" · ")}</span></div>
           <Submitted files={i.files} code={code} />
           <div className="cl-3 two"><button type="button" className={v === "ok" ? "on ok" : ""} onClick={() => setRec({ ...rec, [code]: "ok" })}>Received</button><button type="button" className={v === "missing" ? "on miss" : ""} onClick={() => setRec({ ...rec, [code]: "missing" })}>Missing</button></div>
-          {v === "missing" && <span className="small faint">Stays in this collection to pick up on a later visit.</span>}
+          {v === "missing" && <span className="small faint">Stays in this collection until the school brings it.</span>}
           {v === "ok" && <div className="cl-more">
             <Check label="Damaged" checked={!!dmg[code]} onChange={on => setDmg({ ...dmg, [code]: on })} />
             {(dmg[code] || cond[code]) !== undefined && <input className="input" placeholder={dmg[code] ? "What's damaged?" : "Condition notes (optional)"} value={cond[code] || ""} onChange={e => setCond({ ...cond, [code]: e.target.value })} />}
@@ -171,7 +172,7 @@ function Detail({ id, can, onBack, onChanged }) {
               : recIn(g).map(i => <div key={i.entry.code} className="stack s4"><span className="code small">{i.entry.code}</span><LocSelect value={itemWhere[i.entry.code] || ""} pathway={g.code} onChange={v => setItemWhere({ ...itemWhere, [i.entry.code]: v })} placeholder="Choose…" /></div>)}
           </div>)}
         </div>
-        <div className="cl-sec"><div className="cl-sh"><b>4. Handed over by (school contact)</b></div>
+        <div className="cl-sec"><div className="cl-sh"><b>4. Delivered by (school representative)</b></div>
           <Field label="Full name"><input className="input" autoComplete="off" value={contact.name} onChange={e => setContact({ ...contact, name: e.target.value })} placeholder="As on the Emirates ID" /></Field>
           <Field label="Mobile number"><input className="input" type="tel" inputMode="tel" autoComplete="off" value={contact.phone} onChange={e => setContact({ ...contact, phone: e.target.value })} placeholder="050 123 4567" /></Field>
           <Field label="Emirates ID photo" help="Saved with the box photos in the school's folder in the Shared Drive. In the website only admins, Logistics and the school's coordinator can open it, and every view is recorded.">
@@ -181,12 +182,12 @@ function Detail({ id, can, onBack, onChanged }) {
       </>}
       <div className="cl-bar">
         <div className="small"><b>{received}</b> received · <b>{missingN}</b> missing{laterN ? <> · <b>{laterN}</b> not marked</> : ""}{needs.length ? <span className="faint"> · To confirm: {needs.join(", ")}</span> : ""}</div>
-        <Btn v="primary" disabled={needs.length > 0} onClick={() => setConf(true)}>{received ? "Confirm handover" : "Record visit"}</Btn>
+        <Btn v="primary" disabled={needs.length > 0} onClick={() => setConf(true)}>{received ? "Confirm delivery" : "Record delivery"}</Btn>
       </div>
     </>}
 
     {doneItems.length > 0 && <div className="cl-sec">
-      <div className="cl-sh"><b>{scheduled ? "Already collected" : "Artworks"}</b></div>
+      <div className="cl-sh"><b>{scheduled ? "Already delivered" : "Artworks"}</b></div>
       {doneItems.map(i => <div key={i.entry.code} className="cl-item">
         <div className="cl-it"><span className="code">{i.entry.code}</span><span className="t" dir="auto">{i.entry.title_en || i.entry.title_ar || i.entry.group_name || ""}</span><span className="row" style={{ gap: 6, flexWrap: "wrap" }}><StateBadge s={i.state} />{i.state === "storage" && i.where ? <span className="small faint">{i.where}</span> : null}{i.damaged && <Badge tone="warn">Damaged</Badge>}</span></div>
         <Submitted files={i.files} code={i.entry.code} />
@@ -202,21 +203,21 @@ function Detail({ id, can, onBack, onChanged }) {
       {x.boxPhotos.length ? <Thumbs photos={x.boxPhotos} canRemove={can} onRemove={removePhoto} /> : <span className="small faint">No box photos yet.</span>}
     </div>}
 
-    {x.visits.length > 0 && <div className="cl-sec"><div className="cl-sh"><b>Visits</b></div>
+    {x.visits.length > 0 && <div className="cl-sec"><div className="cl-sh"><b>Deliveries</b></div>
       {x.visits.map(v => <div key={v.id} className="cl-visit">
         <div className="row between" style={{ gap: 8, flexWrap: "wrap" }}><b>{when(v.at)}</b><span className="small faint">by {v.by_name}</span></div>
-        {v.contact_name && <span className="small">Handed over by <b>{v.contact_name}</b>{v.contact_phone ? <> · <a href={`tel:${v.contact_phone.replace(/[^0-9+]/g, "")}`}>{v.contact_phone}</a></> : ""}{v.location ? ` · stored in ${v.location}` : ""}</span>}
-        <span className="small faint">{[v.received.length && `${v.received.length} received`, v.missing.length && `${v.missing.length} missing (${v.missing.join(", ")})`, v.later.length && `${v.later.length} not yet`].filter(Boolean).join(" · ") || "Nothing handed over"}</span>
+        {v.contact_name && <span className="small">Delivered by <b>{v.contact_name}</b>{v.contact_phone ? <> · <a href={`tel:${v.contact_phone.replace(/[^0-9+]/g, "")}`}>{v.contact_phone}</a></> : ""}{v.location ? ` · stored in ${v.location}` : ""}</span>}
+        <span className="small faint">{[v.received.length && `${v.received.length} received`, v.missing.length && `${v.missing.length} missing (${v.missing.join(", ")})`, v.later.length && `${v.later.length} not yet`].filter(Boolean).join(" · ") || "Nothing delivered"}</span>
         {v.photos.some(p => p.kind === "box") && <span className="small faint">{v.photos.filter(p => p.kind === "box").length} box photos (above)</span>}
         <Thumbs photos={v.photos.filter(p => p.kind !== "box")} canRemove={can} onRemove={removePhoto} />
       </div>)}
     </div>}
 
-    <Modal open={conf} title="Confirm handover" onClose={() => setConf(false)} footer={<><Btn onClick={() => setConf(false)}>Back</Btn><Btn v="primary" busy={busy} onClick={handover}>Confirm</Btn></>}>
-      <p><b>{received}</b> received{Object.values(dmg).filter(Boolean).length ? ` (${Object.values(dmg).filter(Boolean).length} damaged)` : ""}{missingN ? <>, <b>{missingN}</b> missing: they stay in this collection to pick up on a later visit</> : ""}.</p>
-      {received > 0 && <p className="muted">Handed over by {contact.name} ({contact.phone}). {boxNew.length} box photo{boxNew.length === 1 ? "" : "s"} and the Emirates ID photo are saved with this visit.</p>}
+    <Modal open={conf} title="Confirm delivery" onClose={() => setConf(false)} footer={<><Btn onClick={() => setConf(false)}>Back</Btn><Btn v="primary" busy={busy} onClick={handover}>Confirm</Btn></>}>
+      <p><b>{received}</b> received{Object.values(dmg).filter(Boolean).length ? ` (${Object.values(dmg).filter(Boolean).length} damaged)` : ""}{missingN ? <>, <b>{missingN}</b> missing: they stay in this collection until the school brings them</> : ""}.</p>
+      {received > 0 && <p className="muted">Delivered by {contact.name} ({contact.phone}). {boxNew.length} box photo{boxNew.length === 1 ? "" : "s"} and the Emirates ID photo are saved with this delivery.</p>}
     </Modal>
-    <Modal open={!!fix} title={fix?.to === "missing" ? `Mark ${fix?.code} missing?` : `${fix?.code} was received`} sub={fix?.to === "missing" ? "It goes back into this collection to pick up on a later visit." : ""} onClose={() => setFix(null)} footer={<><Btn onClick={() => setFix(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={fix?.to === "missing" && !fix?.note.trim()} onClick={correct}>Save</Btn></>}>
+    <Modal open={!!fix} title={fix?.to === "missing" ? `Mark ${fix?.code} missing?` : `${fix?.code} was received`} sub={fix?.to === "missing" ? "It goes back into this collection until the school brings it." : ""} onClose={() => setFix(null)} footer={<><Btn onClick={() => setFix(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={fix?.to === "missing" && !fix?.note.trim()} onClick={correct}>Save</Btn></>}>
       {fix && <div className="stack" style={{ gap: 12 }}>
         {fix.to === "received" && <Field label="Stored in"><LocSelect value={fix.loc} onChange={v => setFix({ ...fix, loc: v })} placeholder={col.where ? `Same as the batch (${col.where})` : "Choose room and shelf…"} /></Field>}
         <Field label={fix.to === "missing" ? "What happened?" : "Note (optional)"}><input className="input" value={fix.note} onChange={e => setFix({ ...fix, note: e.target.value })} placeholder={fix.to === "missing" ? "For example: not in the box after all" : "For example: found in the second box"} /></Field>

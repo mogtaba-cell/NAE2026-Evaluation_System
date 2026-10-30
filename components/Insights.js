@@ -64,7 +64,7 @@ export default function Insights() {
     <div className="ins-grid">
       <ChartCard title="Physical artworks" sub={x.logisticsExtra.total ? `${fmt(x.logisticsExtra.total)} artworks · ${x.logisticsExtra.damaged} damaged · ${x.logisticsExtra.framing} need framing` : "Round 2 physical subpathways"}
         table={x.logistics.length ? { cols: ["State", "Artworks"], rows: x.logistics.map(r => [r.label, r.n]) } : null}>
-        <HBars rows={x.logistics.filter(r => r.n || ["To collect", "In storage"].includes(r.label))} empty="No physical artworks in this view." />
+        <HBars rows={x.logistics.filter(r => r.n || ["Awaiting delivery", "In storage"].includes(r.label))} empty="No physical artworks in this view." />
       </ChartCard>
       <ChartCard title="Schools with the most artworks shortlisted" sub="Artworks shortlisted for Round 2, with all artworks for comparison"
         table={{ cols: ["School", "Shortlisted", "Artworks"], rows: x.topSchools.map(s => [s.name, s.through, s.entries]) }}>

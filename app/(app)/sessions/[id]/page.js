@@ -34,7 +34,7 @@ export default function Session({ params }) {
   const { id } = use(params); const sp = useSearchParams(); const router = useRouter(); const toast = useToast(); const meta = useMeta();
   const cur = sp.get("entry");
   const d = useApi(`/api/sessions/${id}${cur ? `?entry=${encodeURIComponent(cur)}` : ""}`, [], { live: 15000 });
-  const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [abs, setAbs] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
+  const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [abs, setAbs] = useState({}); const [cm, setCm] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
   const [finishAsk, setFinishAsk] = useState(null);
   const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null);
   const me = meta?.data?.me;
@@ -49,22 +49,24 @@ export default function Session({ params }) {
   useEffect(() => {
     if (!e) return;
     const dr = readDraft(id, e.code) || {};
-    const mm = {}, ii = {}, aa = {};
+    const mm = {}, ii = {}, aa = {}, cc = {};
     d.data.team.forEach(t => {
       const sc = e.scores.find(x => x.evaluator_id === t.id);
-      if (sc && sc.status !== "draft") { mm[t.id] = { ...(sc.scores || {}) }; ii[t.id] = sc.national_identity ?? null; return; }
+      if (sc && sc.status !== "draft") { mm[t.id] = { ...(sc.scores || {}) }; ii[t.id] = sc.national_identity ?? null; cc[t.id] = sc.comment || ""; return; }
+      cc[t.id] = (dr.cm || {})[t.id] ?? sc?.comment ?? "";
       mm[t.id] = { ...((dr.m || {})[t.id] || sc?.scores || {}) }; ii[t.id] = (dr.idn || {})[t.id] ?? sc?.national_identity ?? null; aa[t.id] = !!(dr.abs || {})[t.id];
     });
-    setM(mm); setIdn(ii); setAbs(aa); setErr(null);
+    setM(mm); setIdn(ii); setAbs(aa); setCm(cc); setErr(null);
   }, [e?.code, savedSig]); // eslint-disable-line
   const crit = e?.rubric?.criteria || [];
   const scoreOf = ev => e?.scores.find(x => x.evaluator_id === ev);
   const saved = ev => scoreOf(ev)?.status === "submitted";
   const absent = ev => scoreOf(ev)?.status === "absent";
   function edit_(fn) { const next = fn(); if (e) writeDraft(id, e.code, next); }
-  const setScore = (ev, key, v) => { const nm = { ...m, [ev]: { ...m[ev], [key]: v } }; setM(nm); edit_(() => ({ m: nm, idn, abs })); };
-  const setId = (ev, v) => { const ni = { ...idn, [ev]: v }; setIdn(ni); edit_(() => ({ m, idn: ni, abs })); };
-  const setAb = (ev, v) => { const na = { ...abs, [ev]: v }; setAbs(na); edit_(() => ({ m, idn, abs: na })); };
+  const setScore = (ev, key, v) => { const nm = { ...m, [ev]: { ...m[ev], [key]: v } }; setM(nm); edit_(() => ({ m: nm, idn, abs, cm })); };
+  const setId = (ev, v) => { const ni = { ...idn, [ev]: v }; setIdn(ni); edit_(() => ({ m, idn: ni, abs, cm })); };
+  const setAb = (ev, v) => { const na = { ...abs, [ev]: v }; setAbs(na); edit_(() => ({ m, idn, abs: na, cm })); };
+  const setCom = (ev, v) => { const nc = { ...cm, [ev]: v }; setCm(nc); edit_(() => ({ m, idn, abs, cm: nc })); };
   if (!d.data) return <Loading error={d.error} />;
   const { session: s, team, entries, rules } = d.data;
   const filled = ev => crit.every(c => m[ev]?.[c.key] !== "" && m[ev]?.[c.key] != null) && (!e.rubric?.identity_required || idn[ev] !== null);
@@ -105,7 +107,7 @@ export default function Session({ params }) {
   async function saveSheet() {
     setBusy("go"); setErr(null);
     try {
-      const items = open_.map(t => abs[t.id] ? { evaluator_id: t.id, absent: true } : { evaluator_id: t.id, scores: m[t.id], national_identity: idn[t.id] });
+      const items = open_.map(t => abs[t.id] ? { evaluator_id: t.id, absent: true } : { evaluator_id: t.id, scores: m[t.id], national_identity: idn[t.id], comment: (cm[t.id] || "").trim() || null });
       const r = await api("/api/scores/session", { body: { session_id: s.id, entry_code: e.code, items } });
       writeDraft(id, e.code, null);
       toast(`${e.code}: saved ${r.saved} score${r.saved === 1 ? "" : "s"}${r.absent ? `, ${r.absent} absent` : ""}`);
@@ -162,6 +164,7 @@ export default function Session({ params }) {
             {crit.map(c => { const ct = critIn(c, lang); return <tr key={c.key}><td><div className="cl"><b>{ct.label} <span className="w">{c.weight}%</span></b>{ct.desc && <span className="d">{ct.desc}</span>}{ct.missing && ar && <span className="d">{T.noAr}</span>}</div></td>
               {team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? <span className="faint small">{T.absent}</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!editable || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setScore(t.id, c.key, x.target.value.replace(/\D/g, "").slice(0, 3))} />}</td>)}</tr>; })}
             {e.rubric.identity_required && <tr><td><div className="cl"><b>{T.identity}</b></div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : <span className="f3-yn"><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === true ? "on" : ""} onClick={() => setId(t.id, true)}>{T.y}</button><button type="button" disabled={!editable || saved(t.id)} className={idn[t.id] === false ? "on" : ""} onClick={() => setId(t.id, false)}>{T.n}</button></span>}</td>)}</tr>}
+            <tr className="cmt"><td><div className="cl"><b>{T.comment}</b></div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : saved(t.id) ? <span className="small" dir="auto">{scoreOf(t.id).comment || <span className="faint">–</span>}</span> : <textarea className="sc-cm" dir="auto" rows={2} disabled={!editable} value={cm[t.id] || ""} placeholder={T.commentPh} onChange={x => setCom(t.id, x.target.value)} aria-label={`${t.name}, ${T.comment}`} />}</td>)}</tr>
             <tr className="tot"><td>{T.total}</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) || abs[t.id] ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
             {(editable || team.some(t => saved(t.id) || absent(t.id))) && <tr className="act"><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? <Badge>{T.absent}</Badge> : editable && (abs[t.id] ? <Btn sm v="ghost" onClick={() => setAb(t.id, false)}>{T.undo}</Btn> : <Btn sm v="ghost" onClick={() => setAb(t.id, true)}>{T.absent}</Btn>)}</td>)}</tr>}
           </tbody></table></div>}
@@ -170,12 +173,11 @@ export default function Session({ params }) {
             <div className="stack s4"><Check label={T.needs} disabled={!editable} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label={T.glass} disabled={!editable || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
           {err && <Banner tone="bad" title={err} />}
           {editable && open_.length > 0 && <div className="sheet-save">
-            <div className="stack s4" style={{ flex: 1, minWidth: 220 }}>
-              {pv ? (pv.complete ? (pv.why.length ? <span><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· goes to management review because {pv.why.join(", and ")}</span></span> : <span><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· {pv.passes ? `passes Round ${s.round_no}` : `does not pass Round ${s.round_no}`}</span></span>) : <span className="faint">So far {pv.team} · grade {pv.grade}. {pv.left} more score{pv.left === 1 ? "" : "s"} needed.</span>) : <span className="faint">{T.draftKept}</span>}
+            <div className="stack s4" style={{ flex: 1, minWidth: 0 }}>
+              {pv?.complete ? (pv.why.length ? <span className="small"><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· goes to review: {pv.why.join(", ")}</span></span> : <span className="small"><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· {pv.passes ? `passes Round ${s.round_no}` : `does not pass Round ${s.round_no}`}</span></span>) : null}
               {missingCols.length > 0 && <span className="small" style={{ color: "var(--warn)" }}>{T.needFill(missingCols.map(t => t.name).join(", "))}</span>}
-              <span className="small faint">Saved scores are final; only an admin can correct them, with a reason.</span>
             </div>
-            <Btn v="primary" busy={busy === "go"} disabled={!canSave} onClick={saveSheet}>{nextOpen() ? T.saveSheet : T.saveSheetLast}</Btn>
+            <Btn v="primary" busy={busy === "go"} disabled={!canSave} onClick={saveSheet} title="Saved scores are final; only an admin can correct them">{nextOpen() ? T.saveSheet : T.saveSheetLast}</Btn>
           </div>}
           {(!editable || !open_.length) && idx < entries.length - 1 && <div className="row" style={{ justifyContent: "flex-end" }}><Btn onClick={() => go((nextOpen() || entries[idx + 1]).code)}>{T.next}</Btn></div>}
         </section>

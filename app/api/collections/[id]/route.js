@@ -53,7 +53,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
       if (!note) throw bad("Say what happened (for example: not in the box after all).");
       if (lg.state !== "storage") throw bad("Only an artwork that is in storage can be put back to collect.");
       await q(db().from("nae_logistics").update({ state: "to_collect", location_id: null, location: null, collected_on: null, collected_by: null, updated_at: new Date().toISOString() }).eq("entry_id", e.id));
-      await logEvents(session, [{ entry_id: e.id, action: "Not received after all: back to collect", from_state: "storage", to_state: "to_collect", note: `Correction after collection: ${note}`, ref_type: "collection", ref_id: c.id }]);
+      await logEvents(session, [{ entry_id: e.id, action: "Not received after all: back to awaiting delivery", from_state: "storage", to_state: "to_collect", note: `Correction after collection: ${note}`, ref_type: "collection", ref_id: c.id }]);
       if (c.status !== "scheduled") await q(db().from("nae_collections").update({ status: "scheduled" }).eq("id", c.id));
     } else if (b.to === "received") {
       if (!b.location_id && !c.location_id) throw bad("Choose where it is stored.");
@@ -83,10 +83,10 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   const anyReceived = marked.length > 0;
   const contact = String(b.contact_name || "").trim(), phone = String(b.contact_phone || "").trim();
   if (anyReceived) {
-    if (!contact) throw bad("Enter the name of the school contact who handed the artworks over.");
-    if (!PHONE.test(phone)) throw bad("Enter the school contact's phone number (for example 050 123 4567).");
+    if (!contact) throw bad("Enter the name of the school representative who delivered the artworks.");
+    if (!PHONE.test(phone)) throw bad("Enter the school representative's phone number (for example 050 123 4567).");
     const eid = await q(db().from("nae_collection_photos").select("id").eq("collection_id", c.id).eq("kind", "eid").is("visit_id", null).in("id", (b.photo_ids || []).length ? b.photo_ids : ["00000000-0000-0000-0000-000000000000"]));
-    if (!eid.length) throw bad("Take a photo of the school contact's Emirates ID.");
+    if (!eid.length) throw bad("Take a photo of the school representative's Emirates ID.");
     const box = await q(db().from("nae_collection_photos").select("id").eq("collection_id", c.id).eq("kind", "box").is("visit_id", null).in("id", (b.photo_ids || []).length ? b.photo_ids : ["00000000-0000-0000-0000-000000000000"]));
     if (!box.length) throw bad("Take at least one photo of the boxes (outside and inside).");
   }
@@ -107,10 +107,10 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     const damaged = !!(b.damaged || {})[code];
     const cond = String((b.conditions || {})[code] || "").trim() || (damaged ? "Damaged" : "Good");
     await q(db().from("nae_logistics").update({ state: "storage", location_id: where, location: label(where), damaged, condition: cond, collected_on: b.collected_on || today, collected_by: session.name, missing_outcome: null, updated_at: now }).eq("entry_id", i.entry_id));
-    events.push({ entry_id: i.entry_id, action: "Collected and received in storage", from_state: "to_collect", to_state: "storage", location: label(where), handed_by: contact || null, received_by: session.name, note: cond !== "Good" ? cond : null, ref_type: "collection", ref_id: c.id });
+    events.push({ entry_id: i.entry_id, action: "Delivered and received in storage", from_state: "to_collect", to_state: "storage", location: label(where), handed_by: contact || null, received_by: session.name, note: cond !== "Good" ? cond : null, ref_type: "collection", ref_id: c.id });
     ok++; if (damaged) dmg++;
   }
-  notIn.forEach(i => events.push({ entry_id: i.entry_id, action: "Missing at collection: still to collect", from_state: "to_collect", to_state: "to_collect", handed_by: contact || null, note: String((b.conditions || {})[i.entry.code] || "").trim() || null, ref_type: "collection", ref_id: c.id }));
+  notIn.forEach(i => events.push({ entry_id: i.entry_id, action: "Missing at collection: still to be delivered", from_state: "to_collect", to_state: "to_collect", handed_by: contact || null, note: String((b.conditions || {})[i.entry.code] || "").trim() || null, ref_type: "collection", ref_id: c.id }));
   await logEvents(session, events);
   const miss = notIn.length, left = notIn.length;
   const visit = await q(db().from("nae_collection_visits").insert({ collection_id: c.id, by_id: session.sub, by_name: session.name, contact_name: contact || null, contact_phone: phone || null,
@@ -118,17 +118,17 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   if ((b.photo_ids || []).length) await q(db().from("nae_collection_photos").update({ visit_id: visit.id }).eq("collection_id", c.id).is("visit_id", null).in("id", b.photo_ids));
   // in the Shared Drive: name the Emirates ID photo after the contact, and leave a plain-text record of the visit
   const vPhotos = (b.photo_ids || []).length ? await q(db().from("nae_collection_photos").select("kind, path").eq("visit_id", visit.id)) : [];
-  for (const p of vPhotos.filter(p => p.kind === "eid")) await renamePhoto(p.path, `Emirates ID - ${contact || "school contact"}`);
+  for (const p of vPhotos.filter(p => p.kind === "eid")) await renamePhoto(p.path, `Emirates ID - ${contact || "school representative"}`);
   const school = (await q(db().from("nae_schools").select("name, esis").eq("id", c.school_id).maybeSingle())) || {};
   const nowD = new Date();
   await writeVisitRecord({ school, when: nowD, text: [
-    `Collection visit · ${school.name || ""} (eSIS ${school.esis || "–"})`, `Collection ${c.code}`, `Date ${dayOf(nowD)} ${timeOf(nowD).replace(/-/g, ":")} (UAE)`,
-    `Checked in by ${session.name}`, contact ? `Handed over by ${contact}${phone ? `, ${phone}` : ""}` : "Nothing handed over",
+    `Delivery · ${school.name || ""} (eSIS ${school.esis || "–"})`, `Collection ${c.code}`, `Date ${dayOf(nowD)} ${timeOf(nowD).replace(/-/g, ":")} (UAE)`,
+    `Checked in by ${session.name}`, contact ? `Delivered by ${contact}${phone ? `, ${phone}` : ""}` : "Nothing delivered",
     "", `Received (${marked.length}):`, ...marked.map(i => `  ${i.entry.code}  ${S.P[i.entry.pathway_code]?.name || ""}  stored in ${label(placeOf(i)) || "–"}${(b.damaged || {})[i.entry.code] ? "  DAMAGED" : ""}${String((b.conditions || {})[i.entry.code] || "").trim() ? `  (${String(b.conditions[i.entry.code]).trim()})` : ""}`),
-    "", `Missing, still to collect (${notIn.length}):`, ...notIn.map(i => `  ${i.entry.code}  ${S.P[i.entry.pathway_code]?.name || ""}`),
+    "", `Missing, still to be delivered (${notIn.length}):`, ...notIn.map(i => `  ${i.entry.code}  ${S.P[i.entry.pathway_code]?.name || ""}`),
     "", `Photos in this folder: ${vPhotos.filter(p => p.kind === "box").length} of the boxes, ${vPhotos.filter(p => p.kind === "eid").length} Emirates ID.`, b.note ? `Note: ${b.note}` : ""
   ].join("\n") });
   await q(db().from("nae_collections").update({ status: left ? "scheduled" : "checked_in", location_id: b.location_id || Object.values(pwLoc)[0] || c.location_id || null, handed_by: contact || c.handed_by || null, checked_in_by: session.sub, checked_in_at: now }).eq("id", c.id));
-  await audit(session, `Collection ${left ? (ok ? "partly " : "visit, nothing ") : ""}checked in (${ok} received${dmg ? `, ${dmg} damaged` : ""}${miss ? `, ${miss} missing: still to collect` : ""})`, "collection", c.id, `${c.code}${contact ? ` · handed over by ${contact}` : ""}${b.location_id ? ` · ${label(b.location_id)}` : ""}`);
-  return { ok: true, note: `${ok ? `Checked in ${ok} artwork${ok === 1 ? "" : "s"}${b.location_id ? ` to ${label(b.location_id)}` : ""}` : "Visit recorded"}${miss ? `. ${miss} missing: still to collect on the next visit.` : "."}` };
+  await audit(session, `Collection ${left ? (ok ? "partly " : "delivery, nothing ") : ""}checked in (${ok} received${dmg ? `, ${dmg} damaged` : ""}${miss ? `, ${miss} missing: still to be delivered` : ""})`, "collection", c.id, `${c.code}${contact ? ` · delivered by ${contact}` : ""}${b.location_id ? ` · ${label(b.location_id)}` : ""}`);
+  return { ok: true, note: `${ok ? `Checked in ${ok} artwork${ok === 1 ? "" : "s"}${b.location_id ? ` to ${label(b.location_id)}` : ""}` : "Delivery recorded"}${miss ? `. ${miss} missing: still to be delivered.` : "."}` };
 });
