@@ -1186,3 +1186,6 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 .dim-in{position:relative;display:block}
 .dim-in .input{width:100%;padding-right:34px;text-align:left}
 .dim-in i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;color:var(--ink3);pointer-events:none}
+/* queue / session lists: artwork name first, code underneath */
+.f3-qi .t.tf b{text-align:left;font-family:var(--sans);font-size:13px;font-weight:600;line-height:18px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f3-qi .t.tf .cd{font-family:var(--mono);font-size:11px;line-height:16px;color:var(--ink3)}
