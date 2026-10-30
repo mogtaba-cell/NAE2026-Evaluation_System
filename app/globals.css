@@ -1179,3 +1179,10 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
   .x-cmp.sess-mx .f3-yn button{min-width:22px;padding:0 5px}
   .score-card{padding-left:14px;padding-right:14px}
 }
+/* size in cm: three small boxes */
+.dim3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.dim3 label{display:flex;flex-direction:column;gap:2px;min-width:0}
+.dim3 small{font-size:11px;color:var(--ink3)}
+.dim-in{position:relative;display:block}
+.dim-in .input{width:100%;padding-right:34px;text-align:left}
+.dim-in i{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-style:normal;font-size:12px;color:var(--ink3);pointer-events:none}
