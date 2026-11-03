@@ -60,13 +60,13 @@ export default function Allocation() {   // page is "Artwork Distribution"
           </div>
           {mode === "counts" && <p className="small faint" style={{ margin: 0 }}>Targets add up to <b>{setTotal}</b> of {pool} artwork{pool === 1 ? "" : "s"} to hand out. {setTotal !== pool ? "Totals land close, not exact, because a school is never split; any difference goes to whoever is furthest below their target." : "Totals land close, not exact, because a school is never split."}</p>}
           <Check label="Re-allocate everything (not only unallocated artworks)" checked={all} onChange={setAll} />
-          <p className="small faint" style={{ margin: 0 }}>{all ? `All ${x.total} ${pwName} artworks will be split again among the ticked coordinators. Anyone unticked loses their schools in ${pwName}.` : x.unallocated ? `Only the ${x.unallocated} unallocated artworks will be handed out; everyone keeps their current schools.` : "Every artwork already has a coordinator. Tick \"Re-allocate everything\" to split them again."}</p>
+          <p className="small faint" style={{ margin: 0 }}>{all ? `${pwName} is split again among the ticked coordinators, moving as few schools as possible: schools stay with their coordinator unless someone is over their target. Anyone unticked hands over their schools.` : x.unallocated ? `Only the ${x.unallocated} unallocated artworks will be handed out; everyone keeps their current schools.` : "Every artwork already has a coordinator. Tick \"Re-allocate everything\" to split them again."}</p>
           <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
             <Btn busy={busy === "preview"} onClick={() => run("preview")} disabled={!chosen.length || !pool}>Preview</Btn>
             <Btn v="primary" busy={busy === "confirm"} disabled={!pv} onClick={() => run("confirm")}>{pv ? `Confirm: move ${pv.changed} school${pv.changed === 1 ? "" : "s"}` : "Confirm"}</Btn>
           </div>
         </Card>
-        <Card title={pv ? "Preview: now → after" : "Current split"} sub={pv ? `${pv.moved} artworks handed out · ${pv.changed} school${pv.changed === 1 ? "" : "s"} change coordinator. Nothing is saved until you confirm.` : null} flush>
+        <Card title={pv ? "Preview: now → after" : "Current split"} sub={pv ? `${pv.changed} school${pv.changed === 1 ? "" : "s"} (${pv.moved} artworks) change coordinator; everyone else keeps their schools. Nothing is saved until you confirm.` : null} flush>
           <div className="al-split">
             <div className="al-sh"><span>Coordinator</span><span className="r">Schools</span><span className="r">Artworks</span></div>
             {rows.map(r => <div key={r.id} className="al-sr">

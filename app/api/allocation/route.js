@@ -10,14 +10,32 @@ async function data(pathway) {
 function summary(ents, assign, coords, subs) {
   return coords.map(c => { const m = ents.filter(e => assign(e) === c.id); const by = {}; m.forEach(e => { by[e.sub_code] = (by[e.sub_code] || 0) + 1; }); return { id: c.id, name: c.display_name, pathways: c.pathways, schools: new Set(m.map(e => e.school_id)).size, entries: m.length, bySub: by }; });
 }
+// Split schools among the ticked coordinators, moving as few schools as possible: each school stays with its
+// coordinator when that coordinator is ticked and still has room; only schools of unticked coordinators, unallocated
+// ones, and what's needed to bring someone down to their target are moved, to whoever is furthest below target.
+// A school is never split. Balanced: everyone aims for the same number of artworks.
 function split(ents, coordIds, counts) {
   const by = {}; ents.forEach(e => { (by[e.school_id] = by[e.school_id] || []).push(e); });
-  const load = Object.fromEntries(coordIds.map(k => [k, 0]));
-  const target = counts ? Object.fromEntries(coordIds.map(k => [k, Number(counts[k]) || 0])) : null;
-  const out = {};
-  Object.keys(by).sort((a, b) => by[b].length - by[a].length).forEach(s => {
-    const pick = coordIds.reduce((m, k) => { const room = target ? (target[k] - load[k]) : -load[k]; const mroom = target ? (target[m] - load[m]) : -load[m]; return room > mroom ? k : m; }, coordIds[0]);
-    out[s] = pick; load[pick] += by[s].length;
+  const size = sid => by[sid].length;
+  const owner = sid => { const n = {}; by[sid].forEach(e => { if (e.coordinator_id) n[e.coordinator_id] = (n[e.coordinator_id] || 0) + 1; }); return Object.keys(n).sort((a, b) => n[b] - n[a])[0] || null; };
+  const total = ents.length;
+  const target = counts ? Object.fromEntries(coordIds.map(k => [k, Number(counts[k]) || 0])) : Object.fromEntries(coordIds.map(k => [k, total / coordIds.length]));
+  const load = Object.fromEntries(coordIds.map(k => [k, 0])); const out = {}; const free = [];
+  for (const sid of Object.keys(by)) { const o = owner(sid); if (o && coordIds.includes(o)) { out[sid] = o; load[o] += size(sid); } else free.push(sid); }
+  // whoever is over their target gives back schools (the one that best fits the excess first)
+  for (const k of coordIds) {
+    for (;;) {
+      const excess = load[k] - target[k]; if (excess <= 0) break;
+      const mine = Object.keys(out).filter(sid => out[sid] === k).sort((a, b) => size(b) - size(a));
+      const pick = mine.find(sid => size(sid) <= excess) || (mine.length && size(mine[mine.length - 1]) / 2 < excess ? mine[mine.length - 1] : null);
+      if (!pick) break;
+      delete out[pick]; load[k] -= size(pick); free.push(pick);
+    }
+  }
+  // the freed and unallocated schools go, largest first, to whoever has the most room
+  free.sort((a, b) => size(b) - size(a)).forEach(sid => {
+    const pick = coordIds.reduce((m, k) => (target[k] - load[k] > target[m] - load[m] ? k : m), coordIds[0]);
+    out[sid] = pick; load[pick] += size(sid);
   });
   return out;
 }
@@ -45,9 +63,10 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const assign = e => map[e.school_id] !== undefined && pool.includes(e) ? map[e.school_id] : e.coordinator_id;
   const sel = coords.filter(c => chosen.includes(c.id) || ents.some(e => e.coordinator_id === c.id));
   const changed = Object.keys(map).filter(sid => pool.some(e => e.school_id === sid && e.coordinator_id !== map[sid])).length;   // schools that change coordinator
-  if (b.action === "preview") return { preview: summary(ents, assign, sel), moved: pool.length, changed };
-  const byCoord = {}; pool.forEach(e => { (byCoord[map[e.school_id]] = byCoord[map[e.school_id]] || []).push(e.id); });
+  const moving = pool.filter(e => e.coordinator_id !== map[e.school_id]);
+  if (b.action === "preview") return { preview: summary(ents, assign, sel), moved: moving.length, changed };
+  const byCoord = {}; moving.forEach(e => { (byCoord[map[e.school_id]] = byCoord[map[e.school_id]] || []).push(e.id); });
   for (const [k, ids] of Object.entries(byCoord)) for (let i = 0; i < ids.length; i += 150) await q(db().from("nae_entries").update({ coordinator_id: k }).in("id", ids.slice(i, i + 150)));
-  await audit(session, `Allocated ${pool.length} ${pathway} entries`, "pathway", pathway, sel.map(c => c.display_name).join(", "));
-  return { ok: true, note: `Saved: ${pool.length} artworks handed out, ${changed} school${changed === 1 ? "" : "s"} changed coordinator.` };
+  await audit(session, `Distributed ${pathway}: ${moving.length} artworks moved (${changed} schools)`, "pathway", pathway, sel.map(c => c.display_name).join(", "));
+  return { ok: true, note: `Saved: ${changed} school${changed === 1 ? "" : "s"} (${moving.length} artworks) changed coordinator.` };
 });

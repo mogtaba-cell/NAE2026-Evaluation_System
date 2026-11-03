@@ -1213,9 +1213,9 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 /* Collections step 2: to store */
 .cl-store{gap:10px}
 .cl-store-items{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
-.cl-store-it{display:grid;grid-template-columns:110px minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:8px 12px}
+.cl-store-it{display:flex;flex-direction:column;gap:8px;padding:10px 12px}
 .cl-store-it+.cl-store-it{border-top:1px solid var(--rule)}
-.cl-store-it .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cl-store-it .lp{grid-column:1 / -1}
-@media (max-width:700px){.cl-store-it{grid-template-columns:minmax(0,1fr) auto}.cl-store-it .t{grid-column:1 / -1;white-space:normal}}
 .rm-card{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;background:var(--sheet)}
+/* artwork thumbnails in lists */
+.cell-th{width:40px;height:40px;flex:none;border-radius:6px;object-fit:cover;background:var(--wash);border:1px solid var(--rule)}
+.cellp span.cell-th.none{display:inline-flex;align-items:center;justify-content:center;color:var(--ink3);font-size:12px;line-height:1}

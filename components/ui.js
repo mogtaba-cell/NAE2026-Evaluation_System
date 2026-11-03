@@ -178,7 +178,7 @@ export const gradeOf = (t, bands) => { const b = [...(bands || [{ grade: "A", mi
 export function Art({ seed = 0, w = 40, h = 40 }) { return <div className={`art a${Math.abs(seed) % 6}`} style={{ width: w, height: h, maxWidth: "100%" }} role="img" aria-label="Artwork" />; }
 export const seedOf = s => [...String(s || "")].reduce((a, c) => a + c.charCodeAt(0), 0);
 export function EntryCell({ e, sub }) {
-  return <div className="cellp">{e.thumb ? <img src={e.thumb} alt="" width="40" height="40" style={{ borderRadius: 6, objectFit: "cover" }} /> : <Art seed={seedOf(e.code)} />}<div style={{ minWidth: 0 }}><b className="code">{e.code}</b><span style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{sub ?? e.title_en ?? "Untitled"}</span></div></div>;
+  return <div className="cellp">{e.thumb ? <img className="cell-th" src={`${e.thumb}?s=120`} alt="" width="40" height="40" loading="lazy" /> : <span className="cell-th none" title="No photo">–</span>}<div style={{ minWidth: 0 }}><b className="code">{e.code}</b><span style={{ maxWidth: 260, overflow: "hidden", textOverflow: "ellipsis" }}>{sub ?? e.title_en ?? "Untitled"}</span></div></div>;
 }
 export async function download(url) {
   const r = await fetch(url); if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || "Export failed"); }

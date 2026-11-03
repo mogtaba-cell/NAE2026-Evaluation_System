@@ -1,3 +1,4 @@
+import { coverThumbs } from "@/lib/covers";
 import { route, forbidden } from "@/lib/api";
 import { db, qc, q } from "@/lib/db";
 import { scopeEntries, mySessionEntryIds } from "@/lib/perms";
@@ -38,13 +39,14 @@ export const GET = route(["admin", "coordinator", "management", "storage", "lead
   // results are shown only for entries the person works on
   const own = session.role === "coordinator" ? new Set([...(await mySessionEntryIds(session))]) : null;
   const hideScores = r => session.role === "storage" || (session.role === "coordinator" && r.coordinator_id !== session.sub && !own.has(r.id));
+  const thumbs = await coverThumbs(data);
   const rows = data.map(e => {
     let why = "";
     if (term) {
       const vis = [e.code, e.title_en, e.title_ar, e.group_name, e.school?.name].filter(Boolean).join(" ").toLowerCase();
       if (!vis.includes(term)) why = e.reference_id.toLowerCase().includes(term) ? "referenceId" : (e.registration_id || "").toLowerCase().includes(term) ? "RegistrationId" : e.school?.esis === term ? "school eSIS" : "student name or ESIS";
     }
-    return { ...e, why, results: hideScores(e) ? [] : e.results, limited: hideScores(e) };
+    return { ...e, thumb: thumbs[e.id] || null, why, results: hideScores(e) ? [] : e.results, limited: hideScores(e) };
   });
   return { rows, count, page, per, counts };
 });
