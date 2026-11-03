@@ -16,7 +16,7 @@ export default function Allocation() {   // page is "Artwork Distribution"
   const touch = fn => v => { fn(v); setPv(null); };
   const setChosen = touch(setChosen0), setMode = touch(setMode0), setCounts = touch(setCounts0), setAll = touch(setAll0);
   // tick the pathway's coordinators once per pathway (not on every refresh, which used to undo the choices and the preview)
-  useEffect(() => { if (d.data && initFor !== pathway) { setChosen0(d.data.allCoordinators.filter(c => !c.pathways?.length || c.pathways.includes(pathway)).map(c => c.id)); setCounts0({}); setAll0(false); setMode0("balanced"); setPv(null); setInitFor(pathway); } }, [d.data, pathway, initFor]);
+  useEffect(() => { if (d.data && initFor !== pathway) { setChosen0(d.data.allCoordinators.filter(c => (c.pathways || []).includes(pathway)).map(c => c.id)); setCounts0({}); setAll0(false); setMode0("balanced"); setPv(null); setInitFor(pathway); } }, [d.data, pathway, initFor]);
   if (!meta?.data) return <Loading />;
   if (!pws.length) return <><PageHead title="Artwork Distribution" /><Banner title="Import artworks first" action={<Btn sm href="/import">Data import</Btn>} /></>;
   async function run(action) {
@@ -30,7 +30,7 @@ export default function Allocation() {   // page is "Artwork Distribution"
   async function move(school_id, coordinator_id) { try { await api("/api/allocation", { body: { pathway, action: "move", school_id, coordinator_id } }); toast("School moved"); setPv(null); } catch (e) { toast(e.message, "err"); } }
   const x = d.data;
   // only coordinators who work in this pathway (or still hold artworks in it)
-  const inPw = c => !c.pathways?.length || c.pathways.includes(pathway);
+  const inPw = c => (c.pathways || []).includes(pathway);   // only coordinators whose account has this pathway ticked
   const cos = x ? x.allCoordinators.filter(c => inPw(c) || (x.coordinators.find(k => k.id === c.id)?.entries || 0) > 0) : [];
   const pwName = pws.find(p => p.code === pathway)?.name || pathway;
   const nowOf = id => x?.coordinators.find(c => c.id === id) || { schools: 0, entries: 0 };
@@ -51,12 +51,12 @@ export default function Allocation() {   // page is "Artwork Distribution"
           <Field label="How to split"><Seg value={mode} onChange={setMode} items={[["balanced", "Balanced"], ["counts", "Set numbers"]]} /></Field>
           <div className={`al-list${mode === "counts" ? " cnt" : ""}`}>
             <div className="al-h"><span>Coordinator</span><span className="r">Has now</span>{mode === "counts" && <span className="r">Target</span>}</div>
-            {cos.map(c => { const on = chosen.includes(c.id); const mine = !c.pathways?.length || c.pathways.includes(pathway); return <div key={c.id} className={`al-row${on ? " on" : ""}`}>
+            {cos.map(c => { const on = chosen.includes(c.id); const mine = inPw(c); return <div key={c.id} className={`al-row${on ? " on" : ""}`}>
               <span className="al-n"><Check label={c.name} checked={on} onChange={v => setChosen(v ? [...chosen, c.id] : chosen.filter(k => k !== c.id))} />{!mine && <span className="small faint">not in this pathway</span>}</span>
               <span className="r small">{nowOf(c.id).entries ? `${nowOf(c.id).entries} artworks` : "–"}</span>
               {mode === "counts" && <span className="r">{on ? <input className="input num" style={{ width: 84, height: 32 }} inputMode="numeric" placeholder="0" value={counts[c.id] || ""} onChange={e => setCounts({ ...counts, [c.id]: e.target.value.replace(/\D/g, "").slice(0, 4) })} aria-label={`Target for ${c.name}`} /> : null}</span>}
             </div>; })}
-            {!cos.length && <span className="muted" style={{ padding: 12 }}>No coordinators work in {pwName}. Add the pathway to a coordinator in People and logins.</span>}
+            {!cos.length && <span className="muted" style={{ padding: 12 }}>No coordinator has {pwName} ticked. Tick it on the coordinator's account in People and logins.</span>}
           </div>
           {mode === "counts" && <p className="small faint" style={{ margin: 0 }}>Targets add up to <b>{setTotal}</b> of {pool} artwork{pool === 1 ? "" : "s"} to hand out. {setTotal !== pool ? "Totals land close, not exact, because a school is never split; any difference goes to whoever is furthest below their target." : "Totals land close, not exact, because a school is never split."}</p>}
           <Check label="Re-allocate everything (not only unallocated artworks)" checked={all} onChange={setAll} />

@@ -31,12 +31,14 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const b = await body(request); const pathway = b.pathway; if (!pathway) throw bad("Pick a pathway.");
   const { ents, coords } = await data(pathway);
   if (b.action === "move") {
+    if (b.coordinator_id && !coords.find(c => c.id === b.coordinator_id && (c.pathways || []).includes(pathway))) throw bad("That coordinator doesn't have this pathway ticked on their account.");
     const ids = ents.filter(e => e.school_id === b.school_id).map(e => e.id);
     for (let i = 0; i < ids.length; i += 150) await q(db().from("nae_entries").update({ coordinator_id: b.coordinator_id || null }).in("id", ids.slice(i, i + 150)));
     await audit(session, `Moved a school to ${coords.find(c => c.id === b.coordinator_id)?.display_name || "nobody"}`, "school", b.school_id, `${ids.length} ${pathway} entries`);
     return { ok: true };
   }
-  const chosen = (b.coordinators || []).filter(id => coords.find(c => c.id === id));
+  // only coordinators whose account has this pathway ticked
+  const chosen = (b.coordinators || []).filter(id => coords.find(c => c.id === id && (c.pathways || []).includes(pathway)));
   if (!chosen.length) throw bad("Pick at least one coordinator.");
   const pool = b.all ? ents : ents.filter(e => !e.coordinator_id);
   const map = split(pool, chosen, b.mode === "counts" ? b.counts : null);
