@@ -1,3 +1,4 @@
+import { readTimes } from "@/lib/sessiontime";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
 import { loadStructure, versionById, versionView, rubricFor } from "@/lib/structure";
@@ -134,7 +135,9 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
   if (action === "edit") {
     if (s.status !== "planned") throw bad("Only a planned session can be edited.");
     const patch = {};
-    ["title", "session_date", "time_text"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
+    ["title", "session_date"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
+    if (b.start_time !== undefined || b.end_time !== undefined) { const t = readTimes(b, { required: true }); if (t.error) throw bad(t.error); Object.assign(patch, t); }
+    if (b.session_date !== undefined && !patch.session_date) throw bad("Choose the session date.");
     if (b.venue_id !== undefined) Object.assign(patch, await venueFields(b.venue_id, s.venue_id));
     if (patch.title === null) delete patch.title;
     if (Array.isArray(b.evaluator_ids)) {
@@ -146,6 +149,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (Array.isArray(b.self_ids)) patch.self_ids = await selfIds(b.self_ids, patch.evaluator_ids || s.evaluator_ids || []);
     else if (patch.evaluator_ids) patch.self_ids = (s.self_ids || []).filter(x => patch.evaluator_ids.includes(x));
     if (session.role === "admin" && b.coordinator_id) patch.coordinator_id = b.coordinator_id;
+    if (patch.session_date || patch.end_time) patch.overdue_notified_at = null;
     if (Object.keys(patch).length) await q(db().from("nae_sessions").update(patch).eq("id", s.id));
     if (Array.isArray(b.remove) && b.remove.length) {
       const rm = await q(db().from("nae_entries").select("id").in("code", b.remove));

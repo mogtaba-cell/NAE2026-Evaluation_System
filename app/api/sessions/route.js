@@ -1,3 +1,6 @@
+import { after } from "next/server";
+import { checkOverdueSoon } from "@/lib/overdue";
+import { readTimes } from "@/lib/sessiontime";
 import { venueFields } from "@/lib/venues";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q, all, inChunks } from "@/lib/db";
@@ -35,6 +38,7 @@ export const GET = route(["admin", "coordinator", "storage", "evaluator"], async
     pool.forEach(x => { const k = x.entry.school_id || "none"; const g = bySchool[k] = bySchool[k] || { school_id: x.entry.school_id, name: x.entry.school?.name || "No school", esis: x.entry.school?.esis, count: 0, physical: 0, subs: {}, physSubs: {}, mine: false }; g.count++; if (!x.online) { g.physical++; g.physSubs[x.entry.sub_code] = (g.physSubs[x.entry.sub_code] || 0) + 1; } g.subs[x.entry.sub_code] = (g.subs[x.entry.sub_code] || 0) + 1; if (x.entry.coordinator_id === session.sub) g.mine = true; });
     pools[r.id] = Object.values(bySchool).sort((a, b) => (b.mine - a.mine) || a.name.localeCompare(b.name));
   }
+  if (["admin", "coordinator"].includes(session.role)) { const job = checkOverdueSoon(); if (job) after(job); }
   const myEv = session.role === "evaluator" ? await myEvaluatorId(session) : null;
   const visible = sessions.filter(s => session.role === "evaluator" ? (s.evaluator_ids || []).includes(myEv) && s.status !== "cancelled" : session.role !== "coordinator" || s.coordinator_id === session.sub);
   return {
@@ -50,6 +54,9 @@ export const GET = route(["admin", "coordinator", "storage", "evaluator"], async
 export const POST = route(["admin", "coordinator"], async ({ session, request }) => {
   const b = await body(request);
   const S = await loadStructure(); const r = S.roundById[b.round_id]; if (!r || r.status === "closed") throw bad("Pick an open round.");
+  // when: a date with a start and an end time; the end is the session's deadline (overdue after it)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(b.session_date || ""))) throw bad("Choose the session date.");
+  const times = readTimes(b, { required: true }); if (times.error) throw bad(times.error);
   const team = [...new Set(b.evaluator_ids || [])];
   if (!team.length) throw bad("Pick at least one evaluator for the team.");
   const evs = await q(db().from("nae_evaluators").select("id, active").in("id", team));
@@ -84,7 +91,7 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
   picked = sessionOrder(picked);
   const where = await venueFields(b.venue_id);
   const count = (await q(db().from("nae_sessions").select("id").eq("round_id", r.id))).length;
-  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, ...where, coordinator_id: coordinatorId, self_ids: self, evaluator_ids: team }).select("*").single());
+  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date, ...times, ...where, coordinator_id: coordinatorId, self_ids: self, evaluator_ids: team }).select("*").single());
   await q(db().from("nae_session_entries").insert(picked.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: i }))));
   const requested = await requestForSession(session, s, picked.filter(x => !x.online).map(x => x.entry_id));
   for (const x of picked) await recompute(x.entry_id, r.round_no, { S, quiet: true });

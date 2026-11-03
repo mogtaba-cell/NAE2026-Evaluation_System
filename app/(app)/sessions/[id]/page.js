@@ -3,6 +3,7 @@ import VenueSelect from "@/components/VenueSelect";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Field, Modal, Check, Seg, dshort } from "@/components/ui";
+import { hm, timeText, isOverdue, overdueText } from "@/lib/sessiontime";
 import FileViewer from "@/components/FileViewer";
 import SessionBoard from "@/components/SessionBoard";
 import EntryAbout from "@/components/EntryAbout";
@@ -151,11 +152,11 @@ export default function Session({ params }) {
   const resultText = !res ? null : e.review?.status === "open" ? `With management: ${e.review.reason}` : res.complete ? (e.review ? `Decided by management (${e.review.status})` : res.passed ? `Complete · passes Round ${s.round_no}` : `Complete · does not pass Round ${s.round_no}`) : `Provisional: ${res.scored} of ${res.needed} scores${e.min ? ` (needs at least ${e.min})` : ""}`;
   const statusLabel = { live: "In progress", done: "Done", planned: "Planned", cancelled: "Cancelled" }[s.status];
   return <>
-    <PageHead back={[isEv ? "My sessions" : "Scoring sessions", "/sessions"]} title={s.title} sub={[s.session_date ? dshort(s.session_date) : null, s.time_text, s.venue, s.coordinator ? `coordinator ${s.coordinator}` : null].filter(Boolean).join(" · ")}
-      badges={<Badge tone={s.status === "live" ? "info" : s.status === "done" ? "ok" : s.status === "cancelled" ? "bad" : ""}>{statusLabel}</Badge>}
+    <PageHead back={[isEv ? "My sessions" : "Scoring sessions", "/sessions"]} title={s.title} sub={[s.session_date ? dshort(s.session_date) : null, timeText(s.start_time, s.end_time) || s.time_text, s.venue, s.coordinator ? `coordinator ${s.coordinator}` : null].filter(Boolean).join(" · ")}
+      badges={<><Badge tone={s.status === "live" ? "info" : s.status === "done" ? "ok" : s.status === "cancelled" ? "bad" : ""}>{statusLabel}</Badge>{isOverdue(s) && <Badge tone="bad">{overdueText(s)}</Badge>}</>}
       actions={isEv ? null : <>
         {s.status === "planned" && <Btn v="primary" busy={busy === "start"} onClick={() => act("start")}>Start session</Btn>}
-        {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", time_text: s.time_text || "", venue_id: s.venue_id || "", evaluator_ids: team.map(t => t.id), self_ids: team.filter(t => t.self).map(t => t.id), remove: [] })}>Edit</Btn>}
+        {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", start_time: hm(s.start_time), end_time: hm(s.end_time), venue_id: s.venue_id || "", evaluator_ids: team.map(t => t.id), self_ids: team.filter(t => t.self).map(t => t.id), remove: [] })}>Edit</Btn>}
         {s.status === "live" && (s.mine || admin) && <Btn onClick={() => setSelfEdit(team.filter(t => t.self).map(t => t.id))}>Who enters scores</Btn>}
         {s.status === "live" && <Btn busy={busy === "finish"} onClick={() => act("finish")}>Finish session</Btn>}
         {s.status === "done" && admin && <Btn busy={busy === "reopen"} onClick={() => act("reopen")}>Reopen</Btn>}
@@ -234,7 +235,8 @@ export default function Session({ params }) {
         <Field label="Title"><input className="input" value={edit.title} onChange={x => setEdit({ ...edit, title: x.target.value })} /></Field>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
           <Field label="Date"><input type="date" className="input" value={edit.session_date} onChange={x => setEdit({ ...edit, session_date: x.target.value })} /></Field>
-          <Field label="Time"><input className="input" value={edit.time_text} onChange={x => setEdit({ ...edit, time_text: x.target.value })} /></Field>
+          <Field label="Starts"><input type="time" step="900" className="input" value={edit.start_time} onChange={x => setEdit({ ...edit, start_time: x.target.value })} /></Field>
+          <Field label="Ends"><input type="time" step="900" className="input" value={edit.end_time} onChange={x => setEdit({ ...edit, end_time: x.target.value })} /></Field>
           <Field label="Venue"><VenueSelect value={edit.venue_id} current={s.venue} onChange={v => setEdit({ ...edit, venue_id: v })} /></Field>
         </div>
         <Field label="Evaluator team"><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{(meta?.data?.evaluators || []).filter(v => v.active).map(v => <Check key={v.id} label={v.name} checked={edit.evaluator_ids.includes(v.id)} onChange={on => setEdit({ ...edit, evaluator_ids: on ? [...edit.evaluator_ids, v.id] : edit.evaluator_ids.filter(x => x !== v.id), self_ids: on ? edit.self_ids : edit.self_ids.filter(x => x !== v.id) })} />)}</div></Field>
