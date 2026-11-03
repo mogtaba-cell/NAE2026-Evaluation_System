@@ -43,7 +43,8 @@ export default function Dashboard() {
       ...meta?.data?.pathways?.filter(p => p.entries && p.check.some(c => !c.ok && c.key === "rubrics")).map(p => [`${p.name}: rubrics missing`, p.check.find(c => c.key === "rubrics").text + " have a published rubric", <Btn key="r" sm href="/rubrics">Rubrics</Btn>]) || [],
       ...(x.lateRounds || []).map(r => [`${r.pathway} Round ${r.round_no} is past its closing date`, `It was planned to close on ${r.closes_on}. Close it when scoring is finished.`, <Btn key={"lr" + r.id} sm href="/rounds">Rounds</Btn>]),
       ...(x.reviews.overdue ? [[`${x.reviews.overdue} reviews overdue`, `${x.reviews.open} open in total`, <Btn key="v" sm href="/reviews">View</Btn>]] : []),
-      ...un.map(([p, n]) => [`${n} ${p} artworks not allocated`, "Allocate so coordinators can follow up with schools", <Btn key="al" sm href={`/allocation?pathway=${p}`}>Allocate</Btn>]),
+      ...(x.notVisible || []).map(e => [`${e.code} not visible`, `Scoring paused: “${e.note || ""}”. Fix the files and reopen it`, <Btn key={"nv" + e.code} sm href={`/entries/${e.code}`}>Open</Btn>]),
+      ...un.map(([p, n]) => [`${n} ${p} artworks not allocated`, "Distribute them so coordinators can follow up with schools", <Btn key="al" sm href={`/allocation?pathway=${p}`}>Distribute</Btn>]),
       ...(a.unmatched ? [[`${a.unmatched} Drive folders not matched`, "Link them to artworks or ignore them", <Btn key="u" sm href="/files">Open</Btn>]] : []),
       ...(a.nofiles ? [[`${a.nofiles} artwork${a.nofiles === 1 ? " has" : "s have"} no files`, meta?.data?.drive?.mock ? "Test mode: files are counted when each artwork is first opened" : "Their folders are empty or missing. Clears when schools upload", <Btn key="n" sm href="/entries?nofiles=1">Open</Btn>]] : []),
       ...(lg?.unbatched ? [[`${lg.unbatched} physical artwork${lg.unbatched === 1 ? " needs" : "s need"} a collection`, "Group them by school for the Logistics team", <Btn key="c" sm href="/logistics">Open</Btn>]] : [])
@@ -64,6 +65,7 @@ export default function Dashboard() {
       <div className="x-side">
         {(lg?.toMe || lg?.withMe) ? <Card title="Artworks in your session room" right={<Btn sm v="primary" href="/pull-list">Session board</Btn>}><p className="muted">{lg.toMe + lg.withMe} artwork{lg.toMe + lg.withMe === 1 ? " is" : "s are"} in the room. Hand each batch back on the board when it's scored, and Logistics brings the next.</p></Card> : null}
         <Card title="My scoring sessions" right={<Btn sm v="ghost" href="/sessions">All sessions</Btn>}>{mySessions.length ? <div className="x-todo">{mySessions.map(s => <div className="it" key={s.id}><div className="tx"><b>{s.title}</b><span>{dshort(s.session_date)} {s.time_text || ""} · {s.venue || ""} · {s.count} artworks</span></div><Btn sm v={s.status === "live" ? "primary" : "secondary"} href={`/sessions/${s.id}`}>{s.status === "live" ? "Continue" : "Open"}</Btn></div>)}</div> : <p className="muted">No sessions planned. Physical Round 2 artworks are scored in sessions you create.</p>}</Card>
+        {(x.notVisible || []).length > 0 && <Card title="Not visible: fix and reopen" sub="Evaluators couldn't see these artworks properly, so scoring is paused."><div className="x-todo">{x.notVisible.map(e => <div className="it" key={e.code}><div className="tx"><b>{e.code} · {e.title || ""}</b><span>“{e.note}”</span></div><Btn sm href={`/entries/${e.code}`}>Open</Btn></div>)}</div></Card>}
         <Card title="Follow up with schools">{m.nofiles.length || lg?.mineMissing?.length || m.collections.length ? <div className="x-todo">
           {lg?.mineMissing?.map(c => <div className="it" key={c}><div className="tx"><b>{c} missing at collection</b><span>Ask the school to check</span></div><Btn sm href={`/entries/${c}`}>Open</Btn></div>)}
           {m.collections.map(c => <div className="it" key={c.id}><div className="tx"><b>Collection {c.code} · {dshort(c.scheduled_on)}</b><span>{c.school} · {c.count} artworks</span></div><Btn sm href="/collections">Open</Btn></div>)}
@@ -79,6 +81,7 @@ export default function Dashboard() {
       ...(n("returning") ? [[`${n("returning")} handed back from sessions`, "Put them back on the shelves", <Btn key="r" sm href="/pull-list">Session boards</Btn>]] : []),
       ...(lg.unbatched ? [[`${lg.unbatched} artwork${lg.unbatched === 1 ? "" : "s"} not in a collection`, "Group them by school, ready for each school's delivery", <Btn key="c" sm href="/logistics">Schedule</Btn>]] : []),
       ...(lg.to_collect - lg.unbatched > 0 ? [[`${lg.to_collect - lg.unbatched} artworks in scheduled collections`, "Check them in as they arrive", <Btn key="cc" sm href="/collections">Collections</Btn>]] : []),
+      ...(lg.received ? [[`${lg.received} artwork${lg.received === 1 ? "" : "s"} to store`, "Received at the office: choose their room, shelf and row", <Btn key="ts" sm v="primary" href="/collections?view=store">To store</Btn>]] : []),
 
       ...(lg.missing + lg.damaged ? [[`${lg.missing} missing · ${lg.damaged} damaged`, "Decide what happens to each", <Btn key="x" sm href="/logistics?tab=exceptions">Exceptions</Btn>]] : [])
     ];
@@ -95,9 +98,9 @@ export default function Dashboard() {
   if (role === "management") {
     const m = x.mine;
     return <>
-      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews?mine=1">My reviews</Btn></>} />
+      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews">Artworks to be reviewed</Btn></>} />
       <Kpis items={[["My open reviews", m.open.length, `${m.open.filter(r => Date.parse(r.due_at) < Date.now()).length} overdue`, m.open.some(r => Date.parse(r.due_at) < Date.now()) ? "warn" : ""], ["Decided", m.decided, `${m.overridden} overridden`], ["All open reviews", x.reviews.open, `${x.reviews.overdue} overdue`], ["Artworks", fmt(x.total), `${fmt(x.schools)} schools`], ...outcomeItems(x.outcomes)]} dense />
-      <Card title="Waiting for your decision" flush>{m.open.length ? <Table cols={["Artwork", "Reason", { h: "Due", cls: "r" }]} rows={m.open.map(r => { const [t, tone] = dueTxt(r.due_at); return [<Two key="a" a={<span className="code">{r.entry?.code}</span>} b={r.entry?.title_en} />, r.reason, <Badge key="c" tone={tone}>{t}</Badge>]; })} onRow={i => location.assign(`/reviews/${m.open[i].id}`)} /> : <div style={{ padding: 20 }}><Empty title="No reviews waiting">Flagged artworks assigned to you appear here.</Empty></div>}</Card>
+      <Card title="Waiting for your decision" flush>{m.open.length ? <Table cols={["Artwork", "Reason", { h: "Due", cls: "r" }]} rows={m.open.map(r => { const [t, tone] = dueTxt(r.due_at); return [<Two key="a" a={<span className="code">{r.entry?.code}</span>} b={r.entry?.title_en} />, r.reason, <Badge key="c" tone={tone}>{t}</Badge>]; })} onRow={i => location.assign(`/reviews?id=${m.open[i].id}`)} /> : <div style={{ padding: 20 }}><Empty title="No reviews waiting">Flagged artworks assigned to you appear here.</Empty></div>}</Card>
       <Pathways d={x} />
     </>;
   }

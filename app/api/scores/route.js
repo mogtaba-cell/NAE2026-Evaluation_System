@@ -1,3 +1,4 @@
+import { questionsOf, normAnswers, missingAnswer } from "@/lib/questions";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
 import { myEvaluatorId } from "@/lib/perms";
@@ -19,6 +20,7 @@ export const POST = route(["evaluator", "coordinator", "admin"], async ({ sessio
   const round = roundOf(S, e.pathway_code, roundNo); if (!round) throw bad("No such round.");
   if (round.status !== "open" && session.role !== "admin") throw bad("This round is not open.");
   if (["withdrawn", "not_scored"].includes(e.status) && e.current_round === roundNo) throw bad("This artwork was stopped (withdrawn or not scored).");
+  if (e.not_visible_at && e.not_visible_round === roundNo) throw bad("This artwork is marked not visible. The coordinator has to fix it before it can be scored.");
   const physical = isPhysicalRound(S, e, roundNo);
   let evaluatorId = b.evaluator_id, sess = null;
 
@@ -52,23 +54,24 @@ export const POST = route(["evaluator", "coordinator", "admin"], async ({ sessio
   const pin = await pinnedVersion(S, e, roundNo);
   if (!pin) throw bad("This subpathway has no published rubric.");
   const version = versionById(S, pin.version_id).version;
+  const qs = questionsOf(version); const ans = normAnswers(qs, b.answers, b.national_identity);
 
   let row;
   if (b.absent) {
     if (!sess) throw bad("Absent can only be marked in a session.");
-    row = { status: "absent", scores: {}, total: null, national_identity: null, submitted_at: new Date().toISOString() };
+    row = { status: "absent", scores: {}, total: null, answers: {}, national_identity: null, submitted_at: new Date().toISOString() };
   } else {
     const submit = !!b.submit;
     let clean = b.scores || {}, total = null;
     if (submit) {
       const v = await validateScores(version.criteria, b.scores); if (v.error) throw bad(v.error); clean = v.scores;
-      if (version.identity_required && typeof b.national_identity !== "boolean") throw bad("Choose yes or no for national identity.");
+      const miss = missingAnswer(qs, ans); if (miss) throw bad(`Choose yes or no for ${miss.label.toLowerCase()}.`);
       total = weightedTotal(version.criteria, clean);
     }
-    row = { status: submit ? "submitted" : "draft", scores: clean, total, national_identity: typeof b.national_identity === "boolean" ? b.national_identity : null, submitted_at: submit ? new Date().toISOString() : null };
+    row = { status: submit ? "submitted" : "draft", scores: clean, total, answers: ans, national_identity: typeof ans.identity === "boolean" ? ans.identity : null, submitted_at: submit ? new Date().toISOString() : null };
   }
-  if (b.clear_absent && existing?.status === "absent") row = { status: "draft", scores: {}, total: null, national_identity: null, submitted_at: null };
-  await q(db().from("nae_scores").upsert({ round_id: round.id, entry_id: e.id, evaluator_id: evaluatorId, rubric_version_id: pin.version_id, comment: b.comment || null, entered_by: session.sub, session_id: b.session_id || null, updated_at: new Date().toISOString(), ...row }, { onConflict: "round_id,entry_id,evaluator_id" }));
+  if (b.clear_absent && existing?.status === "absent") row = { status: "draft", scores: {}, total: null, answers: {}, national_identity: null, submitted_at: null };
+  await q(db().from("nae_scores").upsert({ round_id: round.id, entry_id: e.id, evaluator_id: evaluatorId, rubric_version_id: pin.version_id, comment: b.comment || null, to_review: !!b.to_review && row.status !== "absent", entered_by: session.sub, session_id: b.session_id || null, updated_at: new Date().toISOString(), ...row }, { onConflict: "round_id,entry_id,evaluator_id" }));
 
   // framing (physical work in Round 2): one pair of boxes per artwork
   if (b.framing && roundNo === 2) await saveFraming(e.id, b.framing);

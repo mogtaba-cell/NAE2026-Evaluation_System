@@ -2,17 +2,18 @@ import { venueFields } from "@/lib/venues";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q, all, inChunks } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
-import { sessionPool, sessionOrder, takeNext } from "@/lib/sessions";
+import { sessionPool, sessionOrder, takeNext, selfIds } from "@/lib/sessions";
+import { myEvaluatorId } from "@/lib/perms";
 import { requestForSession } from "@/lib/movements";
 import { recompute } from "@/lib/scoring";
 import { audit } from "@/lib/audit";
 
-export const GET = route(["admin", "coordinator", "storage"], async ({ session, scope, url }) => {
+export const GET = route(["admin", "coordinator", "storage", "evaluator"], async ({ session, scope, url }) => {
   const S = await loadStructure();
   const { has } = await scope(S);
   // ?pool=ROUND_ID: the single entries waiting for a session in that round, to pick artworks one by one
   const poolId = url.searchParams.get("pool");
-  if (poolId) {
+  if (poolId && session.role !== "evaluator") {
     const r = S.roundById[poolId]; if (!r || !has(r.pathway_code)) return { entries: [] };
     const pool = await sessionPool(S, r);
     const subName = c => (S.P[r.pathway_code].subs.find(x => x.code === c) || {}).name;
@@ -28,13 +29,14 @@ export const GET = route(["admin", "coordinator", "storage"], async ({ session, 
   const rounds = S.rounds.filter(r => has(r.pathway_code) && r.status !== "closed" && (r.status === "open" || (r.round_no === 2 && S.P[r.pathway_code].subs.some(s => s.is_physical))));
   const pools = {};
   // working out what's waiting is the slow part: only when asked (?pools=1, the New session form and banner)
-  if (url.searchParams.get("pools")) for (const r of rounds) {
+  if (url.searchParams.get("pools") && session.role !== "evaluator") for (const r of rounds) {
     const pool = await sessionPool(S, r);
     const bySchool = {};
     pool.forEach(x => { const k = x.entry.school_id || "none"; const g = bySchool[k] = bySchool[k] || { school_id: x.entry.school_id, name: x.entry.school?.name || "No school", esis: x.entry.school?.esis, count: 0, physical: 0, subs: {}, physSubs: {}, mine: false }; g.count++; if (!x.online) { g.physical++; g.physSubs[x.entry.sub_code] = (g.physSubs[x.entry.sub_code] || 0) + 1; } g.subs[x.entry.sub_code] = (g.subs[x.entry.sub_code] || 0) + 1; if (x.entry.coordinator_id === session.sub) g.mine = true; });
     pools[r.id] = Object.values(bySchool).sort((a, b) => (b.mine - a.mine) || a.name.localeCompare(b.name));
   }
-  const visible = sessions.filter(s => session.role !== "coordinator" || s.coordinator_id === session.sub);
+  const myEv = session.role === "evaluator" ? await myEvaluatorId(session) : null;
+  const visible = sessions.filter(s => session.role === "evaluator" ? (s.evaluator_ids || []).includes(myEv) && s.status !== "cancelled" : session.role !== "coordinator" || s.coordinator_id === session.sub);
   return {
     sessions: visible.map(s => ({ ...s, pathway: S.P[S.roundById[s.round_id]?.pathway_code]?.name, round_no: S.roundById[s.round_id]?.round_no, coordinator: s.coordinator?.display_name, team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean).map(e => ({ id: e.id, name: e.name })), count: s.entries.length, pulled: s.entries.filter(x => x.pulled).length, scored: s.entries.filter(x => res.find(r => r.entry_id === x.entry_id && r.round_id === s.round_id && r.complete)).length, mine: s.coordinator_id === session.sub, artworks: lgs.filter(l => l.session_id === s.id).reduce((m, l) => { m[l.state] = (m[l.state] || 0) + 1; return m; }, {}), entries: undefined })),
     ready: Object.values(pools).reduce((a, p) => a + p.reduce((b, g) => b + g.count, 0), 0),
@@ -78,10 +80,11 @@ export const POST = route(["admin", "coordinator"], async ({ session, request })
     picked = pool.filter(x => schools.has(x.entry.school_id || "none") && (!subs || subs.has(x.entry.sub_code)));
   }
   if (!picked.length) throw bad("No waiting artworks match. Check the schools and subpathways.");
+  const self = await selfIds(b.self_ids, team);
   picked = sessionOrder(picked);
   const where = await venueFields(b.venue_id);
   const count = (await q(db().from("nae_sessions").select("id").eq("round_id", r.id))).length;
-  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, ...where, coordinator_id: coordinatorId, evaluator_ids: team }).select("*").single());
+  const s = await q(db().from("nae_sessions").insert({ round_id: r.id, title: String(b.title || "").trim() || `${S.P[r.pathway_code].name} · Round ${r.round_no} · Session ${count + 1}`, session_date: b.session_date || null, time_text: b.time_text || null, ...where, coordinator_id: coordinatorId, self_ids: self, evaluator_ids: team }).select("*").single());
   await q(db().from("nae_session_entries").insert(picked.map((x, i) => ({ session_id: s.id, entry_id: x.entry_id, position: i }))));
   const requested = await requestForSession(session, s, picked.filter(x => !x.online).map(x => x.entry_id));
   for (const x of picked) await recompute(x.entry_id, r.round_no, { S, quiet: true });

@@ -114,8 +114,8 @@ export function Check({ label, checked, onChange, disabled }) {
 export function Radio({ name, label, checked, onChange }) {
   return <label className="check radio"><input type="radio" name={name} checked={!!checked} onChange={() => onChange && onChange()} /><span className="box" />{label && <span>{label}</span>}</label>;
 }
-export function Switch({ checked, onChange, label }) {
-  return <label className="switch"><input type="checkbox" checked={!!checked} onChange={e => onChange(e.target.checked)} /><span className="tr" />{label && <span>{label}</span>}</label>;
+export function Switch({ checked, onChange, label, disabled }) {
+  return <label className="switch"><input type="checkbox" checked={!!checked} disabled={disabled} onChange={e => onChange(e.target.checked)} /><span className="tr" />{label && <span>{label}</span>}</label>;
 }
 export function Table({ cols, rows, onRow, minw, empty = "Nothing here", sel, footer, lead = 0, flat }) {
   // On phones (flat off) each row turns into a small card: the lead cell on top, the others labelled underneath.

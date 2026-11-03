@@ -1,3 +1,4 @@
+import { questionsOf, normAnswers, missingAnswer, answersOf } from "@/lib/questions";
 import { route, body, bad } from "@/lib/api";
 import { db, q } from "@/lib/db";
 import { loadStructure, versionById, rubricFor } from "@/lib/structure";
@@ -16,12 +17,16 @@ export const POST = route(["admin"], async ({ session, request }) => {
   if (!version) throw bad("The rubric for this score can't be found.");
   const v = await validateScores(version.criteria, b.scores); if (v.error) throw bad(v.error);
   const total = weightedTotal(version.criteria, v.scores);
-  const identity = typeof b.national_identity === "boolean" ? b.national_identity : s.national_identity;
-  if (version.identity_required && typeof identity !== "boolean") throw bad("Choose yes or no for national identity.");
-  const after = { scores: v.scores, total, national_identity: identity, status: "submitted" };
+  const qs = questionsOf(version);
+  const ans = normAnswers(qs, { ...answersOf(s, qs), ...(b.answers || {}) }, typeof b.national_identity === "boolean" ? b.national_identity : undefined);
+  const miss = missingAnswer(qs, ans); if (miss) throw bad(`Choose yes or no for ${miss.label.toLowerCase()}.`);
+  const identity = typeof ans.identity === "boolean" ? ans.identity : null;
+  const after = { scores: v.scores, total, answers: ans, national_identity: identity, status: "submitted" };
   await q(db().from("nae_scores").update({ ...after, submitted_at: s.submitted_at || new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", s.id));
-  await q(db().from("nae_score_history").insert({ score_id: s.id, entry_id: s.entry.id, round_id: s.round.id, evaluator_id: s.evaluator_id, before: { scores: s.scores, total: s.total, national_identity: s.national_identity, status: s.status }, after, reason, changed_by: session.sub }));
-  await audit(session, `Score changed for ${s.evaluator.name} (Round ${s.round.round_no})`, "entry", s.entry.id, `Was ${s.total ?? "none"}${s.national_identity != null ? ` (identity ${s.national_identity ? "yes" : "no"})` : ""}, now ${total}${identity != null ? ` (identity ${identity ? "yes" : "no"})` : ""}. Reason: ${reason}`);
+  await q(db().from("nae_score_history").insert({ score_id: s.id, entry_id: s.entry.id, round_id: s.round.id, evaluator_id: s.evaluator_id, before: { scores: s.scores, total: s.total, answers: s.answers, national_identity: s.national_identity, status: s.status }, after, reason, changed_by: session.sub }));
+  const yn = a => qs.filter(x => typeof a[x.key] === "boolean").map(x => `${x.label.toLowerCase()} ${a[x.key] ? "yes" : "no"}`).join(", ");
+  const before = answersOf(s, qs);
+  await audit(session, `Score changed for ${s.evaluator.name} (Round ${s.round.round_no})`, "entry", s.entry.id, `Was ${s.total ?? "none"}${yn(before) ? ` (${yn(before)})` : ""}, now ${total}${yn(ans) ? ` (${yn(ans)})` : ""}. Reason: ${reason}`);
   const res = await recompute(s.entry.id, s.round.round_no, { S });
   return { ok: true, total, result: res };
 });

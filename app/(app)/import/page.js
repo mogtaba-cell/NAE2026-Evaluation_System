@@ -52,7 +52,7 @@ export default function Import() {
   }
   const pw = rows ? Object.entries(rows.reduce((m, r) => { const k = r.ArtPathwayNameEn || "Not given"; m[k] = (m[k] || 0) + 1; return m; }, {})) : [];
   return <>
-    <PageHead title="Data import" sub="Upload the submissions export (.xlsx or .csv). New referenceIds become artworks with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched." />
+    <PageHead title="Data import" sub="Upload the submissions export (.xlsx or .csv). New referenceIds become artworks with short codes in submission-date order. Rows already imported only update their details: scores and history are never touched. A POD (People of Determination) column, if the file has one (Yes/No), marks the artwork POD." />
     <Banner title={`Importing into ${meta?.data?.program?.name || "the current program"}`}>Switch program at the top to import into another one. Pathways are matched by name to this program's pathways; new subpathways found in the file are added to them.</Banner>
     {!run && <div className={`drop${drag ? " on" : ""}`} role="button" tabIndex={0} onClick={() => inp.current?.click()} onKeyDown={e => e.key === "Enter" && inp.current?.click()}
       onDragOver={e => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files[0]; if (f) read(f); }}>

@@ -5,13 +5,14 @@ import LocPicker from "@/components/LocPicker";
 import { useMemo, useState } from "react";
 import { api, useApi, useToast, Btn, Badge, Banner, Modal, Field, Check, Loading, when, dshort } from "@/components/ui";
 
-export const SHORT = { to_collect: "Awaiting delivery", storage: "In storage", requested: "Waiting for its session", picked: "Picked", handed_over: "Handed over", coordinator: "In the session room", returning: "Handed back", framer: "At the framer", showcase: "Showcase", returned: "Returned to school", missing: "Missing" };
-const TONE = { to_collect: "", storage: "ok", requested: "info", picked: "info", handed_over: "warn", coordinator: "info", returning: "warn", framer: "", showcase: "ok", returned: "", missing: "bad" };
+export const SHORT = { to_collect: "Awaiting delivery", received: "To be stored", storage: "In storage", requested: "Waiting for its session", picked: "Picked", handed_over: "Handed over", coordinator: "In the session room", returning: "Handed back", framer: "At the framer", photography: "At photography", showcase: "Showcase", exhibition: "At the exhibition", returned: "Returned to school", missing: "Missing" };
+const TONE = { to_collect: "", received: "warn", storage: "ok", requested: "info", picked: "info", handed_over: "warn", coordinator: "info", returning: "warn", framer: "", photography: "info", showcase: "ok", exhibition: "ok", returned: "", missing: "bad" };
 export const MISSING = { collect_later: "School delivers later", score_online: "Scored from its files", withdrawn: "Withdrawn" };
 export const StateBadge = ({ s }) => <Badge tone={TONE[s]}>{SHORT[s] || s}</Badge>;
 
 // label, from states, roles, needs (location | framer | note), primary
 export const STEPS = {
+  store:         ["Store: choose room, shelf and row", ["received"], ["admin", "storage"], "location"],
   return_room:   ["Hand back to storage", ["coordinator", "handed_over"], ["admin", "coordinator", "storage"]],
   receive_back:  ["Back on the shelves", ["returning", "coordinator", "handed_over"], ["admin", "storage"], "location", true],
   move:          ["Move to…", ["storage", "showcase"], ["admin", "storage"], "location"],
@@ -20,7 +21,7 @@ export const STEPS = {
   showcase:      ["Ready for showcase", ["storage"], ["admin", "storage"]],
   unshowcase:    ["Back to storage list", ["showcase"], ["admin", "storage"]],
   return_school: ["Returned to the school", ["storage", "showcase"], ["admin", "storage"], "note"],
-  missing:       ["Mark missing", ["storage", "requested", "picked", "handed_over", "coordinator", "returning"], ["admin", "storage"], "note"],
+  missing:       ["Mark missing", ["received", "storage", "requested", "picked", "handed_over", "coordinator", "returning"], ["admin", "storage"], "note"],
   found:         ["Found: put in storage", ["missing"], ["admin", "storage"], "location"]
 };
 
@@ -65,7 +66,7 @@ export function ArtworkBatch({ rows, groups, role, steps, onDone, empty = "Nothi
           <span className="t">{r.entry.title_en || r.entry.group_name || r.sub}</span>
           <span className="m small faint">{[r.entry.school?.name, r.sub, r.entry.size_text].filter(Boolean).join(" · ")}</span>
         </button>
-        <span className="mv-where small">{r.state === "storage" || r.state === "requested" || r.state === "picked" || r.state === "showcase" ? (r.where || "Not shelved") : r.state === "missing" ? (r.missing_outcome ? MISSING[r.missing_outcome] : "Not decided") : r.state === "to_collect" ? (r.collection ? `Batch ${r.collection.scheduled_on ? dshort(r.collection.scheduled_on) : "not dated"}` : "Not scheduled") : r.state === "framer" ? (r.framing_vendor || "Framer") + (r.framing_due ? ` · due ${dshort(r.framing_due)}` : "") : r.session ? r.session.coordinator || "" : ""}</span>
+        <span className="mv-where small">{r.state === "storage" || r.state === "requested" || r.state === "picked" || r.state === "showcase" ? (r.where || "Not shelved") : r.state === "received" ? "At the office: choose its shelf" : r.state === "missing" ? (r.missing_outcome ? MISSING[r.missing_outcome] : "Not decided") : r.state === "to_collect" ? (r.collection ? `Batch ${r.collection.scheduled_on ? dshort(r.collection.scheduled_on) : "not dated"}` : "Not scheduled") : r.state === "framer" ? (r.framing_vendor || "Framer") + (r.framing_due ? ` · due ${dshort(r.framing_due)}` : "") : r.session ? r.session.coordinator || "" : ""}</span>
         <span className="mv-st">{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.needs_framing && <Badge>{r.glass_framing ? "Frame + glass" : "Frame"}</Badge>}<StateBadge s={r.state} /></span>
       </div>)}
     </div>; })}

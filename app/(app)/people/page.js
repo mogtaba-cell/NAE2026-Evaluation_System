@@ -11,7 +11,7 @@ function PwPicker({ value, onChange, pws }) {
 
 export default function People() {
   const d = useApi("/api/people"); const meta = useMeta(); const toast = useToast(); const progs = useApi("/api/programs");
-  const [tab, setTab] = useState("accounts"); const [form, setForm] = useState(null); const [pw, setPw] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState("accounts"); const [form, setForm] = useState(null); const [pw, setPw] = useState(null); const [err, setErr] = useState(null); const [busy, setBusy] = useState(false); const [bulk, setBulk] = useState(null);
   if (!d.data) return <Loading error={d.error} />;
   const pws = (meta?.data?.pathways || []);
   const pwName = c => pws.find(p => p.code === c)?.code || c;
@@ -29,8 +29,11 @@ export default function People() {
   }
   async function reset(a) { try { const r = await api(`/api/people/${a.id}`, { method: "PATCH", body: { reset_password: true } }); setPw({ user: a.username, pw: r.tempPassword }); } catch (e) { toast(e.message, "err"); } }
   const accs = d.data.accounts;
+  const noLogin = d.data.evaluators.filter(e => e.active && !e.account);
+  async function bulkLogins() { setBusy(true); try { const r = await api("/api/people", { body: { action: "bulk_logins" } }); setBulk(r.created); d.reload(); meta?.reload(); } catch (e) { toast(e.message, "err"); } setBusy(false); }
   return <>
-    <PageHead title="People and logins" sub="Accounts sign in with a username and password. New accounts get a temporary password and must set their own at first sign-in. Evaluators without a login are scored by their coordinator in physical sessions." actions={<><Btn onClick={() => { setErr(null); setForm({ kind: "evaluator", name: "", pathways: [] }); }}>Add evaluator without login</Btn><Btn v="primary" onClick={() => { setErr(null); setForm({ username: "", display_name: "", email: "", role: "evaluator", pathways: [] }); }}>New account</Btn></>} />
+    <PageHead title="People and logins" sub="Accounts sign in with a username and password. New accounts get a temporary password and must set their own at first sign-in. Every evaluator has a login; in each scoring session the coordinator chooses who types their own scores." actions={<><Btn onClick={() => { setErr(null); setForm({ kind: "evaluator", name: "", pathways: [] }); }}>Add evaluator</Btn><Btn v="primary" onClick={() => { setErr(null); setForm({ username: "", display_name: "", email: "", role: "evaluator", pathways: [] }); }}>New account</Btn></>} />
+    {noLogin.length > 0 && <Banner tone="warn" title={`${noLogin.length} evaluator${noLogin.length === 1 ? " has" : "s have"} no login`} action={<Btn sm v="primary" busy={busy} onClick={bulkLogins}>Create logins</Btn>}>{noLogin.map(e => e.name).join(", ")}. A username and a temporary password are made for each, shown once to share privately.</Banner>}
     <Tabs value={tab} onChange={setTab} items={[["accounts", "Accounts", accs.length], ["evaluators", "Evaluator panel", d.data.evaluators.length]]} />
     {tab === "accounts" && <Card flush><Table minw={900} cols={["Person", "Role", "Programs and pathways", "Workload", "Last sign-in", ""]} rows={accs.map(a => [
       <Person key="p" name={a.display_name} sub={`${a.username}${a.email ? " · " + a.email : ""}`} />,
@@ -57,6 +60,9 @@ export default function People() {
         {["evaluator", "coordinator"].includes(form.role) && <Field label={form.role === "evaluator" ? "Pathways they evaluate" : "Pathways they can see (besides their own schools)"}><PwPicker pws={pws} value={form.pathways} onChange={v => setForm({ ...form, pathways: v })} /></Field>}
         {form.role === "management" && <Switch checked={!!form.auto_mark_viewed} onChange={v => setForm({ ...form, auto_mark_viewed: v })} label="Opening an artwork marks it “Viewed by management”" />}
         {form.id && <Switch checked={form.active !== false} onChange={v => setForm({ ...form, active: v })} label="Account can sign in" />}</>}
+    </Modal>
+    <Modal open={!!bulk} wide title="New evaluator logins" sub="Shown only once. Share each one privately; they set their own password at first sign-in." onClose={() => setBulk(null)} footer={<><Btn onClick={() => { try { navigator.clipboard.writeText((bulk || []).map(b => `${b.name}\t${b.username}\t${b.password}`).join("\n")); toast("Copied"); } catch { toast("Copy failed", "err"); } }}>Copy all</Btn><Btn v="primary" onClick={() => setBulk(null)}>Done</Btn></>}>
+      {bulk && (bulk.length ? <table className="x-cmp"><thead><tr><th>Evaluator</th><th>Username</th><th>Temporary password</th></tr></thead><tbody>{bulk.map(b => <tr key={b.username}><td>{b.name}</td><td>{b.username}</td><td>{b.password}</td></tr>)}</tbody></table> : <p className="muted">Every active evaluator already has a login.</p>)}
     </Modal>
     <Modal open={!!pw} title="Temporary password" sub={pw ? `For ${pw.user}` : ""} onClose={() => setPw(null)} footer={<Btn v="primary" onClick={() => setPw(null)}>Done</Btn>}>
       {pw && <><div className="pw-box">{pw.pw}</div><p className="muted">Share it with the person privately. It is shown only once. They will be asked to set their own password when they sign in.</p></>}

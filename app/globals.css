@@ -1189,3 +1189,33 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 /* queue / session lists: artwork name first, code underneath */
 .f3-qi .t.tf b{text-align:left;font-family:var(--sans);font-size:13px;font-weight:600;line-height:18px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .f3-qi .t.tf .cd{font-family:var(--mono);font-size:11px;line-height:16px;color:var(--ink3)}
+/* Artwork Distribution list: fixed columns so the header lines up with the rows */
+.al-h,.al-row{grid-template-columns:minmax(0,1fr) 110px}
+.al-list.cnt .al-h,.al-list.cnt .al-row{grid-template-columns:minmax(0,1fr) 110px 96px}
+.al-row .input.num{width:84px!important;margin-left:auto;display:block}
+.al-n .check{min-width:0}
+@media (max-width:700px){ .al-h,.al-row{grid-template-columns:minmax(0,1fr) 96px} .al-list.cnt .al-h,.al-list.cnt .al-row{grid-template-columns:minmax(0,1fr) 84px 90px} }
+/* rubric yes/no questions */
+.rb-qs{display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--rule);padding-top:14px}
+.rb-qs .rb-crit .rb-row{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 150px 32px}
+.rb-qs .rb-crit .rb-row.ar{grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 150px 32px}
+@media (max-width:640px){.rb-qs .rb-crit .rb-row,.rb-qs .rb-crit .rb-row.ar{grid-template-columns:1fr}}
+/* ticks under the score (review, POD, not visible) */
+.sc-ticks{display:flex;flex-direction:column;gap:8px;padding:10px 0;border-top:1px solid var(--rule)}
+.cc-box{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px solid var(--rule);border-radius:var(--r);background:var(--wash2)}
+/* session sheet: the column you type, and "own login" columns */
+.x-cmp.sess-mx th.mine{color:var(--ink);font-weight:600}
+.x-cmp.sess-mx th .own{display:block;font-size:10px;font-weight:500;color:var(--accent-ink,var(--accent));text-transform:none}
+/* Artworks to be reviewed: list on the left like a scoring session */
+.rv-ws .f3-queue .qh select{width:100%}
+.rv-who{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--ink3);margin-top:2px}
+.rv-who .badge{font-size:10px;padding:0 6px}
+/* Collections step 2: to store */
+.cl-store{gap:10px}
+.cl-store-items{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.cl-store-it{display:grid;grid-template-columns:110px minmax(0,1fr) auto auto;gap:4px 10px;align-items:center;padding:8px 12px}
+.cl-store-it+.cl-store-it{border-top:1px solid var(--rule)}
+.cl-store-it .t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-store-it .lp{grid-column:1 / -1}
+@media (max-width:700px){.cl-store-it{grid-template-columns:minmax(0,1fr) auto}.cl-store-it .t{grid-column:1 / -1;white-space:normal}}
+.rm-card{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;background:var(--sheet)}

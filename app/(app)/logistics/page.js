@@ -6,10 +6,11 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Modal, Field, Card, Table, Tabs, Check, Seg, Search, dshort } from "@/components/ui";
 import Framing from "@/components/Framing";
+import { Photography, Exhibition } from "@/components/Curation";
 import { ArtworkBatch, ArtworkDrawer, bySession, SHORT } from "@/components/Movements";
 
-const CHAIN = ["to_collect", "storage", "requested", "coordinator", "returning"];
-const SIDE = ["picked", "handed_over", "framer", "showcase", "returned", "missing"];
+const CHAIN = ["to_collect", "received", "storage", "requested", "coordinator", "returning"];
+const SIDE = ["picked", "handed_over", "framer", "photography", "showcase", "exhibition", "returned", "missing"];
 
 function group(rows, by) {
   if (by === "session") return bySession(rows, () => true);
@@ -59,7 +60,7 @@ export default function Logistics() {
     ...(staff || coord ? [["todo", "To do", todoN]] : []),
     ["all", coord ? "My artworks" : "All artworks", rows.length],
     ...(coord ? [] : [["exceptions", "Exceptions", exc.length]]),
-    ...(staff || role === "management" ? [["framing", "Framing"]] : []),
+    ...(staff || role === "management" ? [["framing", "Framing"], ["photography", "Photography"], ["exhibition", "Exhibition"]] : []),
     ...(staff ? [["locations", "Storage locations"], ["venues", "Session venues"]] : [])
   ];
   const showState = st => { setF({ ...f, state: st }); setTab("all"); };
@@ -69,6 +70,7 @@ export default function Logistics() {
       sub={coord ? "Physical artworks of your schools and sessions. During a session, Logistics brings them into the room in batches; you hand each batch back on the session board when it is scored." : "Physical Round 2 artworks from school delivery to return. Every step is recorded with who, when and where. Tick a whole batch or single artworks and choose what happened."}
       actions={<>{staff && <Btn href="/collections">Collections</Btn>}{(staff || coord) && <Btn v="primary" href="/pull-list">Session boards</Btn>}</>} />
 
+    {staff && (count.received || 0) > 0 && <Banner tone="warn" title={`${count.received} artwork${count.received === 1 ? "" : "s"} received at the office need${count.received === 1 ? "s" : ""} a shelf`} action={<Btn sm v="primary" href="/collections?view=store">To store</Btn>}>Choose the room, shelf and row for each school's pathway.</Banner>}
     <div className="mv-pipe">
       {CHAIN.map((k, i) => <span key={k} className="row nowrap" style={{ gap: 6 }}>{i > 0 && <span className="arrow">→</span>}<button type="button" className={`chip${tab === "all" && f.state === k ? " on" : ""}`} onClick={() => showState(f.state === k && tab === "all" ? "" : k)}>{SHORT[k]}<span className="n">{count[k] || 0}</span></button></span>)}
       <span className="arrow" style={{ margin: "0 4px" }}>·</span>
@@ -99,6 +101,8 @@ export default function Logistics() {
 
     {tab === "locations" && staff && <Locations />}
     {tab === "framing" && <Framing canAct={staff} />}
+    {tab === "photography" && <Photography canAct={staff} />}
+    {tab === "exhibition" && <Exhibition canAct={staff} />}
     {tab === "venues" && staff && <Venues admin={role === "admin"} />}
 
     {open && <ArtworkDrawer row={open} role={role} onClose={() => setOpen(null)} onChanged={reload} />}

@@ -35,6 +35,7 @@ export const GET = route("*", async ({ session, params, url }) => {
   const accs = accIds.length ? await q(db().from("nae_accounts").select("id, display_name").in("id", accIds)) : [];
   const accName = id => accs.find(a => a.id === id)?.display_name || null;
   const evs = session.role === "admin" ? await q(db().from("nae_evaluators").select("id, name, account_id, pathways, active")) : [];
+  const coordComments = session.role === "evaluator" ? [] : await q(db().from("nae_entry_comments").select("*").eq("entry_id", e.id));
   const rounds = [];
   for (const no of [1, 2]) {
     const r = roundOf(S, e.pathway_code, no); if (!r) continue;
@@ -54,17 +55,19 @@ export const GET = route("*", async ({ session, params, url }) => {
       evaluators: assigned.map(a => a.evaluator),
       panel: session.role === "admin" ? roundPanel(r, evs).map(x => ({ id: x.id, name: x.name })) : undefined,
       needed: plan?.needed,
-      scores: visible.map(s => ({ id: s.id, evaluator_id: s.evaluator_id, evaluator: s.evaluator?.name, has_login: !!s.evaluator?.account_id, scores: s.scores, total: s.total, national_identity: s.national_identity, comment: s.comment, status: s.status, entered_by: s.enterer?.display_name || null, self: s.entered_by && s.evaluator?.account_id === s.entered_by, submitted_at: s.submitted_at, rubric_version_id: s.rubric_version_id })),
+      scores: visible.map(s => ({ id: s.id, evaluator_id: s.evaluator_id, evaluator: s.evaluator?.name, has_login: !!s.evaluator?.account_id, scores: s.scores, total: s.total, national_identity: s.national_identity, answers: s.answers || {}, to_review: !!s.to_review, comment: s.comment, status: s.status, entered_by: s.enterer?.display_name || null, self: s.entered_by && s.evaluator?.account_id === s.entered_by, submitted_at: s.submitted_at, rubric_version_id: s.rubric_version_id })),
       hidden: 0,
       result: evaluator && visible.length < scores.filter(s => s.status === "submitted").length ? null : results.find(x => x.round_no === no) || null,
-      reviews: evaluator ? [] : reviews.filter(x => x.round_no === no).map(x => ({ ...x, manager: accName(x.manager_id) }))
+      reviews: evaluator ? [] : reviews.filter(x => x.round_no === no).map(x => ({ ...x, manager: accName(x.manager_id) })),
+      coordComment: evaluator ? null : (coordComments.find(c => c.round_no === no) ? { ...coordComments.find(c => c.round_no === no), author: accName(coordComments.find(c => c.round_no === no).author_id) } : null)
     });
   }
   const sub = (S.P[e.pathway_code]?.subs || []).find(s => s.code === e.sub_code);
-  const lg = logistics ? { ...logistics, where: logistics.loc ? `${logistics.loc.label}` : logistics.location || null } : null;
+  const wall = logistics?.exhibit_wall_id ? await q(db().from("nae_exhibit_walls").select("name, section:nae_exhibit_sections(name)").eq("id", logistics.exhibit_wall_id).maybeSingle()) : null;
+  const lg = logistics ? { ...logistics, where: logistics.loc ? `${logistics.loc.label}` : logistics.location || null, wall: wall ? `${wall.section?.name} · ${wall.name}` : null } : null;
   return {
     access,
-    entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code]?.name, sub: sub?.name, is_physical: !!sub?.is_physical, coordinator: accName(e.coordinator_id), mgmt_viewed_name: accName(e.mgmt_viewed_by) },
+    entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code]?.name, sub: sub?.name, is_physical: !!sub?.is_physical, coordinator: accName(e.coordinator_id), mgmt_viewed_name: accName(e.mgmt_viewed_by), not_visible_name: accName(e.not_visible_by) },
     students: session.role === "evaluator" ? students.map(s => ({ position: s.position, grade: s.grade, gender: s.gender, nationality: s.nationality })) : students,
     cycle: isCompetition(S, e.pathway_code) && session.role !== "evaluator" ? { ...cycleOf([...students.map(s => s.grade), e.grades_text], e.cycle_choice), cycles: CYCLES } : null,
     files: files.map(fileView), rounds, logistics: lg, sessions: links.map(l => l.session).filter(Boolean), history, scoreHistory: scoreHist,
@@ -72,8 +75,16 @@ export const GET = route("*", async ({ session, params, url }) => {
   };
 });
 
-export const PATCH = route(["admin", "coordinator", "management", "storage", "leadership"], async ({ session, params, request }) => {
+export const PATCH = route(["admin", "coordinator", "management", "storage", "leadership", "evaluator"], async ({ session, params, request }) => {
   const e = await loadEntry(params.code, session); const b = await body(request); const patch = {};
+  // People of Determination: anyone scoring or working on the artwork can tick it
+  if (b.pod !== undefined) {
+    if ((await entryAccess(session, e)) !== "full" || session.role === "leadership") throw forbidden();
+    await q(db().from("nae_entries").update({ pod: !!b.pod, manual_fields: [...new Set([...(e.manual_fields || []), "pod"])], updated_at: new Date().toISOString() }).eq("id", e.id));
+    await audit(session, b.pod ? "Marked POD (People of Determination)" : "POD unmarked", "entry", e.id, "");
+    return { ok: true };
+  }
+  if (session.role === "evaluator") throw forbidden();
   if (b.details) return editDetails(session, await loadStructure(), e, b.details);
   if (b.coordinator_id !== undefined) { if (session.role !== "admin") throw forbidden(); patch.coordinator_id = b.coordinator_id || null; }
   if (b.mgmt_viewed !== undefined) {

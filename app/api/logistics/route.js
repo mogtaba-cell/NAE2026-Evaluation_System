@@ -67,7 +67,11 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     } : null;
     let receivedBy = b.received_by;
     if (b.action === "hand_over" && !receivedBy && b.session_id) { const s = await q(db().from("nae_sessions").select("coordinator:nae_accounts(display_name)").eq("id", b.session_id).maybeSingle()); receivedBy = s?.coordinator?.display_name || null; }
-    const r = await applyMove(session, b.action, ids, { location_id: b.location_id || null, locations: b.locations || {}, received_by: receivedBy, note: b.note || null, vendor: b.vendor, due: b.due, check, ref_type: b.session_id ? "session" : null, ref_id: b.session_id || null });
+    // photography goes in numbered batches; exhibition walls are named "Section · Wall" in the history
+    let batchNo = b.batch || null, wallLabels = null;
+    if (b.action === "to_photo" && !batchNo) { const mx = await q(db().from("nae_logistics").select("photo_batch").not("photo_batch", "is", null).order("photo_batch", { ascending: false }).limit(1)); batchNo = (mx[0]?.photo_batch || 0) + 1; }
+    if (["to_exhibition", "exhibit_move"].includes(b.action)) { const ws = await q(db().from("nae_exhibit_walls").select("id, name, active, section:nae_exhibit_sections(name, active)")); const want = [b.wall_id, ...Object.values(b.walls || {})].filter(Boolean); if (!want.length) throw bad("Choose the section and the wall."); if (want.some(w => !ws.find(x => x.id === w && x.active && x.section?.active))) throw bad("Pick an active wall."); wallLabels = Object.fromEntries(ws.map(w => [w.id, `${w.section?.name} · ${w.name}`])); }
+    const r = await applyMove(session, b.action, ids, { location_id: b.location_id || null, locations: b.locations || {}, received_by: receivedBy, note: b.note || null, vendor: b.vendor, due: b.due, check, ref_type: b.session_id ? "session" : null, ref_id: b.session_id || null, batch: batchNo, wall_id: b.wall_id || null, walls: b.walls || null, wallLabels });
     if (r.done.length) await audit(session, `${r.label}: ${r.done.length} artwork${r.done.length === 1 ? "" : "s"}`, b.session_id ? "session" : "logistics", b.session_id || null, r.done.slice(0, 40).join(", "));
     const skipNote = r.skipped.length ? ` ${r.skipped.length} skipped (${[...new Set(r.skipped.map(x => x.why))].join(", ")}).` : "";
     return { ok: true, done: r.done, skipped: r.skipped, note: `${r.label}: ${r.done.length} artwork${r.done.length === 1 ? "" : "s"}.${skipNote}` };

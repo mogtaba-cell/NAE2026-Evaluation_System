@@ -17,7 +17,7 @@ const FIELDS = {
   shortlist: ["Shortlisted (passed Round 1)", e => res(e, 1)?.passed == null ? null : res(e, 1).passed ? "Yes" : "No"], r2p: ["Selected (passed Round 2)", e => res(e, 2)?.passed == null ? null : res(e, 2).passed ? "Yes" : "No"],
   cycle: ["Cycle", e => { const c = cycleOf([e.grades_text]).cycle; return c ? `Cycle ${c}` : null; }],
   framing: ["Needs framing", e => lgOf(e)?.needs_framing ? "Yes" : "No"], glass: ["Protective glass", e => lgOf(e)?.glass_framing ? "Yes" : "No"],
-  mgmt: ["Viewed by management", e => e.mgmt_viewed_at ? "Yes" : "No"], reg: ["Artwork type", e => e.registration_type || (e.group_name ? "Group" : "Individual")]
+  mgmt: ["Viewed by management", e => e.mgmt_viewed_at ? "Yes" : "No"], pod: ["POD (People of Determination)", e => e.pod ? "Yes" : "No"], reg: ["Artwork type", e => e.registration_type || (e.group_name ? "Group" : "Individual")]
 };
 const lgOf = e => Array.isArray(e.logistics) ? e.logistics[0] : e.logistics;
 const res = (e, n) => (e.results || []).find(r => r.round_no === n);

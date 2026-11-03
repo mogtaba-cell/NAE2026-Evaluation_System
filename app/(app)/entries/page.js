@@ -33,6 +33,8 @@ export default function Entries() {
         {me?.role !== "evaluator" && <select className="select" style={{ width: 250 }} value={p.mgmt || ""} onChange={e => set("mgmt", e.target.value)} aria-label="Viewed by management"><option value="">Viewed by management: any</option><option value="yes">Viewed by management</option><option value="no">Not viewed by management</option></select>}
         {me?.role === "coordinator" && !allScope && <Check label="Allocated to me" checked={p.mine === "1"} onChange={v => set("mine", v ? "1" : "")} />}
         <Check label="No files" checked={p.nofiles === "1"} onChange={v => set("nofiles", v ? "1" : "")} />
+        <Check label="POD" checked={p.pod === "1"} onChange={v => set("pod", v ? "1" : "")} />
+        {me?.role !== "evaluator" && <Check label="Not visible" checked={p.notvisible === "1"} onChange={v => set("notvisible", v ? "1" : "")} />}
         {me?.role === "admin" && <Check label="Not allocated" checked={p.unallocated === "1"} onChange={v => set("unallocated", v ? "1" : "")} />}
       </div>
       <Chips items={chips} value={p.status || ""} onChange={v => set("status", v)} />

@@ -5,19 +5,22 @@ import { pinnedVersion, scorePlan, recompute, ruleText, flagLine, passThreshold,
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
-import { sessionPool } from "@/lib/sessions";
+import { sessionPool, selfIds } from "@/lib/sessions";
 import { venueFields } from "@/lib/venues";
 import { requestForSession, releaseFromSession } from "@/lib/movements";
+import { myEvaluatorId } from "@/lib/perms";
 
 async function loadSession(id, session) {
   const s = await q(db().from("nae_sessions").select("*, coordinator:nae_accounts(display_name)").eq("id", id).maybeSingle());
   if (!s) throw bad("Session not found.");
   if (session.role === "coordinator" && s.coordinator_id !== session.sub) throw forbidden("This session is run by another coordinator.");
+  if (session.role === "evaluator") { const ev = await myEvaluatorId(session); if (!ev || !(s.evaluator_ids || []).includes(ev) || s.status === "cancelled") throw forbidden("You are not in this session's team."); s.__ev = ev; }
   return s;
 }
 
-// The session's score sheet: only its coordinator and admins (the Logistics team uses the pull list).
-export const GET = route(["admin", "coordinator"], async ({ session, params, url }) => {
+// The session's score sheet: its coordinator, admins, and the evaluators in its team (they type their own column
+// when they enter their own scores, and see the others' saved scores). The Logistics team uses the pull list.
+export const GET = route(["admin", "coordinator", "evaluator"], async ({ session, params, url }) => {
   const S = await loadStructure();
   const s = await loadSession(params.id, session);
   const r = S.roundById[s.round_id];
@@ -30,6 +33,8 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
     q(db().from("nae_evaluators").select("id, name, account_id").in("id", s.evaluator_ids || [])),
     ids.length ? q(db().from("nae_reviews").select("entry_id, round_no, status, reason").eq("round_no", r.round_no).in("entry_id", ids)) : []
   ]);
+  const evaluator = session.role === "evaluator";
+  const comments = ids.length && !evaluator ? await q(db().from("nae_entry_comments").select("entry_id, comment, author_id, updated_at").eq("round_no", r.round_no).in("entry_id", ids)) : [];
   const cur = url.searchParams.get("entry") || null;
   // Everything per artwork comes from these batch reads (no query per artwork): the rubric version an artwork was
   // first scored with, and the latest session of this round each artwork is in (its team decides the minimum).
@@ -50,7 +55,10 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
       position: l.position, code: e.code, pathway_code: e.pathway_code, sub_code: e.sub_code, manual_fields: e.manual_fields || [], title_en: e.title_en, title_ar: e.title_ar, group_name: e.group_name, students_count: e.students_count, grades_text: e.grades_text, school: e.school?.name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name, medium: e.medium, size_text: e.size_text, description_en: e.description_en, description_ar: e.description_ar, reflections: e.reflections, registration_type: e.registration_type, status: e.status,
       r1: r.round_no === 2 ? results.find(x => x.entry_id === e.id && x.round_no === 1) || null : null,
       rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
-      scores: scores.filter(x => x.entry_id === e.id),
+      // evaluators see their own drafts, and only saved (submitted or absent) scores of the others
+      scores: scores.filter(x => x.entry_id === e.id && (!evaluator || x.status !== "draft" || x.evaluator_id === s.__ev)).map(x => evaluator && x.evaluator_id !== s.__ev ? { ...x, entered_by: undefined } : x),
+      pod: !!e.pod, not_visible: e.not_visible_at && e.not_visible_round === r.round_no ? { at: e.not_visible_at, note: e.not_visible_note } : null,
+      coordComment: comments.find(c => c.entry_id === e.id)?.comment || null,
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
       logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.label}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
@@ -62,9 +70,10 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
   if (target) { const e = links.find(l => l.entry.code === target.code).entry; target.files = (await entryFiles(e)).map(fileView); }
   const bandsFor = x => x.rubric?.grade_bands || DEFAULT_BANDS;
   return {
+    me: { role: session.role, evaluator_id: s.__ev || null },
     canEditDetails: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && s.coordinator_id === session.sub && ["planned", "live"].includes(s.status)),
-    session: { ...s, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code].name, round_no: r.round_no, round_status: r.status, mine: s.coordinator_id === session.sub },
-    team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean),
+    session: { ...s, __ev: undefined, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code].name, round_no: r.round_no, round_status: r.status, mine: s.coordinator_id === session.sub },
+    team: (s.evaluator_ids || []).map(id => evs.find(e => e.id === id)).filter(Boolean).map(t => ({ ...t, self: (s.self_ids || []).includes(t.id), has_login: !!t.account_id, account_id: undefined })),
     entries: entries.map(x => ({ ...x, flagLine: flagLine(r, bandsFor(x)), passMark: passThreshold(r.pass_rule, bandsFor(x)) })),
     current: target?.code || null,
     rules: { pass_rule: r.pass_rule, pass_text: ruleText(r.pass_rule), flag_near: r.flag_near !== false, flag_margin: r.flag_margin, flag_line: r.flag_line, flag_spread: r.flag_spread !== false, spread_limit: r.spread_limit, flag_identity: r.flag_identity !== false }
@@ -72,7 +81,7 @@ export const GET = route(["admin", "coordinator"], async ({ session, params, url
 });
 
 // start | finish | reopen (admin) | cancel (planned only) | edit (planned: details, team, entries)
-export const PATCH = route(["admin", "coordinator"], async ({ session, params, request }) => {
+export const PATCH = route(["admin", "coordinator"], async ({ session, params, request }) => {   // eslint-disable-line
   const b = await body(request);
   const s = await loadSession(params.id, session);
   const S = await loadStructure(); const r = S.roundById[s.round_id];
@@ -114,6 +123,14 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     await audit(session, `${s.title}: cancelled`, "session", s.id, b.reason || "");
     return { ok: true };
   }
+  // who types their own scores can change at any time before the session is finished (e.g. a phone that won't log in)
+  if (action === "self") {
+    if (!["planned", "live"].includes(s.status)) throw bad("This session is finished.");
+    const self = await selfIds(b.self_ids, s.evaluator_ids || []);
+    await q(db().from("nae_sessions").update({ self_ids: self }).eq("id", s.id));
+    await audit(session, `${s.title}: who enters their own scores changed`, "session", s.id, `${self.length} of ${(s.evaluator_ids || []).length}`);
+    return { ok: true };
+  }
   if (action === "edit") {
     if (s.status !== "planned") throw bad("Only a planned session can be edited.");
     const patch = {};
@@ -126,6 +143,8 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
       if (evs.length !== team.length || evs.some(e => !e.active)) throw bad("Pick active evaluators only.");
       patch.evaluator_ids = team;
     }
+    if (Array.isArray(b.self_ids)) patch.self_ids = await selfIds(b.self_ids, patch.evaluator_ids || s.evaluator_ids || []);
+    else if (patch.evaluator_ids) patch.self_ids = (s.self_ids || []).filter(x => patch.evaluator_ids.includes(x));
     if (session.role === "admin" && b.coordinator_id) patch.coordinator_id = b.coordinator_id;
     if (Object.keys(patch).length) await q(db().from("nae_sessions").update(patch).eq("id", s.id));
     if (Array.isArray(b.remove) && b.remove.length) {

@@ -45,7 +45,7 @@ export default function RoundEditor({ r, p, onSaved }) {
         {["A", "B", "C"].map(g => <Check key={g} label={g} disabled={f.rule !== "grade"} checked={f.grades.includes(g)} onChange={v => set("grades", v ? [...f.grades, g].sort() : f.grades.filter(x => x !== g))} />)}
       </div>
     </Field>
-    <p className="small faint" style={{ marginTop: -8 }}>National identity (asking it, and whether "yes" is needed to go through) is set in each rubric, in the Rubric library. Grade lines come from each rubric too.</p>
+    <p className="small faint" style={{ marginTop: -8 }}>Yes/no questions (national identity, theme…, and whether "yes" is needed to go through) are set in each rubric, in the Rubric library. Grade lines come from each rubric too.</p>
     <Field label={`Round ${r.round_no} evaluator panel`} help={`${panelCount} evaluator${panelCount === 1 ? "" : "s"} with a login will get online artworks. Each artwork needs ${f.evaluators_per_entry || 2}.${r.round_no === 2 ? " Round 1 evaluators are only used for an artwork they already judged when nobody else is free." : ""}`} err={panelCount < Number(f.evaluators_per_entry || 2)}>
       <div className="stack s8">
         <label className="check radio"><input type="radio" checked={f.panelMode === "all"} onChange={() => set("panelMode", "all")} /><span className="box" /><span>Everyone with a login in {p?.name || r.pathway_code} ({inPath.length})</span></label>
@@ -61,7 +61,7 @@ export default function RoundEditor({ r, p, onSaved }) {
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><Switch checked={!!f.flag_near} onChange={v => set("flag_near", v)} label="When the team result is within" />{num("flag_margin", 64)}<span>points of the</span>
           <select className="select" style={{ width: 170 }} value={f.flag_line} disabled={!f.flag_near} onChange={e => set("flag_line", e.target.value)}><option value="pass">pass mark</option><option value="A">grade A line</option></select></div>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><Switch checked={!!f.flag_spread} onChange={v => set("flag_spread", v)} label="When evaluators differ by more than" />{num("spread_limit", 64)}<span>points</span></div>
-        <Switch checked={!!f.flag_identity} onChange={v => set("flag_identity", v)} label="When evaluators disagree on national identity" />
+        <Switch checked={!!f.flag_identity} onChange={v => set("flag_identity", v)} label="When evaluators disagree on a yes/no question (national identity, theme…)" />
       </div>
     </Field>
     {started && <Field label="Reason for the change" help="This round has started, so changes are recorded in the audit log with the old values."><input className="input" value={reason} onChange={e => setReason(e.target.value)} /></Field>}

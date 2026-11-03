@@ -2,7 +2,7 @@ import { route, forbidden } from "@/lib/api";
 import { db, qc, q } from "@/lib/db";
 import { scopeEntries, mySessionEntryIds } from "@/lib/perms";
 
-const SELECT_LIST = "id, code, reference_id, registration_id, title_en, title_ar, group_name, registration_type, students_count, grades_text, pathway_code, sub_code, current_round, status, files_count, coordinator_id, mgmt_viewed_at, mgmt_viewed_how, school:nae_schools!inner(id, name, esis, region, school_type), results:nae_results(round_no, team, final, grade, scored, needed, complete, passed)";
+const SELECT_LIST = "id, code, pod, not_visible_at, reference_id, registration_id, title_en, title_ar, group_name, registration_type, students_count, grades_text, pathway_code, sub_code, current_round, status, files_count, coordinator_id, mgmt_viewed_at, mgmt_viewed_how, school:nae_schools!inner(id, name, esis, region, school_type), results:nae_results(round_no, team, final, grade, scored, needed, complete, passed)";
 const clean = s => String(s || "").trim().replace(/[%,()]/g, " ").trim();
 
 export const GET = route(["admin", "coordinator", "management", "storage", "leadership"], async ({ session, url, scope }) => {
@@ -25,6 +25,8 @@ export const GET = route(["admin", "coordinator", "management", "storage", "lead
   if (p.coordinator) qy = qy.eq("coordinator_id", p.coordinator);
   if (p.unallocated === "1") qy = qy.is("coordinator_id", null);
   if (p.nofiles === "1") qy = qy.eq("files_count", 0);
+  if (p.pod === "1") qy = qy.eq("pod", true);
+  if (p.notvisible === "1") qy = qy.not("not_visible_at", "is", null);
   if (p.reg === "Group") qy = qy.or("registration_type.ilike.group*,group_name.not.is.null");
   if (p.reg === "Individual") qy = qy.is("group_name", null).or("registration_type.is.null,registration_type.not.ilike.group*");
   if (p.mgmt === "yes") qy = qy.not("mgmt_viewed_at", "is", null);

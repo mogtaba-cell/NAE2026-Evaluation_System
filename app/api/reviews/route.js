@@ -5,10 +5,10 @@ import { canWorkOnEntry, can, mySessionEntryIds } from "@/lib/perms";
 import { loadStructure, roundOf } from "@/lib/structure";
 
 export const GET = route(["admin", "management", "coordinator", "leadership"], async ({ session, url, scope: inProgram }) => {
-  const scope = url.searchParams.get("scope") || (session.role === "management" ? "mine" : "all");
+  const scope = url.searchParams.get("scope") || "all";
   const status = url.searchParams.get("status") || "open";
-  let qy = db().from("nae_reviews").select("*, entry:nae_entries(id, code, title_en, group_name, pathway_code, sub_code, coordinator_id, school:nae_schools(name))").order(status === "open" ? "due_at" : "decided_at", { ascending: status === "open" });
-  qy = status === "open" ? qy.eq("status", "open") : qy.neq("status", "open");
+  let qy = db().from("nae_reviews").select("*, entry:nae_entries(id, code, title_en, title_ar, group_name, pathway_code, sub_code, coordinator_id, pod, school:nae_schools(name))").order(status === "open" ? "due_at" : "decided_at", { ascending: status === "open" });
+  qy = status === "open" ? qy.eq("status", "open") : status === "all" ? qy : qy.neq("status", "open");
   if (scope === "mine") qy = qy.eq("manager_id", session.sub);
   let rows = await all(() => qy);
   if (session.role === "coordinator") { const mine = new Set(await mySessionEntryIds(session)); rows = rows.filter(r => r.entry && (r.entry.coordinator_id === session.sub || mine.has(r.entry_id))); }

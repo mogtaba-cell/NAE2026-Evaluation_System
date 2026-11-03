@@ -5,23 +5,30 @@ import { recompute, passThreshold, ruleText, pinnedVersion, flagLine, DEFAULT_BA
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
+import { entryAccess } from "@/lib/perms";
 
-export const GET = route(["admin", "management", "leadership"], async ({ params }) => {
+export const GET = route(["admin", "management", "leadership", "coordinator"], async ({ session, params }) => {
   const rv = await q(db().from("nae_reviews").select("*").eq("id", params.id).single());
   const e = await q(db().from("nae_entries").select("*, school:nae_schools(name, esis)").eq("id", rv.entry_id).single());
+  if (!(await entryAccess(session, e))) throw forbidden("You can't open this artwork.");
+  const cc = await q(db().from("nae_entry_comments").select("comment, author_id, updated_at").eq("entry_id", e.id).eq("round_no", rv.round_no).maybeSingle());
+  const history = await q(db().from("nae_reviews").select("id, round_no, status, reason, flagged_at, decided_at, decided_by, manager_id, new_passed, new_result, decision_note").eq("entry_id", e.id).order("flagged_at", { ascending: false }));
   const S = await loadStructure(); const r = roundOf(S, e.pathway_code, rv.round_no); const ver = await pinnedVersion(S, e, rv.round_no); const bands = ver?.grade_bands || DEFAULT_BANDS;
   const scores = await q(db().from("nae_scores").select("*, evaluator:nae_evaluators(name)").eq("entry_id", e.id).eq("round_id", r.id).eq("status", "submitted"));
   const result = await q(db().from("nae_results").select("*").eq("entry_id", e.id).eq("round_no", rv.round_no).maybeSingle());
   const files = (await entryFiles(e)).map(fileView);
   const accs = await q(db().from("nae_accounts").select("id, display_name, role").in("role", ["management", "admin", "coordinator"]));
   const name = id => accs.find(a => a.id === id)?.display_name || null;
-  return { review: { ...rv, manager: name(rv.manager_id), flagged_by_name: rv.flagged_by ? name(rv.flagged_by) : "System", decided_by_name: name(rv.decided_by) }, entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code].name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name }, round: { round_no: r.round_no, pass_text: ruleText(r.pass_rule), threshold: passThreshold(r.pass_rule, bands), flag_line: flagLine(r, bands), flag_line_kind: r.flag_line, spread_limit: r.spread_limit, identity: !!r.pass_rule?.identity }, rubric: ver, criteria: ver?.criteria || [], bands, scores: scores.map(s => ({ evaluator: s.evaluator?.name, scores: s.scores, total: s.total, national_identity: s.national_identity, comment: s.comment })), result, files, managers: accs.filter(a => a.role === "management").map(a => ({ id: a.id, name: a.display_name })) };
+  return { review: { ...rv, manager: name(rv.manager_id), flagged_by_name: rv.flagged_by ? name(rv.flagged_by) : "System", decided_by_name: name(rv.decided_by) }, entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code].name, sub: (S.P[e.pathway_code].subs.find(x => x.code === e.sub_code) || {}).name }, round: { round_no: r.round_no, pass_text: ruleText(r.pass_rule), threshold: passThreshold(r.pass_rule, bands), flag_line: flagLine(r, bands), flag_line_kind: r.flag_line, spread_limit: r.spread_limit, identity: !!r.pass_rule?.identity }, rubric: ver, criteria: ver?.criteria || [], bands, scores: scores.map(s => ({ evaluator: s.evaluator?.name, scores: s.scores, total: s.total, national_identity: s.national_identity, answers: s.answers || {}, to_review: !!s.to_review, comment: s.comment })), result, files,
+    coordComment: cc ? { ...cc, author: name(cc.author_id) } : null,
+    history: history.filter(h => h.id !== rv.id).map(h => ({ ...h, decided_by_name: name(h.decided_by), manager: name(h.manager_id) })),
+    canDecide: rv.status === "open" && ["admin", "management"].includes(session.role), managers: accs.filter(a => a.role === "management").map(a => ({ id: a.id, name: a.display_name })) };
 });
 export const POST = route(["admin", "management"], async ({ session, params, request }) => {
   const b = await body(request);
   const rv = await q(db().from("nae_reviews").select("*").eq("id", params.id).single());
   if (rv.status !== "open") throw bad("This review is already decided.");
-  if (session.role === "management" && rv.manager_id !== session.sub) throw forbidden("This review is assigned to someone else.");
+  // every manager can decide any artwork to be reviewed (it stays assigned to one manager for the workload and due time)
   if (b.action === "delegate") {
     if (!b.manager_id) throw bad("Pick a manager.");
     const m = await q(db().from("nae_accounts").select("id, role, active").eq("id", b.manager_id).maybeSingle());
@@ -45,6 +52,6 @@ export const POST = route(["admin", "management"], async ({ session, params, req
   const res = await recompute(rv.entry_id, rv.round_no);
   await audit(session, patch.status === "overridden" ? `Overridden: ${patch.new_passed ? (rv.round_no === 1 ? "shortlisted" : "selected") : (rv.round_no === 1 ? "not shortlisted" : "not selected")}${patch.new_result != null ? `, result ${patch.new_result}` : ""}` : "Result confirmed", "entry", rv.entry_id, b.note || "");
   const e = await q(db().from("nae_entries").select("code, current_round, status").eq("id", rv.entry_id).single());
-  const next = await q(db().from("nae_reviews").select("id").eq("status", "open").eq("manager_id", session.sub).order("due_at").limit(1));
+  const next = await q(db().from("nae_reviews").select("id").eq("status", "open").order("due_at").limit(1));
   return { ok: true, result: res, next: next[0]?.id || null, note: `${patch.status === "overridden" ? "Overridden" : `Confirmed${res?.final != null ? ` ${res.final}` : ""}`}. ${e.code} ${!res?.complete ? "will be decided when its scores are complete" : rv.round_no === 1 ? (res?.passed ? "is shortlisted for Round 2" : "is not shortlisted") : res?.passed ? "is selected" : "is not selected"}.` };
 });

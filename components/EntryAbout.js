@@ -20,7 +20,7 @@ export default function EntryAbout({ e, compact, showStudents, students = [], on
   const [lang, setLang] = useLang(e);
   const refl = Q.filter(([k]) => e.reflections?.[k]);
   const group = e.registration_type === "Group" || (!e.registration_type && e.group_name);
-  const details = [["Pathway", e.pathway], ["Subpathway", e.sub], ["Size", e.size_text], ["Medium", e.medium], ["Artwork type", group ? "Group" : "Individual"], ["Group name", group ? e.group_name : null], ["Students", e.students_count ? `${e.students_count} student${e.students_count === 1 ? "" : "s"}` : null], ["Grade", e.grades_text]].filter(x => x[1]);
+  const details = [["Pathway", e.pathway], ["Subpathway", e.sub], ["People of Determination", e.pod ? "Yes (POD)" : null], ["Size", e.size_text], ["Medium", e.medium], ["Artwork type", group ? "Group" : "Individual"], ["Group name", group ? e.group_name : null], ["Students", e.students_count ? `${e.students_count} student${e.students_count === 1 ? "" : "s"}` : null], ["Grade", e.grades_text]].filter(x => x[1]);
   return <section className="card x-about">
     <div className="card-h"><div className="tt"><h3>About the artwork</h3><span className="sub">{(e.manual_fields || []).length ? "As submitted by the school, with corrections" : "As submitted by the school"}</span></div>{onEdit && <button type="button" className="btn ghost sm" onClick={onEdit}>Edit details</button>}<LangToggle lang={lang} onChange={setLang} /></div>
     <div className="stack" style={{ gap: 16 }}>

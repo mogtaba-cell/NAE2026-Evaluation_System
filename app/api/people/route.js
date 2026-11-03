@@ -20,6 +20,22 @@ export const GET = route(["admin"], async () => {
 export const POST = route(["admin"], async ({ session, request }) => {
   const b = await body(request);
   const pathways = Array.isArray(b.pathways) ? b.pathways : [];
+  // every evaluator gets a login: create one for each active evaluator who has none (passwords shown once)
+  if (b.action === "bulk_logins") {
+    const evs = await q(db().from("nae_evaluators").select("*").is("account_id", null).eq("active", true).order("name"));
+    if (!evs.length) return { created: [] };
+    const taken = new Set((await q(db().from("nae_accounts").select("username"))).map(a => a.username));
+    const created = [];
+    for (const ev of evs) {
+      const base = usernameFor(ev.name); let u = base, n = 2; while (taken.has(u)) u = `${base}${n++}`; taken.add(u);
+      const pw = tempPassword();
+      const acc = await q(db().from("nae_accounts").insert({ username: u, display_name: ev.name, role: "evaluator", pathways: ev.pathways || [], programs: [], password_hash: hashPassword(pw), must_change_password: true }).select("id").single());
+      await q(db().from("nae_evaluators").update({ account_id: acc.id }).eq("id", ev.id));
+      created.push({ name: ev.name, username: u, password: pw });
+    }
+    await audit(session, `Created logins for ${created.length} evaluator${created.length === 1 ? "" : "s"}`, "account", null, created.map(c => c.username).join(", "));
+    return { created };
+  }
   if (b.kind === "evaluator") {
     if (!String(b.name || "").trim()) throw bad("Enter the evaluator's name.");
     const ev = await q(db().from("nae_evaluators").insert({ name: b.name.trim(), pathways }).select("*").single());
@@ -35,3 +51,9 @@ export const POST = route(["admin"], async ({ session, request }) => {
   await audit(session, `Created account ${username} (${b.role})`, "account", acc.id);
   return { id: acc.id, tempPassword: pw };
 });
+// "Dr. Aisha Al Zaabi" → "aisha.alzaabi"
+function usernameFor(name) {
+  const w = String(name || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/^(dr|mr|mrs|ms|miss|prof)\.?\s+/, "").replace(/[^a-z\s-]/g, " ").split(/\s+/).filter(Boolean);
+  if (!w.length) return "evaluator";
+  return (w.length === 1 ? w[0] : `${w[0]}.${w.slice(1).join("")}`).slice(0, 30);
+}

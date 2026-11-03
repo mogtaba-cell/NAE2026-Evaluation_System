@@ -23,7 +23,7 @@ export const GET = route("*", async ({ session, scope }) => {
   const out = { role: session.role, outcomes, total, students, schools, pathways, reviews: { open: reviews.length, overdue: reviews.filter(r => Date.parse(r.due_at) < now).length } };
   if (["admin", "storage", "coordinator", "leadership"].includes(session.role)) {
     const lg = (await all(() => db().from("nae_logistics").select("state, location, condition, damaged, needs_framing, collection_id, session_id, entry:nae_entries(coordinator_id, code, pathway_code)"))).filter(x => has(x.entry?.pathway_code));
-    out.logistics = { total: lg.length, to_collect: lg.filter(x => x.state === "to_collect").length, unbatched: lg.filter(x => x.state === "to_collect" && !x.collection_id).length, storage: lg.filter(x => x.state === "storage").length, coordinator: lg.filter(x => x.state === "coordinator").length, missing: lg.filter(x => x.state === "missing").length, damaged: lg.filter(x => x.damaged).length, framer: lg.filter(x => x.state === "framer").length, framing: lg.filter(x => x.needs_framing).length, returned: lg.filter(x => x.state === "returned").length, by: lg.reduce((m, x) => { m[x.state] = (m[x.state] || 0) + 1; return m; }, {}), pullSessions: new Set(lg.filter(x => ["requested", "picked"].includes(x.state)).map(x => x.session_id)).size, shelves: lg.filter(x => x.state === "storage").reduce((m, x) => { m[x.location || "Not shelved"] = (m[x.location || "Not shelved"] || 0) + 1; return m; }, {}) };
+    out.logistics = { total: lg.length, to_collect: lg.filter(x => x.state === "to_collect").length, received: lg.filter(x => x.state === "received").length, unbatched: lg.filter(x => x.state === "to_collect" && !x.collection_id).length, storage: lg.filter(x => x.state === "storage").length, coordinator: lg.filter(x => x.state === "coordinator").length, missing: lg.filter(x => x.state === "missing").length, damaged: lg.filter(x => x.damaged).length, framer: lg.filter(x => x.state === "framer").length, framing: lg.filter(x => x.needs_framing).length, returned: lg.filter(x => x.state === "returned").length, by: lg.reduce((m, x) => { m[x.state] = (m[x.state] || 0) + 1; return m; }, {}), pullSessions: new Set(lg.filter(x => ["requested", "picked"].includes(x.state)).map(x => x.session_id)).size, shelves: lg.filter(x => x.state === "storage").reduce((m, x) => { m[x.location || "Not shelved"] = (m[x.location || "Not shelved"] || 0) + 1; return m; }, {}) };
     if (session.role === "coordinator") { const mine = lg.filter(x => x.entry?.coordinator_id === session.sub); out.logistics.mineMissing = mine.filter(x => x.state === "missing").map(x => x.entry.code); }
   }
   const sessions = await q(db().from("nae_sessions").select("id, title, session_date, time_text, venue, status, coordinator_id, evaluator_ids, entries:nae_session_entries(entry_id)").order("session_date"));
@@ -32,6 +32,11 @@ export const GET = route("*", async ({ session, scope }) => {
     const mine = new Set(sessions.filter(s => s.coordinator_id === session.sub).map(s => s.id));
     const lgm = (await q(db().from("nae_logistics").select("state, session_id").in("state", ["handed_over", "coordinator"]))).filter(x => mine.has(x.session_id));
     out.logistics.toMe = lgm.filter(x => x.state === "handed_over").length; out.logistics.withMe = lgm.filter(x => x.state === "coordinator").length;
+  }
+  // artworks marked "not visible" during scoring: the coordinator fixes the files and reopens them
+  if (["admin", "coordinator"].includes(session.role)) {
+    const nv = (await q(db().from("nae_entries").select("code, title_en, pathway_code, coordinator_id, not_visible_note, not_visible_at").not("not_visible_at", "is", null).order("not_visible_at"))).filter(e => has(e.pathway_code));
+    out.notVisible = (session.role === "coordinator" ? nv.filter(e => e.coordinator_id === session.sub) : nv).slice(0, 20).map(e => ({ code: e.code, title: e.title_en, note: e.not_visible_note }));
   }
   // rounds still open after their closing date (dates don't close rounds by themselves)
   const today = new Date().toISOString().slice(0, 10);

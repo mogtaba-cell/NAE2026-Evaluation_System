@@ -42,7 +42,7 @@ export default function Queue() {
       <section className="card f3-queue">
         <div className="qh"><Seg value={filter} onChange={setFilter} items={[["todo", `To do ${items.length - done}`], ["done", `Done ${done}`], ["all", "All"]]} /></div>
         <div className="qb">{list.length ? list.map(i => <div key={i.key} role="button" tabIndex={0} className={`f3-qi${i.key === key ? " on" : ""}`} onClick={() => openItem(i)} onKeyDown={e => e.key === "Enter" && openItem(i)}>
-          <div className="t"><b>{i.code}{qd.data.rounds.length > 1 || items.some(x => x.round_no === 2) ? <span className="faint" style={{ fontFamily: "var(--sans)", fontWeight: 400 }}> · R{i.round_no}</span> : null}</b><span dir="auto">{i.title_en || i.title_ar || "Untitled"}</span></div>
+          <div className="t tf"><b dir="auto">{i.title_en || i.title_ar || "Untitled"}</b><span className="cd">{i.code}{qd.data.rounds.length > 1 || items.some(x => x.round_no === 2) ? <span style={{ fontFamily: "var(--sans)" }}> · R{i.round_no}</span> : null}</span></div>
           <span className="s">{i.myStatus === "submitted" ? i.myTotal : i.myStatus === "draft" ? "Draft" : ""}</span></div>) : <p className="x-note" style={{ padding: 12 }}>{filter === "todo" ? "All done. Thank you!" : "Nothing here."}</p>}</div>
       </section>
       <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
@@ -55,7 +55,7 @@ export default function Queue() {
       </div>
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         {d && <EntryAbout e={d.entry} compact />}
-        {d && round && <ScoreForm code={d.entry.code} round={round} mine={mine} framing={cur?.round_no === 2 && d.logistics ? d.logistics : null} onSaved={async submit => { await qd.reload(); if (submit) { if (nextItem) openItem(nextItem); else load(code); } else load(code); }} />}
+        {d && round && <ScoreForm code={d.entry.code} round={round} mine={mine} framing={cur?.round_no === 2 && d.logistics ? d.logistics : null} pod={d.entry.pod} onPod={async v => { try { await api(`/api/entries/${encodeURIComponent(d.entry.code)}`, { method: "PATCH", body: { pod: v } }); load(code); } catch (x) { setErr(x.message); } }} notVisible={d.entry.not_visible_at && d.entry.not_visible_round === round.round_no ? { note: d.entry.not_visible_note } : null} onSaved={async submit => { await qd.reload(); if (submit) { if (nextItem) openItem(nextItem); else load(code); } else load(code); }} />}
         {d && round && mine?.status === "submitted" && round.scores.length > 1 && <section className="card"><div className="card-h"><div className="tt"><h3>Team scores</h3><span className="sub">Visible after you submit</span></div></div>
           <table className="x-cmp"><tbody>{round.scores.map(s => <tr key={s.id}><td>{s.evaluator_id === qd.data.evaluator_id ? "You" : s.evaluator}</td><td>{s.status === "submitted" ? s.total : "Not yet"}</td></tr>)}</tbody></table></section>}
         {d && nextItem && <Btn onClick={() => openItem(nextItem)}>Next artwork ›</Btn>}

@@ -1,3 +1,4 @@
+import { questionsOf, IDENTITY } from "@/lib/questions";
 import { route, body, bad } from "@/lib/api";
 import { db, q } from "@/lib/db";
 import { audit } from "@/lib/audit";
@@ -12,9 +13,9 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const code = String(b.code || "").trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
   if (!code || !b.name) throw bad("Give the rubric a code and a name.");
   const r = await q(db().from("nae_rubrics").insert({ code, name: b.name, pathway_code: b.pathway_code || null }).select("*").single());
-  let criteria = [], identity = !!b.identity_required, idPass = false, bands = undefined;
-  if (b.copyFrom) { const v = await q(db().from("nae_rubric_versions").select("*").eq("rubric_id", b.copyFrom).eq("status", "published").maybeSingle()); if (v) { criteria = v.criteria; identity = v.identity_required; idPass = !!v.identity_pass; bands = v.grade_bands; } }
-  await q(db().from("nae_rubric_versions").insert({ rubric_id: r.id, version: 1, status: "draft", criteria, identity_required: identity, identity_pass: identity && idPass, ...(bands ? { grade_bands: bands } : {}) }));
+  let criteria = [], identity = !!b.identity_required, idPass = false, bands = undefined, questions = identity ? [{ ...IDENTITY, pass_yes: false }] : [];
+  if (b.copyFrom) { const v = await q(db().from("nae_rubric_versions").select("*").eq("rubric_id", b.copyFrom).eq("status", "published").maybeSingle()); if (v) { criteria = v.criteria; identity = v.identity_required; idPass = !!v.identity_pass; bands = v.grade_bands; questions = questionsOf(v); } }
+  await q(db().from("nae_rubric_versions").insert({ rubric_id: r.id, version: 1, status: "draft", criteria, questions, identity_required: identity, identity_pass: identity && idPass, ...(bands ? { grade_bands: bands } : {}) }));
   await audit(session, `Created rubric ${code}`, "rubric", r.id);
   return { id: r.id };
 });

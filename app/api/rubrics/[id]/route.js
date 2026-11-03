@@ -1,3 +1,4 @@
+import { questionsOf, cleanQuestions } from "@/lib/questions";
 import { route, body, bad } from "@/lib/api";
 import { db, q, qc } from "@/lib/db";
 import { loadStructure } from "@/lib/structure";
@@ -19,7 +20,7 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
   const versions = await q(db().from("nae_rubric_versions").select("*").eq("rubric_id", params.id).order("version"));
   let draft = versions.find(v => v.status === "draft");
   const pub = versions.filter(v => v.status === "published").pop();
-  if (!draft) draft = await q(db().from("nae_rubric_versions").insert({ rubric_id: params.id, version: Math.max(0, ...versions.map(v => v.version)) + 1, status: "draft", criteria: pub?.criteria || [], identity_required: pub?.identity_required || false, identity_pass: pub?.identity_pass || false, grade_bands: pub?.grade_bands }).select("*").single());
+  if (!draft) draft = await q(db().from("nae_rubric_versions").insert({ rubric_id: params.id, version: Math.max(0, ...versions.map(v => v.version)) + 1, status: "draft", criteria: pub?.criteria || [], identity_required: pub?.identity_required || false, identity_pass: pub?.identity_pass || false, questions: questionsOf(pub), grade_bands: pub?.grade_bands }).select("*").single());
   const patch = {};
   if (Array.isArray(b.criteria)) {
     // Each criterion keeps its own internal key for good (new ones get a random one), so two criteria with
@@ -32,12 +33,19 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
       return { key, label: String(c.label || "").trim(), label_ar: String(c.label_ar || "").trim(), weight: Number(c.weight) || 0, description: String(c.description || "").trim(), description_ar: String(c.description_ar || "").trim() };
     });
   }
-  if (b.identity_required !== undefined) patch.identity_required = !!b.identity_required;
-  if (b.identity_pass !== undefined) patch.identity_pass = !!b.identity_pass && (b.identity_required !== undefined ? !!b.identity_required : true);
+  // yes/no questions; the national identity columns mirror the "identity" question for older screens and reports
+  if (Array.isArray(b.questions)) {
+    patch.questions = cleanQuestions(b.questions);
+    const idq = patch.questions.find(x => x.key === "identity");
+    patch.identity_required = !!idq; patch.identity_pass = !!idq?.pass_yes;
+  } else {
+    if (b.identity_required !== undefined) patch.identity_required = !!b.identity_required;
+    if (b.identity_pass !== undefined) patch.identity_pass = !!b.identity_pass && (b.identity_required !== undefined ? !!b.identity_required : true);
+  }
   if (b.grade_bands !== undefined) { const gb = cleanBands(b.grade_bands); if (!gb) throw bad("Grade lines must be whole numbers with A above B (for example A 80, B 50)."); patch.grade_bands = gb; }
   if (b.name) await q(db().from("nae_rubrics").update({ name: b.name }).eq("id", params.id));
   await q(db().from("nae_rubric_versions").update(patch).eq("id", draft.id));
-  const summary = [patch.criteria ? patch.criteria.map(c => `${c.label} ${c.weight}%`).join(", ") : null, patch.identity_required !== undefined ? `national identity ${patch.identity_required ? (patch.identity_pass ? "asked, yes required to go through" : "asked") : "not asked"}` : null, patch.grade_bands ? `A ${patch.grade_bands[0].min}, B ${patch.grade_bands[1].min}` : null].filter(Boolean).join(" · ");
+  const summary = [patch.criteria ? patch.criteria.map(c => `${c.label} ${c.weight}%`).join(", ") : null, patch.questions ? (patch.questions.length ? `yes/no: ${patch.questions.map(x => `${x.label}${x.pass_yes ? " (yes required)" : ""}`).join(", ")}` : "no yes/no questions") : patch.identity_required !== undefined ? `national identity ${patch.identity_required ? (patch.identity_pass ? "asked, yes required to go through" : "asked") : "not asked"}` : null, patch.grade_bands ? `A ${patch.grade_bands[0].min}, B ${patch.grade_bands[1].min}` : null].filter(Boolean).join(" · ");
   const r = await q(db().from("nae_rubrics").select("code").eq("id", params.id).single());
   await audit(session, `Draft saved: rubric ${r.code} v${draft.version}`, "rubric", params.id, summary);
   return { ok: true, draft: draft.id };
@@ -50,7 +58,7 @@ export const POST = route(["admin"], async ({ session, params, request }) => {
   const rub = S.rubrics[params.id]; if (!rub) throw bad("Rubric not found.");
   const draft = rub.draft; if (!draft) throw bad("There is no draft to publish.");
   const pub = rub.published;
-  if (pub && same(pub.criteria, draft.criteria) && pub.identity_required === draft.identity_required && !!pub.identity_pass === !!draft.identity_pass && same(pub.grade_bands, draft.grade_bands)) throw bad("Nothing has changed since the published version.");
+  if (pub && same(pub.criteria, draft.criteria) && same(questionsOf(pub), questionsOf(draft)) && same(pub.grade_bands, draft.grade_bands)) throw bad("Nothing has changed since the published version.");
   const crit = draft.criteria || [];
   const total = crit.reduce((s, c) => s + Number(c.weight || 0), 0);
   if (total !== 100) throw bad(`Weights add up to ${total}. They must add up to 100.`);
