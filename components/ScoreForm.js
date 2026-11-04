@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Btn, Banner, Badge, useToast, Modal, Field, Check } from "@/components/ui";
 import { useLang, LangToggle, CritText, critName, hasArabic, scoreLang, SL, AR_FONT } from "@/components/lang";
 import { answersOf, qLabel, qAsk } from "@/lib/questions";
+import ChoicePick from "@/components/ChoicePick";
 
 export const total = (criteria, s) => Math.ceil((criteria || []).reduce((a, c) => a + Number(s?.[c.key] || 0) * Number(c.weight || 0), 0) / 100 - 1e-9);
 export const gradeFor = (t, bands) => { const b = [...(bands || [{ grade: "A", min: 80 }, { grade: "B", min: 50 }, { grade: "C", min: 0 }])].sort((x, y) => y.min - x.min).find(x => t >= x.min); return b ? b.grade : ""; };
@@ -23,7 +24,7 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
   const filled = crit.filter(c => s[c.key] !== "" && s[c.key] != null).length;
   const t = useMemo(() => total(crit, s), [crit, s]);
   const bad = c => { const v = s[c.key]; if (v === "" || v == null) return false; const n = Number(v); return !Number.isInteger(n) || n < 0 || n > 100; };
-  const ready = filled === crit.length && !crit.some(bad) && qs.every(x => typeof ans[x.key] === "boolean");
+  const ready = filled === crit.length && !crit.some(bad) && qs.every(x => typeof ans[x.key] === "boolean" && (!ans[x.key] || !x.options?.length || (ans[`${x.key}_choice`] && ans[`${x.key}_choice`] !== "Other: ")));
   async function save(submit) {
     setBusy(submit ? "submit" : "draft"); setErr(null);
     try {
@@ -45,8 +46,8 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
     <div className="stack" style={{ gap: 0 }}>
       {crit.map(c => <div key={c.key} className="f3-crit"><div className="lab"><CritText c={c} lang={lang} /></div>
         <input className={`sc-in${bad(c) ? " f3-err" : ""}`} inputMode="numeric" aria-label={`${c.label}, 0 to 100`} placeholder="0–100" disabled={done} value={s[c.key] ?? ""} onChange={e => setS({ ...s, [c.key]: e.target.value.replace(/[^0-9]/g, "").slice(0, 3) })} /></div>)}
-      {qs.map(x => <div key={x.key} className="f3-crit"><div className="lab"><div><b>{qLabel(x, ar)}</b><span>{qAsk(x, ar)}{x.pass_yes ? T.identityReq : ""}</span></div></div>
-        <span className="f3-yn lg"><button type="button" disabled={done} className={ans[x.key] === true ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: true })}>{T.yes}</button><button type="button" disabled={done} className={ans[x.key] === false ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: false })}>{T.no}</button></span></div>)}
+      {qs.map(x => <div key={x.key} className="f3-crit"><div className="lab"><div><b>{qLabel(x, ar)}</b><span>{qAsk(x, ar)}{x.pass_yes ? T.identityReq : ""}</span></div>{ans[x.key] === true && <ChoicePick q={x} ar={ar} disabled={done} value={ans[`${x.key}_choice`]} onChange={v => setAns({ ...ans, [`${x.key}_choice`]: v })} />}</div>
+        <span className="f3-yn lg"><button type="button" disabled={done} className={ans[x.key] === true ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: true })}>{T.yes}</button><button type="button" disabled={done} className={ans[x.key] === false ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: false, [`${x.key}_choice`]: undefined })}>{T.no}</button></span></div>)}
     </div>
     {framing && <div className="f3-crit"><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
       <div className="stack s4"><Check label={T.needs} disabled={done} checked={fr.needs} onChange={v => setFr({ needs: v, glass: v && fr.glass })} />
@@ -61,7 +62,7 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
     {!done && <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}><Btn onClick={() => save(false)} busy={busy === "draft"} disabled={!!busy}>{T.saveDraft}</Btn><Btn v="primary" disabled={!ready || !!busy} onClick={() => setConfirm(true)}>{T.submit}</Btn></div>}
     {done && <p className="x-note">Submitted scores can't be changed here. If something is wrong, ask the admin to correct it (they must give a reason).</p>}
     <Modal open={confirm} title="Submit this score?" sub={`${code} · Round ${round.round_no}`} onClose={() => setConfirm(false)} footer={<><Btn onClick={() => setConfirm(false)}>Back</Btn><Btn v="primary" busy={busy === "submit"} onClick={() => save(true)}>Submit {t}</Btn></>}>
-      <table className="x-cmp"><thead><tr><th>Criterion</th><th>Weight</th><th>Score</th></tr></thead><tbody>{crit.map(c => <tr key={c.key}><td dir="auto">{critName(c, lang)}</td><td>{c.weight}%</td><td>{s[c.key]}</td></tr>)}{qs.map(x => <tr key={x.key}><td>{x.label}</td><td></td><td>{ans[x.key] ? "Yes" : "No"}</td></tr>)}{toRev && <tr><td colSpan={3}>Sent to management review</td></tr>}<tr className="tot"><td>Total</td><td></td><td>{t} · {gradeFor(t, bands)}</td></tr></tbody></table>
+      <table className="x-cmp"><thead><tr><th>Criterion</th><th>Weight</th><th>Score</th></tr></thead><tbody>{crit.map(c => <tr key={c.key}><td dir="auto">{critName(c, lang)}</td><td>{c.weight}%</td><td>{s[c.key]}</td></tr>)}{qs.map(x => <tr key={x.key}><td>{x.label}</td><td></td><td>{ans[x.key] ? `Yes${ans[`${x.key}_choice`] ? ` · ${ans[`${x.key}_choice`]}` : ""}` : "No"}</td></tr>)}{toRev && <tr><td colSpan={3}>Sent to management review</td></tr>}<tr className="tot"><td>Total</td><td></td><td>{t} · {gradeFor(t, bands)}</td></tr></tbody></table>
       <p className="muted">You can't change it after you submit. Other evaluators' scores become visible to you once you submit.</p>
     </Modal>
     <Modal open={nv !== null} title={T.notVisible} sub={code} onClose={() => setNv(null)} footer={<><Btn onClick={() => setNv(null)}>Back</Btn><Btn v="primary" busy={busy === "nv"} disabled={!String(nv || "").trim()} onClick={notVis}>Send to the coordinator</Btn></>}>

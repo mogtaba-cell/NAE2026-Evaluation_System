@@ -1219,3 +1219,39 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 /* artwork thumbnails in lists */
 .cell-th{width:40px;height:40px;flex:none;border-radius:6px;object-fit:cover;background:var(--wash);border:1px solid var(--rule)}
 .cellp span.cell-th.none{display:inline-flex;align-items:center;justify-content:center;color:var(--ink3);font-size:12px;line-height:1}
+/* session sheet: Absent / Saved under each evaluator's name */
+.x-cmp.sess-mx th .th-act{display:block;margin-top:4px;min-height:22px}
+.x-cmp.sess-mx th .th-btn{font:inherit;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--rule2);background:var(--sheet);color:var(--ink2);cursor:pointer}
+.x-cmp.sess-mx th .th-btn:hover{border-color:var(--ink3)}
+.x-cmp.sess-mx th .th-btn.on{background:var(--warn-wash);border-color:#C27D0E;color:var(--warn)}
+.x-cmp.sess-mx th .badge{font-size:10px}
+/* option picked after a Yes */
+.chp{display:flex;flex-direction:column;gap:6px;margin-top:6px;min-width:0}
+.chp .select,.chp .input{height:34px;font-size:13px}
+.chp.sm{margin-top:4px}
+.chp.sm .select,.chp.sm .input{height:28px;font-size:11px;padding:0 6px;min-width:0;width:100%}
+.d-choice{display:block;margin-top:4px;font-family:var(--sans);font-size:11px;color:var(--ink2)}
+.rb-opts{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:640px){.rb-opts{grid-template-columns:1fr}}
+/* session board: photos and groups by storage place / school */
+.sb-row{grid-template-columns:auto 48px minmax(0,1fr) auto}
+.sb-th{width:48px;height:48px;border-radius:6px;overflow:hidden;border:1px solid var(--rule);background:var(--wash);padding:0;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:12px}
+.sb-th img{width:100%;height:100%;object-fit:cover;display:block}
+.sb-grp+.sb-grp{margin-top:2px}
+.sb-gh{display:flex;align-items:center;gap:8px;padding:6px var(--s3);background:var(--wash2);border-top:1px solid var(--rule);font-size:12px}
+.sb-gh b{font-weight:600;color:var(--ink2)}
+/* session cards: venue on top; upcoming moves */
+.sess-venue{font-weight:700;font-size:15px;color:var(--ink)}
+.plan-card{gap:10px}
+.plan-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.plan-venue{font-weight:700;font-size:18px;color:var(--ink)}
+.plan-g{border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.plan-gh{display:flex;align-items:baseline;gap:8px;padding:6px 12px;background:var(--wash2);font-size:12px}
+.plan-r{display:grid;grid-template-columns:16px 40px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid var(--rule)}
+.plan-r .bx{width:14px;height:14px;border:1.5px solid var(--ink3);border-radius:3px}
+@media print{.plan-card{break-inside:avoid;box-shadow:none}}
+
+/* session card: a strip of small photos of its artworks */
+.sess-strip{display:flex;gap:4px;margin-top:6px;align-items:center}
+.sess-strip img{width:34px;height:34px;object-fit:cover;border-radius:6px;border:1px solid var(--rule);background:var(--wash);flex:none}
+.sess-strip .more{font-size:11px;color:var(--ink3);font-family:var(--mono);padding-left:2px}

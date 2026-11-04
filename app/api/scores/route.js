@@ -65,7 +65,7 @@ export const POST = route(["evaluator", "coordinator", "admin"], async ({ sessio
     let clean = b.scores || {}, total = null;
     if (submit) {
       const v = await validateScores(version.criteria, b.scores); if (v.error) throw bad(v.error); clean = v.scores;
-      const miss = missingAnswer(qs, ans); if (miss) throw bad(`Choose yes or no for ${miss.label.toLowerCase()}.`);
+      const miss = missingAnswer(qs, ans); if (miss) throw bad(`${miss.why[0].toUpperCase()}${miss.why.slice(1)}.`);
       total = weightedTotal(version.criteria, clean);
     }
     row = { status: submit ? "submitted" : "draft", scores: clean, total, answers: ans, national_identity: typeof ans.identity === "boolean" ? ans.identity : null, submitted_at: submit ? new Date().toISOString() : null };

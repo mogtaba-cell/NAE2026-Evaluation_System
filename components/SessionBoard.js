@@ -5,7 +5,7 @@ import LocPicker from "@/components/LocPicker";
 // Logistics brings the next batch; the coordinator hands a batch back once it is scored; Logistics confirms it is back
 // on the shelves and brings the next one. It refreshes itself every few seconds, so both sides see the same thing.
 import { useState } from "react";
-import { api, useApi, useToast, Btn, Badge, Banner, Loading, Modal, Field, Check, when } from "@/components/ui";
+import { api, useApi, useToast, Btn, Badge, Banner, Loading, Modal, Field, Check, Seg, when } from "@/components/ui";
 
 function LocationSelect({ value, onChange }) {
 
@@ -17,6 +17,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
   const toast = useToast();
   const [sel, setSel] = useState({ waiting: new Set(), room: new Set(), back: new Set() });
   const [count, setCount] = useState(10); const [busy, setBusy] = useState(null); const [ask, setAsk] = useState(null); const [loc, setLoc] = useState("");
+  const [by, setBy] = useState("place"); const [big, setBig] = useState(null);
   if (!d.data) return <Loading error={d.error} />;
   const { rows, session: s, nextBatch } = d.data;
   const staff = ["admin", "storage"].includes(role); const coord = role === "coordinator" || role === "admin";
@@ -31,10 +32,18 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
     try { const r = await api(`/api/sessions/${sessionId}/board`, { body: b }); toast(r.note); setSel({ waiting: new Set(), room: new Set(), back: new Set() }); setAsk(null); d.reload(); onChanged && onChanged(); }
     catch (e) { toast(e.message, "err"); } setBusy(null);
   }
+  // group a lane by storage place (room · shelf, rows in order) or by school
+  const groupKey = r => by === "school" ? `${r.school || "No school"}${r.esis ? ` · eSIS ${r.esis}` : ""}` : r.room ? `${r.room} · ${r.shelf}` : "Not shelved";
+  const grouped = list => { const m = new Map(); [...list].sort(by === "school" ? (a, b) => String(a.school).localeCompare(String(b.school)) || a.sort - b.sort || a.code.localeCompare(b.code) : (a, b) => a.sort - b.sort || a.code.localeCompare(b.code)).forEach(r => { const g = groupKey(r); if (!m.has(g)) m.set(g, []); m.get(g).push(r); }); return [...m.entries()]; };
+  const canTick = k => (k === "waiting" && staff) || (k === "room" && (coord || staff)) || (k === "back" && staff);
+  const Groups = ({ list, k }) => grouped(list).map(([g, rs]) => <div key={g} className="sb-grp">
+    <div className="sb-gh">{k && canTick(k) && <Check label="" checked={rs.every(r => sel[k].has(r.code))} onChange={v => setAll(k, rs.map(r => r.code), v)} />}<b>{g}</b><span className="small faint">{rs.length}</span></div>
+    {rs.map(r => <Row key={r.code} r={r} k={k} />)}</div>);
   const Row = ({ r, k }) => <div className={`sb-row${sel[k]?.has(r.code) ? " on" : ""}`}>
-    {k && ((k === "waiting" && staff) || (k === "room" && (coord || staff)) || (k === "back" && staff)) ? <Check label="" checked={sel[k].has(r.code)} onChange={v => toggle(k, r.code, v)} /> : <span />}
-    <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[r.school, r.sub, r.size].filter(Boolean).join(" · ")}</span></div>
-    <div className="sb-side">{k === "waiting" && <span className="small">{r.where || "Not shelved"}</span>}{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.scored ? <Badge tone="ok">Scored</Badge> : r.progress && r.progress !== "0/0" ? <Badge>{r.progress}</Badge> : null}</div>
+    {k && canTick(k) ? <Check label="" checked={sel[k].has(r.code)} onChange={v => toggle(k, r.code, v)} /> : <span />}
+    <button type="button" className="sb-th" onClick={() => r.thumb && setBig(r)} aria-label={`Photo of ${r.code}`}>{r.thumb ? <img src={`${r.thumb}?s=120`} alt="" loading="lazy" /> : <span>–</span>}</button>
+    <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[by === "school" ? null : r.school, r.sub, r.size].filter(Boolean).join(" · ")}</span></div>
+    <div className="sb-side">{k === "waiting" && <span className="small">{by === "place" ? (r.row != null ? `Row ${r.row}` : r.where || "Not shelved") : r.where || "Not shelved"}</span>}{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.scored ? <Badge tone="ok">Scored</Badge> : r.progress && r.progress !== "0/0" ? <Badge>{r.progress}</Badge> : null}</div>
   </div>;
   const unscored = b => room.filter(r => r.batch === b && !r.scored).length;
 
@@ -45,7 +54,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
       <span><b>{back.length}</b> handed back</span><span className="arrow">→</span>
       <span><b>{done.length}</b> scored and back on the shelves</span>
       {missing.length > 0 && <Badge tone="bad">{missing.length} missing</Badge>}
-      <span className="sp" /><span className="small faint">Updates by itself</span>
+      <span className="sp" /><Seg value={by} onChange={setBy} items={[["place", "By storage place"], ["school", "By school"]]} /><span className="small faint">Updates by itself</span>
     </div>
     {!rows.length && <p className="muted" style={{ padding: 12 }}>This session has no physical artworks (they are scored from their files).</p>}
     {rows.length > 0 && <div className="sb-lanes">
@@ -57,7 +66,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
           <span className="sp" /><Check label="All" checked={sel.waiting.size > 0 && sel.waiting.size === waiting.length} onChange={v => setAll("waiting", waiting.map(r => r.code), v)} />
         </div>}
         {!staff && waiting.length > 0 && <p className="small faint sb-note">Logistics brings these in batches.</p>}
-        <div className="sb-list">{waiting.map(r => <Row key={r.code} r={r} k="waiting" />)}{!waiting.length && <p className="small faint sb-note">Nothing waiting.</p>}</div>
+        <div className="sb-list"><Groups list={waiting} k="waiting" />{!waiting.length && <p className="small faint sb-note">Nothing waiting.</p>}</div>
       </section>
 
       <section className="sb-lane room">
@@ -66,7 +75,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
         {batches.map(bn => { const br = room.filter(r => (r.batch || 0) === bn); const left = unscored(bn); const first = br.map(r => r.handed_at).filter(Boolean).sort()[0]; return <div key={bn} className="sb-batch">
           <div className="sb-bh"><Check label="" checked={br.every(r => sel.room.has(r.code))} onChange={v => setAll("room", br.map(r => r.code), v)} /><b>{bn ? `Batch ${bn}` : "Brought in earlier"}</b><span className="small faint">{br.length} artworks · {br.length - left} scored{first ? ` · ${when(first)}` : ""}</span><span className="sp" />
             {(coord || staff) && <Btn sm v={left ? "secondary" : "primary"} busy={busy === `back${bn}`} onClick={() => left ? setAsk({ batch: bn, left }) : go(`back${bn}`, { action: "back", batch: bn || undefined, codes: bn ? undefined : br.map(r => r.code) })}>{coord ? "Batch done: hand back" : "Collect from room"}</Btn>}</div>
-          {br.map(r => <Row key={r.code} r={r} k="room" />)}
+          <Groups list={br} k="room" />
         </div>; })}
         {sel.room.size > 0 && <div className="sb-act"><Btn sm busy={busy === "backsel"} onClick={() => go("backsel", { action: "back", codes: [...sel.room] })}>Hand back {sel.room.size} selected</Btn></div>}
       </section>
@@ -74,7 +83,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
       <section className="sb-lane">
         <div className="sb-lh"><div><b>Handed back</b><span className="small faint">{staff ? "Check them and put them back" : "Logistics takes them back"}</span></div><span className="n">{back.length}</span></div>
         {staff && back.length > 0 && <div className="sb-act"><Btn sm v="primary" busy={busy === "shelve"} onClick={() => setAsk({ shelve: true, codes: sel.back.size ? [...sel.back] : null })}>{sel.back.size ? `Back on shelves (${sel.back.size})` : `All ${back.length} back on shelves`}</Btn><span className="sp" /><Check label="All" checked={sel.back.size > 0 && sel.back.size === back.length} onChange={v => setAll("back", back.map(r => r.code), v)} /></div>}
-        <div className="sb-list">{back.map(r => <Row key={r.code} r={r} k="back" />)}{!back.length && <p className="small faint sb-note">Nothing to put back.</p>}</div>
+        <div className="sb-list"><Groups list={back} k="back" />{!back.length && <p className="small faint sb-note">Nothing to put back.</p>}</div>
         {done.length > 0 && <details className="sb-done"><summary className="small">{done.length} scored and back on the shelves</summary>{done.map(r => <Row key={r.code} r={r} />)}</details>}
         {missing.length > 0 && <details className="sb-done" open><summary className="small" style={{ color: "var(--bad)" }}>{missing.length} missing</summary>{missing.map(r => <Row key={r.code} r={r} />)}</details>}
       </section>
@@ -85,6 +94,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
       {ask?.shelve ? <Field label="Put them" help="Leave as is to put each artwork back on the shelf it came from."><LocationSelect value={loc} onChange={setLoc} /></Field>
         : ask && <Banner tone="warn" title={`${ask.left} artwork${ask.left === 1 ? " isn't" : "s aren't"} fully scored yet`}>They go back to storage and wait on the shelves again; Logistics can bring them in a later batch.</Banner>}
     </Modal>
+    <Modal open={!!big} wide title={big?.code} sub={big ? [big.title, big.school, big.where].filter(Boolean).join(" · ") : ""} onClose={() => setBig(null)} footer={<Btn onClick={() => setBig(null)}>Close</Btn>}>{big?.thumb && <img src={`${big.thumb}?s=1600`} alt="" style={{ width: "100%", borderRadius: 8 }} />}</Modal>
   </div>;
 }
 

@@ -11,6 +11,7 @@ import EditDetails from "@/components/EditDetails";
 import { total, gradeFor } from "@/components/ScoreForm";
 import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/components/lang";
 import { answersOf, answerOf, qLabel } from "@/lib/questions";
+import ChoicePick from "@/components/ChoicePick";
 
 const qsOf = e => e?.rubric?.questions || [];
 const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identityPass && idn !== true) return false; return true; };
@@ -75,7 +76,7 @@ export default function Session({ params }) {
   if (!d.data) return <Loading error={d.error} />;
   const { session: s, team, entries, rules } = d.data;
   const qs = qsOf(e);
-  const filled = ev => crit.every(c => m[ev]?.[c.key] !== "" && m[ev]?.[c.key] != null) && qs.every(x => typeof idn[ev]?.[x.key] === "boolean");
+  const filled = ev => crit.every(c => m[ev]?.[c.key] !== "" && m[ev]?.[c.key] != null) && qs.every(x => typeof idn[ev]?.[x.key] === "boolean" && (!idn[ev][x.key] || !x.options?.length || (idn[ev][`${x.key}_choice`] && idn[ev][`${x.key}_choice`] !== "Other: ")));
   const isEv = d.data.me?.role === "evaluator", myEv = d.data.me?.evaluator_id;
   const nvHere = !!e?.not_visible;
   const editable = !nvHere && ((s.status === "live" && (s.mine || admin || isEv)) || (admin && s.status !== "cancelled"));
@@ -106,6 +107,7 @@ export default function Session({ params }) {
     const spread = totals.length > 1 ? Math.max(...totals) - Math.min(...totals) : 0;
     if (rules.flag_spread && spread > rules.spread_limit) why.push(`the evaluators are ${spread} points apart`);
     if (rules.flag_identity) qs.forEach(x => { const a = answers.map(y => y[x.key]); if (a.includes(true) && a.includes(false)) why.push(`the evaluators disagree on ${x.label.toLowerCase()}`); });
+    qs.filter(x => x.flag_choice && x.options?.length).forEach(x => { const c = new Set(answers.filter(y => y[x.key] === true).map(y => y[`${x.key}_choice`] || "")); if (c.size > 1) why.push(`the evaluators picked different ${x.label.toLowerCase()} options`); });
     if (toRev || team.some(t => saved(t.id) && scoreOf(t.id).to_review)) why.push("it was sent to review");
     return { complete: true, team: teamScore, grade: g, why, passes: passesRule({ ...rules.pass_rule, identityPass: passQs.length > 0 }, teamScore, g, identity) };
   }
@@ -133,9 +135,9 @@ export default function Session({ params }) {
     setBusy(action);
     try {
       const r = await api(`/api/sessions/${id}`, { method: "PATCH", body: { action, ...extra } });
-      if (r.ok === false && r.incomplete) { setFinishAsk(r); setBusy(null); return; }
+      if (r.ok === false && r.incomplete) { setFinishAsk({ ...r, to: r.targets?.[0]?.id || "" }); setBusy(null); return; }
       setFinishAsk(null); setEdit(null);
-      toast({ start: "Session started.", finish: "Session finished. Artworks still in the room are marked as handed back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
+      toast(r.note || { start: "Session started.", finish: "Session finished. Artworks still in the room are marked as handed back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
       if (action === "cancel") router.push("/sessions"); else d.reload();
     } catch (x) { toast(x.message, "err"); } setBusy(null);
   }
@@ -180,12 +182,13 @@ export default function Session({ params }) {
       {e && <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <section className={`card score-card${ar ? " is-ar" : ""}`} dir={ar ? "rtl" : "ltr"} lang={ar ? "ar" : "en"} style={ar ? { fontFamily: AR_FONT } : undefined}>
           <div className="card-h"><div className="tt"><h3>{T.scores}</h3><span className="sub">{T.rubric} <span dir="ltr">{e.rubric?.code} v{e.rubric?.version}</span> · {T.each}</span></div><LangToggle lang={lang} onChange={setLang} both={false} /></div>
-          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>{T.criterion}</th>{team.map(t => <th key={t.id} title={t.name} className={canCol(t) && !saved(t.id) ? "mine" : ""}>{isEv && t.id === myEv ? "You" : t.name}{t.self && <span className="own">own login</span>}</th>)}</tr></thead><tbody>
+          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>{T.criterion}</th>{team.map(t => <th key={t.id} title={t.name} className={canCol(t) && !saved(t.id) ? "mine" : ""}>{isEv && t.id === myEv ? "You" : t.name}{t.self && <span className="own">own login</span>}
+              <span className="th-act">{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? <Badge>{T.absent}</Badge> : staff ? (abs[t.id] ? <button type="button" className="th-btn on" onClick={() => setAb(t.id, false)}>{T.undo}</button> : <button type="button" className="th-btn" onClick={() => setAb(t.id, true)}>{T.absent}</button>) : null}</span></th>)}</tr></thead><tbody>
             {crit.map(c => { const ct = critIn(c, lang); return <tr key={c.key}><td><div className="cl"><b>{ct.label} <span className="w">{c.weight}%</span></b>{ct.desc && <span className="d">{ct.desc}</span>}{ct.missing && ar && <span className="d">{T.noAr}</span>}</div></td>
               {team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? <span className="faint small">{T.absent}</span> : !canCol(t) && !saved(t.id) ? <span className="faint">–</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!canCol(t) || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setScore(t.id, c.key, x.target.value.replace(/\D/g, "").slice(0, 3))} />}</td>)}</tr>; })}
-            {qs.map(x => <tr key={x.key}><td><div className="cl"><b>{qLabel(x, ar)}</b>{x.pass_yes && <span className="d">{T.identityReq.trim()}</span>}</div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : !canCol(t) && !saved(t.id) ? <span className="faint">–</span> : <span className="f3-yn"><button type="button" disabled={!canCol(t) || saved(t.id)} className={idn[t.id]?.[x.key] === true ? "on" : ""} onClick={() => setId(t.id, x.key, true)}>{T.y}</button><button type="button" disabled={!canCol(t) || saved(t.id)} className={idn[t.id]?.[x.key] === false ? "on" : ""} onClick={() => setId(t.id, x.key, false)}>{T.n}</button></span>}</td>)}</tr>)}
+            {qs.map(x => <tr key={x.key}><td><div className="cl"><b>{qLabel(x, ar)}</b>{x.pass_yes && <span className="d">{T.identityReq.trim()}</span>}</div></td>{team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? "" : !canCol(t) && !saved(t.id) ? <span className="faint">–</span> : <span className="f3-yn"><button type="button" disabled={!canCol(t) || saved(t.id)} className={idn[t.id]?.[x.key] === true ? "on" : ""} onClick={() => setId(t.id, x.key, true)}>{T.y}</button><button type="button" disabled={!canCol(t) || saved(t.id)} className={idn[t.id]?.[x.key] === false ? "on" : ""} onClick={() => setId(t.id, x.key, false)}>{T.n}</button></span>}
+              {idn[t.id]?.[x.key] === true && x.options?.length > 0 && !(absent(t.id) || abs[t.id]) && (saved(t.id) ? <span className="small d-choice" dir="auto">{idn[t.id][`${x.key}_choice`] || "–"}</span> : canCol(t) && <ChoicePick compact q={x} ar={ar} value={idn[t.id][`${x.key}_choice`]} onChange={v => setId(t.id, `${x.key}_choice`, v)} />)}</td>)}</tr>)}
             <tr className="tot"><td>{T.total}</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) || abs[t.id] ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
-            {(editable || team.some(t => saved(t.id) || absent(t.id))) && <tr className="act"><td></td>{team.map(t => <td key={t.id}>{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? <Badge>{T.absent}</Badge> : staff ? (abs[t.id] ? <Btn sm v="ghost" onClick={() => setAb(t.id, false)}>{T.undo}</Btn> : <Btn sm v="ghost" onClick={() => setAb(t.id, true)}>{T.absent}</Btn>) : null}</td>)}</tr>}
           </tbody></table></div>}
           {e.rubric && team.some(t => !(absent(t.id) || abs[t.id]) && (saved(t.id) || canCol(t))) && <div className="sc-cms"><b className="small">{T.comment}</b>
             {team.filter(t => !(absent(t.id) || abs[t.id]) && (saved(t.id) || canCol(t))).map(t => <div key={t.id} className="sc-cmr"><span className="small">{isEv && t.id === myEv ? "You" : t.name}</span>
@@ -227,8 +230,13 @@ export default function Session({ params }) {
       <p className="muted" style={{ marginTop: 0 }}>{T.notVisibleHint}</p>
       <Field label="What's wrong?"><textarea className="textarea" rows={3} value={nv || ""} onChange={x => setNv(x.target.value)} placeholder="For example: the video doesn't play, the photo is blurred or cut off" /></Field>
     </Modal>
-    <Modal open={!!finishAsk} title="Finish with artworks not fully scored?" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><Btn v="primary" busy={busy === "finish"} onClick={() => act("finish", { confirm: true })}>Finish anyway</Btn></>}>
-      <p className="muted">{finishAsk?.note}</p>
+    <Modal open={!!finishAsk} title="Finish with artworks not fully scored?" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><span className="sp" />
+      {finishAsk?.movable > 0 && finishAsk?.targets?.length > 0 && <Btn busy={busy === "finish"} disabled={!finishAsk.to} onClick={() => act("finish", { confirm: true, move_to: finishAsk.to })}>Move {finishAsk.movable} and finish</Btn>}
+      <Btn v="primary" busy={busy === "finish"} onClick={() => act("finish", { confirm: true })}>{finishAsk?.movable > 0 && finishAsk?.targets?.length ? "Just finish" : "Finish anyway"}</Btn></>}>
+      <p className="muted" style={{ marginTop: 0 }}>{finishAsk?.note}</p>
+      {finishAsk?.movable > 0 && (finishAsk.targets?.length ? <Field label={`Move the ${finishAsk.movable} artwork${finishAsk.movable === 1 ? "" : "s"} not started yet to another session`} help={finishAsk.partly ? `${finishAsk.partly} partly scored artwork${finishAsk.partly === 1 ? " stays" : "s stay"} with this session's scores; they can go into another session later.` : "Their evaluators there score them. Physical ones wait on the shelves for that session's board."}>
+        <select className="select" value={finishAsk.to} onChange={x => setFinishAsk({ ...finishAsk, to: x.target.value })}>{finishAsk.targets.map(t => <option key={t.id} value={t.id}>{t.title} · {t.date ? dshort(t.date) : "no date"}{t.start ? ` ${hm(t.start)}–${hm(t.end)}` : ""} · {t.coordinator}{t.status === "live" ? " (in progress)" : ""}</option>)}</select></Field>
+        : <p className="small faint">No other planned or live session in this round to move them to. Finish, then put them in a new session.</p>)}
     </Modal>
     <Modal open={!!edit} wide title="Edit session" onClose={() => setEdit(null)} footer={<><Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn><span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => act("edit", edit)}>Save</Btn></>}>
       {edit && <div className="stack" style={{ gap: 12 }}>

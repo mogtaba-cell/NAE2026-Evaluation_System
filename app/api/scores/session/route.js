@@ -56,7 +56,7 @@ export const POST = route(["coordinator", "admin", "evaluator"], async ({ sessio
     const v = await validateScores(version.criteria, i.scores);
     if (v.error) throw bad(`${nameOf(i.evaluator_id)}: ${v.error}`);
     const ans = normAnswers(qs, i.answers, i.national_identity); const miss = missingAnswer(qs, ans);
-    if (miss) throw bad(`${nameOf(i.evaluator_id)}: choose yes or no for ${miss.label.toLowerCase()}.`);
+    if (miss) throw bad(`${nameOf(i.evaluator_id)}: ${miss.why}.`);
     rows.push({ evaluator_id: i.evaluator_id, status: "submitted", scores: v.scores, total: weightedTotal(version.criteria, v.scores), answers: ans, national_identity: typeof ans.identity === "boolean" ? ans.identity : null, comment: i.comment ? String(i.comment).trim().slice(0, 1000) || null : null, to_review: !!(i.to_review || b.to_review), submitted_at: now });
   }
   await q(db().from("nae_scores").upsert(rows.map(r => ({ round_id: round.id, entry_id: e.id, rubric_version_id: pin.version_id, entered_by: session.sub, session_id: sess.id, updated_at: now, comment: null, to_review: false, ...r })), { onConflict: "round_id,entry_id,evaluator_id" }));

@@ -100,14 +100,34 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (s.status !== "live") throw bad("Only a live session can be finished.");
     const res = ids.length ? await q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [];
     const open = ids.filter(id => !res.find(x => x.entry_id === id && x.complete));
-    if (open.length && !b.confirm) return { ok: false, incomplete: open.length, note: `${open.length} artwork${open.length === 1 ? " is" : "s are"} not fully scored. They can go into another session. Artworks still with you are handed back to storage.` };
+    // artworks not started (no saved score) can move to another planned or live session of the same round
+    const started = open.length ? new Set((await q(db().from("nae_scores").select("entry_id").eq("round_id", r.id).eq("status", "submitted").in("entry_id", open))).map(x => x.entry_id)) : new Set();
+    const movable = open.filter(id => !started.has(id));
+    if (open.length && !b.confirm) {
+      const targets = movable.length ? (await q(db().from("nae_sessions").select("id, title, session_date, start_time, end_time, status, coordinator:nae_accounts(display_name)").eq("round_id", r.id).in("status", ["planned", "live"]).neq("id", s.id).order("session_date"))).map(t => ({ id: t.id, title: t.title, date: t.session_date, start: t.start_time, end: t.end_time, status: t.status, coordinator: t.coordinator?.display_name || "" })) : [];
+      return { ok: false, incomplete: open.length, movable: movable.length, partly: open.length - movable.length, targets, note: `${open.length} artwork${open.length === 1 ? " is" : "s are"} not fully scored. Artworks still with you are handed back to storage.` };
+    }
+    let moved = 0, target = null;
+    if (b.move_to && movable.length) {
+      target = await q(db().from("nae_sessions").select("*").eq("id", b.move_to).maybeSingle());
+      if (!target || target.round_id !== r.id || !["planned", "live"].includes(target.status) || target.id === s.id) throw bad("Pick a planned or live session of the same round.");
+      const pos = (await q(db().from("nae_session_entries").select("position").eq("session_id", target.id).order("position", { ascending: false }).limit(1)))[0]?.position ?? 0;
+      await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", movable));
+      await q(db().from("nae_session_entries").upsert(movable.map((id, i) => ({ session_id: target.id, entry_id: id, position: pos + 1 + i })), { onConflict: "session_id,entry_id", ignoreDuplicates: true }));
+      // physical artworks still waiting for this session now wait for the other one; ones on the shelf are requested for it
+      await q(db().from("nae_logistics").update({ session_id: target.id, updated_at: new Date().toISOString() }).eq("session_id", s.id).in("state", ["requested", "picked"]).in("entry_id", movable));
+      await requestForSession(session, target, movable);
+      moved = movable.length;
+      await audit(session, `${s.title}: ${moved} artwork${moved === 1 ? "" : "s"} moved to ${target.title}`, "session", s.id, "");
+      await audit(session, `${target.title}: ${moved} artwork${moved === 1 ? "" : "s"} moved in from ${s.title}`, "session", target.id, "");
+    }
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
     // artworks still out go back: never handed over → straight back to storage; with the coordinator → handed
     // back (Logistics confirms receipt and the shelf)
     await releaseFromSession(session, s, ids, "session finished");
     for (const id of open) await recompute(id, r.round_no, { S, quiet: true });
-    await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored` : "");
-    return { ok: true };
+    await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored${moved ? `, ${moved} moved to ${target.title}` : ""}` : "");
+    return { ok: true, note: moved ? `Session finished. ${moved} artwork${moved === 1 ? "" : "s"} moved to ${target.title}.` : null };
   }
   if (action === "reopen") {
     if (session.role !== "admin") throw forbidden("Only an admin can reopen a finished session.");

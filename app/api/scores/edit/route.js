@@ -19,7 +19,7 @@ export const POST = route(["admin"], async ({ session, request }) => {
   const total = weightedTotal(version.criteria, v.scores);
   const qs = questionsOf(version);
   const ans = normAnswers(qs, { ...answersOf(s, qs), ...(b.answers || {}) }, typeof b.national_identity === "boolean" ? b.national_identity : undefined);
-  const miss = missingAnswer(qs, ans); if (miss) throw bad(`Choose yes or no for ${miss.label.toLowerCase()}.`);
+  const miss = missingAnswer(qs, ans); if (miss) throw bad(`${miss.why[0].toUpperCase()}${miss.why.slice(1)}.`);
   const identity = typeof ans.identity === "boolean" ? ans.identity : null;
   const after = { scores: v.scores, total, answers: ans, national_identity: identity, status: "submitted" };
   await q(db().from("nae_scores").update({ ...after, submitted_at: s.submitted_at || new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", s.id));

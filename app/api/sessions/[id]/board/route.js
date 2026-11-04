@@ -3,6 +3,7 @@ import { db, q, inChunks } from "@/lib/db";
 import { loadStructure, isPhysicalRound } from "@/lib/structure";
 import { applyMove } from "@/lib/movements";
 import { audit } from "@/lib/audit";
+import { boardRows } from "@/lib/board";
 
 // The live board of one scoring session, shared by its coordinator and the Logistics team.
 // Lanes: waiting on the shelves -> in the room (batch 1, 2, ...) -> handed back -> back on the shelves.
@@ -14,31 +15,12 @@ async function load(id, session) {
   if (session.role === "coordinator" && s.coordinator_id !== session.sub) throw forbidden("This session is run by another coordinator.");
   return s;
 }
-const LANE = st => ["coordinator", "handed_over"].includes(st) ? "room" : st === "returning" ? "back" : ["requested", "picked"].includes(st) ? "waiting" : st === "storage" ? "shelved" : st === "missing" ? "missing" : "other";
-
-async function boardRows(S, s) {
-  const r = S.roundById[s.round_id];
-  const links = await q(db().from("nae_session_entries").select("position, entry:nae_entries(id, code, title_en, title_ar, group_name, size_text, medium, pathway_code, sub_code, current_round, physical_override, school:nae_schools(name))").eq("session_id", s.id).order("position"));
-  const phys = links.map(l => l.entry).filter(e => isPhysicalRound(S, e, r.round_no));
-  const ids = phys.map(e => e.id);
-  const [lg, res] = await Promise.all([
-    inChunks(ids, part => q(db().from("nae_logistics").select("entry_id, state, batch_no, damaged, condition, handed_at, returned_at, location, loc:nae_locations(room, shelf, label, sort)").in("entry_id", part))),
-    inChunks(ids, part => q(db().from("nae_results").select("entry_id, complete, scored, needed").eq("round_id", r.id).in("entry_id", part)))
-  ]);
-  return phys.map(e => {
-    const l = lg.find(x => x.entry_id === e.id) || {}; const x = res.find(y => y.entry_id === e.id);
-    // an artwork back on the shelves that still needs scores is waiting again
-    let lane = LANE(l.state); if (lane === "shelved" && !x?.complete) lane = "waiting";
-    return { code: e.code, title: e.title_en || e.title_ar || e.group_name || "", school: e.school?.name || "", sub: (S.P[e.pathway_code]?.subs.find(t => t.code === e.sub_code) || {}).name, size: e.size_text, state: l.state || null, lane, batch: l.batch_no || null, where: l.loc ? `${l.loc.label}` : l.location || null, sort: l.loc?.sort ?? 9999, damaged: !!l.damaged, scored: !!x?.complete, progress: x ? `${x.scored || 0}/${x.needed || 0}` : "", handed_at: l.handed_at, returned_at: l.returned_at };
-  }).sort((a, b) => a.sort - b.sort || String(a.where || "").localeCompare(String(b.where || ""), undefined, { numeric: true }) || a.code.localeCompare(b.code));
-}
-
 export const GET = route(["admin", "coordinator", "storage"], async ({ session, params, scope }) => {
   const S = await loadStructure(); await scope(S);
   const s = await load(params.id, session);
   const rows = await boardRows(S, s);
   const r = S.roundById[s.round_id];
-  return { session: { id: s.id, title: s.title, status: s.status, date: s.session_date, time: s.time_text, venue: s.venue, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code]?.name, round_no: r.round_no, mine: s.coordinator_id === session.sub }, rows, nextBatch: Math.max(s.batches || 0, ...rows.map(x => x.batch || 0)) + 1 };
+  return { session: { id: s.id, title: s.title, status: s.status, date: s.session_date, time: s.time_text, start: s.start_time, end: s.end_time, venue: s.venue, coordinator: s.coordinator?.display_name, pathway: S.P[r.pathway_code]?.name, round_no: r.round_no, mine: s.coordinator_id === session.sub }, rows, nextBatch: Math.max(s.batches || 0, ...rows.map(x => x.batch || 0)) + 1 };
 });
 
 // bring (storage: next N in shelf order, or given codes) | back (coordinator/storage: a batch or given codes) |
@@ -48,7 +30,7 @@ export const POST = route(["admin", "coordinator", "storage"], async ({ session,
   const S = await loadStructure();
   const s = await load(params.id, session);
   if (s.status === "cancelled") throw bad("This session was cancelled.");
-  const rows = await boardRows(S, s);
+  const rows = await boardRows(S, s, { thumbs: false });
   const staff = ["admin", "storage"].includes(session.role);
   const pickCodes = (lane, extra) => { const want = Array.isArray(b.codes) && b.codes.length ? new Set(b.codes) : null; return rows.filter(x => x.lane === lane && (!want || want.has(x.code)) && (!extra || extra(x))); };
   const ids = async list => list.length ? (await inChunks(list.map(x => x.code), part => q(db().from("nae_entries").select("id, code").in("code", part)))).map(x => x.id) : [];

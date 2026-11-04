@@ -1,6 +1,6 @@
 "use client";
 import { use, useEffect, useState } from "react";
-import { api, useApi, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loading, Field, Switch, Table, when } from "@/components/ui";
+import { api, useApi, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loading, Field, Switch, Table, Check, when } from "@/components/ui";
 import { questionsOf } from "@/lib/questions";
 
 export default function RubricBuilder({ params }) {
@@ -20,7 +20,8 @@ export default function RubricBuilder({ params }) {
   const base = draft || pub;
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const strip = c => (c || []).map(x => ({ key: x.key || "", label: x.label || "", label_ar: x.label_ar || "", weight: Number(x.weight) || 0, description: x.description || "", description_ar: x.description_ar || "" }));
-  const stripQ = l => (l || []).map(x => ({ key: x.key || "", label: x.label || "", label_ar: x.label_ar || "", ask: x.ask || "", ask_ar: x.ask_ar || "", pass_yes: !!x.pass_yes }));
+  const optList = o => (Array.isArray(o) ? o : String(o || "").split("\n")).map(t => String(t).trim()).filter(Boolean);
+  const stripQ = l => (l || []).map(x => ({ key: x.key || "", label: x.label || "", label_ar: x.label_ar || "", ask: x.ask || "", ask_ar: x.ask_ar || "", pass_yes: !!x.pass_yes, options: optList(x.options), other: !!x.other && optList(x.options).length > 0, flag_choice: !!x.flag_choice && optList(x.options).length > 0 }));
   const updQ = (i, k, v) => setQs(l => l.map((x, j) => j === i ? { ...x, [k]: v } : x));
   const qBad = qs.some(x => !String(x.label || "").trim());
   const changed = !base || !same(strip(crit), strip(base.criteria)) || !same(stripQ(qs), stripQ(questionsOf(base))) || bandOf(base, "A", 80) !== Number(bands.A) || bandOf(base, "B", 50) !== Number(bands.B);
@@ -61,6 +62,13 @@ export default function RubricBuilder({ params }) {
             <Field label="Question name (Arabic)"><input className="input" lang="ar" dir="rtl" value={x.label_ar || ""} disabled={!admin} placeholder="اسم السؤال" onChange={e => updQ(i, "label_ar", e.target.value)} /></Field>
             <Field label="Question evaluators see (Arabic)"><input className="input" lang="ar" dir="rtl" value={x.ask_ar || ""} disabled={!admin} placeholder="السؤال" onChange={e => updQ(i, "ask_ar", e.target.value)} /></Field>
             <span /><span />
+          </div>
+          <div className="rb-opts">
+            <Field label="If Yes, evaluators choose from (optional)" help="One option per line. Leave empty for a plain Yes/No."><textarea className="textarea" rows={3} disabled={!admin} value={Array.isArray(x.options) ? x.options.join("\n") : x.options || ""} placeholder={"For example:\nFlag\nFalcon\nDesert landscape"} onChange={e => updQ(i, "options", e.target.value)} /></Field>
+            {optList(x.options).length > 0 && <div className="stack s4">
+              <Check label="Add “Other” (the evaluator types it)" disabled={!admin} checked={!!x.other} onChange={v => updQ(i, "other", v)} />
+              <Check label="Send to management review when evaluators choose different options" disabled={!admin} checked={!!x.flag_choice} onChange={v => updQ(i, "flag_choice", v)} />
+            </div>}
           </div>
         </div>)}
         {!qs.length && <p className="small faint" style={{ margin: 0 }}>No yes/no questions in this rubric.</p>}

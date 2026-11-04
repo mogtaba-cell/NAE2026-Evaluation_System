@@ -4,7 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Card, Btn, Badge, Banner, Loading, Field, Seg, Kpis, dueTxt, when } from "@/components/ui";
 import FileViewer from "@/components/FileViewer";
 import EntryAbout from "@/components/EntryAbout";
-import { answerOf } from "@/lib/questions";
+import { answerOf, choiceOf } from "@/lib/questions";
 
 // Artworks to be reviewed: the same workspace as a scoring session. The list of artworks on the left, the artwork's
 // files in the middle, the scores and the decision on the right. Every manager can open and decide any of them;
@@ -67,7 +67,7 @@ function Detail({ id, me, rows, onDone }) {
       <Card title="Scores" sub={`${e.school?.name || ""} · pass: ${round.pass_text} · pass mark ${round.threshold}${round.flag_line_kind === "A" ? ` · grade A line ${round.flag_line}` : ""} · evaluators differ by ${spread}${spread > round.spread_limit ? ` (over ${round.spread_limit})` : ""}`}>
         <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>Criterion</th>{scores.map((s, i) => <th key={i}>{s.evaluator}</th>)}</tr></thead><tbody>
           {criteria.map(c => { const v = scores.map(s => s.scores?.[c.key]); const hi = v.length > 1 && Math.max(...v) - Math.min(...v) >= 20; return <tr key={c.key}><td><div className="cl"><b>{c.label} <span className="w">{c.weight}%</span></b></div></td>{v.map((x, i) => <td key={i} className={hi ? "hi" : ""}>{x}</td>)}</tr>; })}
-          {qs.map(x => { const a = scores.map(s => answerOf(s, x.key)); const split = a.includes(true) && a.includes(false); return <tr key={x.key}><td><div className="cl"><b>{x.label}</b></div></td>{a.map((v, i) => <td key={i} className={split ? "hi" : ""}>{v == null ? "–" : v ? "Yes" : "No"}</td>)}</tr>; })}
+          {qs.map(x => { const a = scores.map(s => answerOf(s, x.key)); const ch = scores.map(s => choiceOf(s, x.key)); const split = (a.includes(true) && a.includes(false)) || (x.options?.length && new Set(ch.filter((c, i) => a[i] === true).map(c => c || "")).size > 1); return <tr key={x.key}><td><div className="cl"><b>{x.label}</b></div></td>{a.map((v, i) => <td key={i} className={split ? "hi" : ""}>{v == null ? "–" : v ? "Yes" : "No"}{ch[i] && <span className="d-choice" dir="auto">{ch[i]}</span>}</td>)}</tr>; })}
           <tr className="tot"><td>Total</td>{scores.map((s, i) => <td key={i}>{s.total}</td>)}</tr></tbody></table></div>
         {!scores.length && <p className="muted" style={{ margin: 0 }}>No saved scores yet.</p>}
         {scores.filter(s => s.comment).map((s, i) => <div key={i} className="x-quote small"><b>{s.evaluator}:</b> <span dir="auto">{s.comment}</span></div>)}
