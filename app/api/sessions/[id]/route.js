@@ -8,7 +8,7 @@ import { fileView } from "@/lib/entryview";
 import { audit } from "@/lib/audit";
 import { sessionPool, selfIds } from "@/lib/sessions";
 import { venueFields } from "@/lib/venues";
-import { requestForSession, releaseFromSession } from "@/lib/movements";
+import { requestForSession, releaseFromSession, transferFromRoom } from "@/lib/movements";
 import { myEvaluatorId } from "@/lib/perms";
 
 async function loadSession(id, session) {
@@ -121,9 +121,11 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", mv));
     await q(db().from("nae_session_entries").upsert(mv.map((id, i) => ({ session_id: target.id, entry_id: id, position: pos + 1 + i })), { onConflict: "session_id,entry_id", ignoreDuplicates: true }));
     // physical artworks still waiting for this session now wait for the other one; ones on the shelf are requested for it;
-    // ones in the room are handed back, and are requested for the other session when they are back on the shelves
+    // ones in the room wait there for the other session (its board says to bring them from this venue)
     await q(db().from("nae_logistics").update({ session_id: target.id, updated_at: new Date().toISOString() }).eq("session_id", s.id).in("state", ["requested", "picked"]).in("entry_id", mv));
     await requestForSession(session, target, mv);
+    // ones in this session's room stay there until Logistics brings them over to the other session's venue
+    await transferFromRoom(session, s, target, mv);
     await releaseFromSession(session, s, mv, `moved to ${target.title}`);
     await audit(session, `${s.title}: ${mv.length} artwork${mv.length === 1 ? "" : "s"} moved to ${target.title}`, "session", s.id, list.map(x => x.code).slice(0, 40).join(", "));
     await audit(session, `${target.title}: ${mv.length} artwork${mv.length === 1 ? "" : "s"} moved in from ${s.title}`, "session", target.id, list.map(x => x.code).slice(0, 40).join(", "));
@@ -196,6 +198,12 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (Array.isArray(b.remove) && b.remove.length && savedHere.length) {
       const scored = (await q(db().from("nae_entries").select("id, code").in("code", b.remove))).filter(x => savedHere.some(y => y.entry_id === x.id));
       if (scored.length) throw bad(`${scored.map(x => x.code).join(", ")} already ${scored.length === 1 ? "has" : "have"} scores saved in this session and can't be taken out. Finish ${scored.length === 1 ? "it" : "them"} here.`);
+    }
+    // once a session is in progress, only an admin moves its date or times (they set when it is overdue)
+    if (session.role === "coordinator" && s.status === "live") {
+      const t5 = v => String(v || "").slice(0, 5);
+      if ((b.session_date !== undefined && b.session_date !== s.session_date) || (b.start_time !== undefined && t5(b.start_time) !== t5(s.start_time)) || (b.end_time !== undefined && t5(b.end_time) !== t5(s.end_time))) throw bad("The session is in progress: only an admin can change its date or times.");
+      delete b.session_date; delete b.start_time; delete b.end_time;
     }
     const patch = {};
     ["title", "session_date"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });

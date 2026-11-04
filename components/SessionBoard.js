@@ -33,7 +33,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
     catch (e) { toast(e.message, "err"); } setBusy(null);
   }
   // group a lane by storage place (room · shelf, rows in order) or by school
-  const groupKey = r => by === "school" ? `${r.school || "No school"}${r.esis ? ` · eSIS ${r.esis}` : ""}` : r.room ? `${r.room} · ${r.shelf}` : "Not shelved";
+  const groupKey = r => by === "school" ? `${r.school || "No school"}${r.esis ? ` · eSIS ${r.esis}` : ""}` : r.room ? `${r.room} · ${r.shelf}` : r.from_venue ? `Still in ${r.from_venue} (${r.from_title}): bring from there` : "Not shelved";
   const grouped = list => { const m = new Map(); [...list].sort(by === "school" ? (a, b) => String(a.school).localeCompare(String(b.school)) || a.sort - b.sort || a.code.localeCompare(b.code) : (a, b) => a.sort - b.sort || a.code.localeCompare(b.code)).forEach(r => { const g = groupKey(r); if (!m.has(g)) m.set(g, []); m.get(g).push(r); }); return [...m.entries()]; };
   const canTick = k => (k === "waiting" && staff) || (k === "room" && (coord || staff)) || (k === "back" && staff);
   const Groups = ({ list, k }) => grouped(list).map(([g, rs]) => <div key={g} className="sb-grp">
@@ -43,13 +43,13 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
     {k && canTick(k) ? <Check label="" checked={sel[k].has(r.code)} onChange={v => toggle(k, r.code, v)} /> : <span />}
     <button type="button" className="sb-th" onClick={() => r.thumb && setBig(r)} aria-label={`Photo of ${r.code}`}>{r.thumb ? <img src={`${r.thumb}?s=120`} alt="" loading="lazy" /> : <span>–</span>}</button>
     <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[by === "school" ? null : r.school, r.sub, r.size].filter(Boolean).join(" · ")}</span></div>
-    <div className="sb-side">{k === "waiting" && <span className="small">{by === "place" ? (r.row != null ? `Row ${r.row}` : r.where || "Not shelved") : r.where || "Not shelved"}</span>}{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.scored ? <Badge tone="ok">Scored</Badge> : r.progress && r.progress !== "0/0" ? <Badge>{r.progress}</Badge> : null}</div>
+    <div className="sb-side">{k === "waiting" && <span className="small">{r.from_venue ? (by === "place" ? "In that room" : r.where) : by === "place" ? (r.row != null ? `Row ${r.row}` : r.where || "Not shelved") : r.where || "Not shelved"}</span>}{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.scored ? <Badge tone="ok">Scored</Badge> : r.progress && r.progress !== "0/0" ? <Badge>{r.progress}</Badge> : null}</div>
   </div>;
   const unscored = b => room.filter(r => r.batch === b && !r.scored).length;
 
   return <div className={`sb${compact ? " compact" : ""}`}>
     <div className="sb-sum">
-      <span><b>{waiting.length}</b> waiting on the shelves</span><span className="arrow">→</span>
+      <span><b>{waiting.length}</b> waiting{waiting.some(r => r.from_venue) ? ` (${waiting.filter(r => r.from_venue).length} still in another session's room)` : " on the shelves"}</span><span className="arrow">→</span>
       <span><b>{room.length}</b> in the room{batches.length ? ` (batch ${batches.join(", ")})` : ""}</span><span className="arrow">→</span>
       <span><b>{back.length}</b> handed back</span><span className="arrow">→</span>
       <span><b>{done.length}</b> scored and back on the shelves</span>
@@ -59,7 +59,7 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
     {!rows.length && <p className="muted" style={{ padding: 12 }}>This session has no physical artworks (they are scored from their files).</p>}
     {rows.length > 0 && <div className="sb-lanes">
       <section className="sb-lane">
-        <div className="sb-lh"><div><b>Waiting on the shelves</b><span className="small faint">Sorted by room and shelf</span></div><span className="n">{waiting.length}</span></div>
+        <div className="sb-lh"><div><b>{waiting.some(r => r.from_venue) ? "Waiting to be brought" : "Waiting on the shelves"}</b><span className="small faint">{waiting.some(r => r.from_venue) ? "From another session's room first, then by room and shelf" : "Sorted by room and shelf"}</span></div><span className="n">{waiting.length}</span></div>
         {staff && live && waiting.length > 0 && <div className="sb-act">
           {sel.waiting.size ? <Btn sm v="primary" busy={busy === "bring"} onClick={() => go("bring", { action: "bring", codes: [...sel.waiting] })}>Bring {sel.waiting.size} to the room as batch {nextBatch}</Btn>
             : <><span className="small">Bring the next</span><select className="select sb-n" value={count} onChange={e => setCount(+e.target.value)}>{[5, 8, 10, 12, 15, 20, 30].map(n => <option key={n} value={n}>{n}</option>)}</select><Btn sm v="primary" busy={busy === "bring"} onClick={() => go("bring", { action: "bring", count })}>as batch {nextBatch}</Btn></>}

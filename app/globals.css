@@ -1268,3 +1268,12 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 @media (max-width:560px){.fin-row{grid-template-columns:minmax(0,1fr) auto}.fin-row .t{grid-column:1/-1;grid-row:2}}
 .plan-where{text-align:right;white-space:nowrap}
 @media (max-width:560px){.plan-r .plan-where{grid-column:3;grid-row:2;text-align:left;white-space:normal;margin-top:-6px}.plan-r .bx,.plan-r .sb-th{grid-row:1/span 2}.plan-gh{flex-wrap:wrap;row-gap:2px}}
+
+/* overdue sessions banner: one row per session with its reminders */
+.od-list{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.od-row{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;padding:6px 0;border-top:1px solid rgba(0,0,0,.06)}
+.od-row:first-child{border-top:0}
+.od-t{display:flex;flex-direction:column;min-width:0;flex:1 1 280px}
+.od-t a{color:inherit;text-decoration:none}
+.od-t a:hover{text-decoration:underline}
+.od-a{display:flex;gap:6px;flex-wrap:wrap}

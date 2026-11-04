@@ -80,6 +80,7 @@ export default function Session({ params }) {
   // in a live session, evaluators and artworks with scores saved here can't be taken out while editing it
   const savedHere = s.status === "live" ? entries.flatMap(x => (x.scores || []).filter(y => y.status === "submitted" && y.session_id === s.id).map(y => ({ code: x.code, ev: y.evaluator_id }))) : [];
   const savedEv = new Set(savedHere.map(x => x.ev)), savedArt = new Set(savedHere.map(x => x.code));
+  const lockWhen = s.status === "live" && !admin;   // a coordinator can't move an in-progress session's date or times
   const qs = qsOf(e);
   const filled = ev => crit.every(c => m[ev]?.[c.key] !== "" && m[ev]?.[c.key] != null) && qs.every(x => typeof idn[ev]?.[x.key] === "boolean" && (!idn[ev][x.key] || !x.options?.length || (idn[ev][`${x.key}_choice`] && idn[ev][`${x.key}_choice`] !== "Other: ")));
   const isEv = d.data.me?.role === "evaluator", myEv = d.data.me?.evaluator_id;
@@ -254,13 +255,13 @@ export default function Session({ params }) {
           <Btn sm v="ghost" busy={busy === "finish"} disabled={!finishAsk.reason.trim()} onClick={() => act("finish", { force: true, reason: finishAsk.reason })}>End with {finishAsk.open.length} undecided</Btn></details>}
       </div>}
     </Modal>
-    <Modal open={!!edit} wide title="Edit session" sub={edit?.status === "live" ? "In progress: evaluators and artworks with scores saved here stay in the session." : edit?.status === "done" ? "Finished: you can correct the details. Reopen it to change the team or artworks." : ""} onClose={() => setEdit(null)} footer={<>{edit?.status === "planned" && <Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn>}<span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => { const { status, ...b } = edit; act("edit", status === "done" ? { title: b.title, session_date: b.session_date, start_time: b.start_time, end_time: b.end_time, venue_id: b.venue_id } : b); }}>Save</Btn></>}>
+    <Modal open={!!edit} wide title="Edit session" sub={edit?.status === "live" ? "In progress: evaluators and artworks with scores saved here stay in the session." : edit?.status === "done" ? "Finished: you can correct the details. Reopen it to change the team or artworks." : ""} onClose={() => setEdit(null)} footer={<>{edit?.status === "planned" && <Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn>}<span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => { const { status, ...b } = edit; act("edit", status === "done" ? { title: b.title, session_date: b.session_date, start_time: b.start_time, end_time: b.end_time, venue_id: b.venue_id } : lockWhen ? { ...b, session_date: undefined, start_time: undefined, end_time: undefined } : b); }}>Save</Btn></>}>
       {edit && <div className="stack" style={{ gap: 12 }}>
         <Field label="Title"><input className="input" value={edit.title} onChange={x => setEdit({ ...edit, title: x.target.value })} /></Field>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
-          <Field label="Date"><input type="date" className="input" value={edit.session_date} onChange={x => setEdit({ ...edit, session_date: x.target.value })} /></Field>
-          <Field label="Starts"><input type="time" step="900" className="input" value={edit.start_time} onChange={x => setEdit({ ...edit, start_time: x.target.value })} /></Field>
-          <Field label="Ends"><input type="time" step="900" className="input" value={edit.end_time} onChange={x => setEdit({ ...edit, end_time: x.target.value })} /></Field>
+          <Field label="Date" help={lockWhen ? "In progress: only an admin can change the date and times." : undefined}><input type="date" className="input" disabled={lockWhen} value={edit.session_date} onChange={x => setEdit({ ...edit, session_date: x.target.value })} /></Field>
+          <Field label="Starts"><input type="time" step="900" className="input" disabled={lockWhen} value={edit.start_time} onChange={x => setEdit({ ...edit, start_time: x.target.value })} /></Field>
+          <Field label="Ends"><input type="time" step="900" className="input" disabled={lockWhen} value={edit.end_time} onChange={x => setEdit({ ...edit, end_time: x.target.value })} /></Field>
           <Field label="Venue"><VenueSelect value={edit.venue_id} current={s.venue} onChange={v => setEdit({ ...edit, venue_id: v })} /></Field>
         </div>
         {edit.status !== "done" && <>
