@@ -135,7 +135,9 @@ export default function Session({ params }) {
     setBusy(action);
     try {
       const r = await api(`/api/sessions/${id}`, { method: "PATCH", body: { action, ...extra } });
-      if (r.ok === false && r.incomplete) { setFinishAsk({ ...r, to: r.targets?.[0]?.id || "" }); setBusy(null); return; }
+      if (r.ok === false && r.undecided) { setFinishAsk({ ...r, to: finishAsk?.to && r.targets?.some(t => t.id === finishAsk.to) ? finishAsk.to : r.targets?.[0]?.id || "", reason: "" }); setBusy(null); return; }
+      // moved the ones not started: show what is still left to decide
+      if (action === "move_open") { toast(r.note); d.reload(); setBusy(null); return act("finish"); }
       setFinishAsk(null); setEdit(null);
       toast(r.note || { start: "Session started.", finish: "Session finished. Artworks still in the room are marked as handed back to storage.", reopen: "Session reopened.", cancel: "Session cancelled.", edit: "Session updated." }[action]);
       if (action === "cancel") router.push("/sessions"); else d.reload();
@@ -230,13 +232,22 @@ export default function Session({ params }) {
       <p className="muted" style={{ marginTop: 0 }}>{T.notVisibleHint}</p>
       <Field label="What's wrong?"><textarea className="textarea" rows={3} value={nv || ""} onChange={x => setNv(x.target.value)} placeholder="For example: the video doesn't play, the photo is blurred or cut off" /></Field>
     </Modal>
-    <Modal open={!!finishAsk} title="Finish with artworks not fully scored?" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><span className="sp" />
-      {finishAsk?.movable > 0 && finishAsk?.targets?.length > 0 && <Btn busy={busy === "finish"} disabled={!finishAsk.to} onClick={() => act("finish", { confirm: true, move_to: finishAsk.to })}>Move {finishAsk.movable} and finish</Btn>}
-      <Btn v="primary" busy={busy === "finish"} onClick={() => act("finish", { confirm: true })}>{finishAsk?.movable > 0 && finishAsk?.targets?.length ? "Just finish" : "Finish anyway"}</Btn></>}>
-      <p className="muted" style={{ marginTop: 0 }}>{finishAsk?.note}</p>
-      {finishAsk?.movable > 0 && (finishAsk.targets?.length ? <Field label={`Move the ${finishAsk.movable} artwork${finishAsk.movable === 1 ? "" : "s"} not started yet to another session`} help={finishAsk.partly ? `${finishAsk.partly} partly scored artwork${finishAsk.partly === 1 ? " stays" : "s stay"} with this session's scores; they can go into another session later.` : "Their evaluators there score them. Physical ones wait on the shelves for that session's board."}>
-        <select className="select" value={finishAsk.to} onChange={x => setFinishAsk({ ...finishAsk, to: x.target.value })}>{finishAsk.targets.map(t => <option key={t.id} value={t.id}>{t.title} · {t.date ? dshort(t.date) : "no date"}{t.start ? ` ${hm(t.start)}–${hm(t.end)}` : ""} · {t.coordinator}{t.status === "live" ? " (in progress)" : ""}</option>)}</select></Field>
-        : <p className="small faint">No other planned or live session in this round to move them to. Finish, then put them in a new session.</p>)}
+    <Modal open={!!finishAsk} title="Artworks still need a decision" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><span className="sp" />
+      {finishAsk?.movable > 0 && finishAsk?.targets?.length > 0 && (finishAsk.partly
+        ? <Btn v="primary" busy={busy === "move_open"} disabled={!finishAsk.to} onClick={() => act("move_open", { move_to: finishAsk.to })}>Move the {finishAsk.movable} not started</Btn>
+        : <Btn v="primary" busy={busy === "finish"} disabled={!finishAsk.to} onClick={() => act("finish", { move_to: finishAsk.to })}>Move {finishAsk.movable} and finish</Btn>)}</>}>
+      {finishAsk && <div className="stack" style={{ gap: 12 }}>
+        <p className="muted" style={{ margin: 0 }}>{finishAsk.note} For each one: finish its scores (mark evaluators absent if they left), tick “Artwork not visible” if its files can't be judged, or move it to another session if nobody has scored it yet.</p>
+        <div className="fin-list">{finishAsk.open.map(x => <button key={x.code} type="button" className="fin-row" onClick={() => { setFinishAsk(null); go(x.code); }}>
+          <span className="code">{x.code}</span><span className="t" dir="auto">{x.title}</span>
+          <span className="small">{x.started ? <Badge tone="warn">{x.saved} of {x.team} scores{x.absent ? ` · ${x.absent} absent` : ""}</Badge> : <Badge>Not started</Badge>}</span></button>)}</div>
+        {finishAsk.movable > 0 && (finishAsk.targets?.length ? <Field label={`Move the ${finishAsk.movable} artwork${finishAsk.movable === 1 ? "" : "s"} not started to`} help={finishAsk.partly ? `The ${finishAsk.partly} partly scored artwork${finishAsk.partly === 1 ? " stays" : "s stay"} here to be finished.` : "Their evaluators there score them. Physical ones are requested for that session's board."}>
+          <select className="select" value={finishAsk.to} onChange={x => setFinishAsk({ ...finishAsk, to: x.target.value })}>{finishAsk.targets.map(t => <option key={t.id} value={t.id}>{t.title} · {t.date ? dshort(t.date) : "no date"}{t.start ? ` ${hm(t.start)}–${hm(t.end)}` : ""} · {t.coordinator}{t.status === "live" ? " (in progress)" : ""}</option>)}</select></Field>
+          : <p className="small faint" style={{ margin: 0 }}>There is no other planned or live session in this round to move them to. Create one first, then come back to finish.</p>)}
+        {admin && <details className="fin-force"><summary className="small">Admin: end the session anyway</summary>
+          <Field label="Reason (recorded in the history)"><textarea className="textarea" rows={2} value={finishAsk.reason} onChange={x => setFinishAsk({ ...finishAsk, reason: x.target.value })} /></Field>
+          <Btn sm v="ghost" busy={busy === "finish"} disabled={!finishAsk.reason.trim()} onClick={() => act("finish", { force: true, reason: finishAsk.reason })}>End with {finishAsk.open.length} undecided</Btn></details>}
+      </div>}
     </Modal>
     <Modal open={!!edit} wide title="Edit session" onClose={() => setEdit(null)} footer={<><Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn><span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => act("edit", edit)}>Save</Btn></>}>
       {edit && <div className="stack" style={{ gap: 12 }}>
