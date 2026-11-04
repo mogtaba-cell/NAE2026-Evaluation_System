@@ -185,7 +185,18 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     return { ok: true };
   }
   if (action === "edit") {
-    if (s.status !== "planned") throw bad("Only a planned session can be edited.");
+    // planned and live sessions: everything (a live one keeps the evaluators and artworks that already have scores
+    // saved in it); finished ones: an admin can still correct the title, date, times and venue
+    if (s.status === "cancelled") throw bad("This session was cancelled.");
+    if (s.status === "done") {
+      if (session.role !== "admin") throw bad("This session is finished. Ask an admin to correct it.");
+      if (Array.isArray(b.evaluator_ids) || Array.isArray(b.self_ids) || b.remove?.length || b.add_schools?.length) throw bad("A finished session's team and artworks can't change. Reopen it first.");
+    }
+    const savedHere = s.status === "live" && ids.length ? await q(db().from("nae_scores").select("entry_id, evaluator_id").eq("session_id", s.id).eq("status", "submitted")) : [];
+    if (Array.isArray(b.remove) && b.remove.length && savedHere.length) {
+      const scored = (await q(db().from("nae_entries").select("id, code").in("code", b.remove))).filter(x => savedHere.some(y => y.entry_id === x.id));
+      if (scored.length) throw bad(`${scored.map(x => x.code).join(", ")} already ${scored.length === 1 ? "has" : "have"} scores saved in this session and can't be taken out. Finish ${scored.length === 1 ? "it" : "them"} here.`);
+    }
     const patch = {};
     ["title", "session_date"].forEach(k => { if (b[k] !== undefined) patch[k] = b[k] || null; });
     if (b.start_time !== undefined || b.end_time !== undefined) { const t = readTimes(b, { required: true }); if (t.error) throw bad(t.error); Object.assign(patch, t); }
@@ -195,7 +206,9 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (Array.isArray(b.evaluator_ids)) {
       const team = [...new Set(b.evaluator_ids)]; if (!team.length) throw bad("Pick at least one evaluator.");
       const evs = await q(db().from("nae_evaluators").select("id, active").in("id", team));
-      if (evs.length !== team.length || evs.some(e => !e.active)) throw bad("Pick active evaluators only.");
+      if (evs.length !== team.length || evs.some(e => !e.active && !(s.evaluator_ids || []).includes(e.id))) throw bad("Pick active evaluators only.");
+      const keep = [...new Set(savedHere.map(x => x.evaluator_id))].filter(x => !team.includes(x));
+      if (keep.length) { const nm = await q(db().from("nae_evaluators").select("name").in("id", keep)); throw bad(`${nm.map(x => x.name).join(", ")} already saved scores in this session and ${nm.length === 1 ? "stays" : "stay"} in its team.`); }
       patch.evaluator_ids = team;
     }
     if (Array.isArray(b.self_ids)) patch.self_ids = await selfIds(b.self_ids, patch.evaluator_ids || s.evaluator_ids || []);
@@ -204,7 +217,7 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     if (patch.session_date || patch.end_time) patch.overdue_notified_at = null;
     if (Object.keys(patch).length) await q(db().from("nae_sessions").update(patch).eq("id", s.id));
     if (Array.isArray(b.remove) && b.remove.length) {
-      const rm = await q(db().from("nae_entries").select("id").in("code", b.remove));
+      const rm = await q(db().from("nae_entries").select("id, code").in("code", b.remove).in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]));
       if (rm.length) await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", rm.map(x => x.id)));
       if (rm.length) await releaseFromSession(session, s, rm.map(x => x.id), "removed from the session");
     }

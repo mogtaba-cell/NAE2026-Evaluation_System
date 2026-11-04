@@ -42,6 +42,8 @@ export default function Session({ params }) {
   const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [toRev, setToRev] = useState(false); const [nv, setNv] = useState(null); const [cc, setCc] = useState(null); const [selfEdit, setSelfEdit] = useState(null); const [abs, setAbs] = useState({}); const [cm, setCm] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
   const [finishAsk, setFinishAsk] = useState(null); const [editD, setEditD] = useState(false);
   const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null);
+  // schools with artworks waiting for a session in this round, to add to the session while editing it
+  const pools = useApi(edit && edit.status !== "done" ? "/api/sessions?pools=1" : null, [edit ? 1 : 0]);
   const me = meta?.data?.me;
   const e = d.data?.entries.find(x => x.code === d.data.current);
   // keep the open artwork in the address, so a live refresh never switches to another one
@@ -75,6 +77,9 @@ export default function Session({ params }) {
   const setRev = v => { setToRev(v); edit_(() => ({ m, idn, abs, cm, toRev: v })); };
   if (!d.data) return <Loading error={d.error} />;
   const { session: s, team, entries, rules } = d.data;
+  // in a live session, evaluators and artworks with scores saved here can't be taken out while editing it
+  const savedHere = s.status === "live" ? entries.flatMap(x => (x.scores || []).filter(y => y.status === "submitted" && y.session_id === s.id).map(y => ({ code: x.code, ev: y.evaluator_id }))) : [];
+  const savedEv = new Set(savedHere.map(x => x.ev)), savedArt = new Set(savedHere.map(x => x.code));
   const qs = qsOf(e);
   const filled = ev => crit.every(c => m[ev]?.[c.key] !== "" && m[ev]?.[c.key] != null) && qs.every(x => typeof idn[ev]?.[x.key] === "boolean" && (!idn[ev][x.key] || !x.options?.length || (idn[ev][`${x.key}_choice`] && idn[ev][`${x.key}_choice`] !== "Other: ")));
   const isEv = d.data.me?.role === "evaluator", myEv = d.data.me?.evaluator_id;
@@ -160,7 +165,7 @@ export default function Session({ params }) {
       badges={<><Badge tone={s.status === "live" ? "info" : s.status === "done" ? "ok" : s.status === "cancelled" ? "bad" : ""}>{statusLabel}</Badge>{isOverdue(s) && <Badge tone="bad">{overdueText(s)}</Badge>}</>}
       actions={isEv ? null : <>
         {s.status === "planned" && <Btn v="primary" busy={busy === "start"} onClick={() => act("start")}>Start session</Btn>}
-        {s.status === "planned" && <Btn onClick={() => setEdit({ title: s.title, session_date: s.session_date || "", start_time: hm(s.start_time), end_time: hm(s.end_time), venue_id: s.venue_id || "", evaluator_ids: team.map(t => t.id), self_ids: team.filter(t => t.self).map(t => t.id), remove: [] })}>Edit</Btn>}
+        {(["planned", "live"].includes(s.status) || (s.status === "done" && admin)) && <Btn onClick={() => setEdit({ status: s.status, title: s.title, session_date: s.session_date || "", start_time: hm(s.start_time), end_time: hm(s.end_time), venue_id: s.venue_id || "", evaluator_ids: team.map(t => t.id), self_ids: team.filter(t => t.self).map(t => t.id), remove: [], add_schools: [] })}>Edit</Btn>}
         {s.status === "live" && (s.mine || admin) && <Btn onClick={() => setSelfEdit(team.filter(t => t.self).map(t => t.id))}>Who enters scores</Btn>}
         {s.status === "live" && <Btn busy={busy === "finish"} onClick={() => act("finish")}>Finish session</Btn>}
         {s.status === "done" && admin && <Btn busy={busy === "reopen"} onClick={() => act("reopen")}>Reopen</Btn>}
@@ -249,7 +254,7 @@ export default function Session({ params }) {
           <Btn sm v="ghost" busy={busy === "finish"} disabled={!finishAsk.reason.trim()} onClick={() => act("finish", { force: true, reason: finishAsk.reason })}>End with {finishAsk.open.length} undecided</Btn></details>}
       </div>}
     </Modal>
-    <Modal open={!!edit} wide title="Edit session" onClose={() => setEdit(null)} footer={<><Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn><span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => act("edit", edit)}>Save</Btn></>}>
+    <Modal open={!!edit} wide title="Edit session" sub={edit?.status === "live" ? "In progress: evaluators and artworks with scores saved here stay in the session." : edit?.status === "done" ? "Finished: you can correct the details. Reopen it to change the team or artworks." : ""} onClose={() => setEdit(null)} footer={<>{edit?.status === "planned" && <Btn v="ghost" busy={busy === "cancel"} onClick={() => act("cancel", { reason: "Cancelled before it started" })}>Cancel session</Btn>}<span className="sp" /><Btn onClick={() => setEdit(null)}>Back</Btn><Btn v="primary" busy={busy === "edit"} onClick={() => { const { status, ...b } = edit; act("edit", status === "done" ? { title: b.title, session_date: b.session_date, start_time: b.start_time, end_time: b.end_time, venue_id: b.venue_id } : b); }}>Save</Btn></>}>
       {edit && <div className="stack" style={{ gap: 12 }}>
         <Field label="Title"><input className="input" value={edit.title} onChange={x => setEdit({ ...edit, title: x.target.value })} /></Field>
         <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 12 }}>
@@ -258,11 +263,15 @@ export default function Session({ params }) {
           <Field label="Ends"><input type="time" step="900" className="input" value={edit.end_time} onChange={x => setEdit({ ...edit, end_time: x.target.value })} /></Field>
           <Field label="Venue"><VenueSelect value={edit.venue_id} current={s.venue} onChange={v => setEdit({ ...edit, venue_id: v })} /></Field>
         </div>
-        <Field label="Evaluator team"><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{(meta?.data?.evaluators || []).filter(v => v.active).map(v => <Check key={v.id} label={v.name} checked={edit.evaluator_ids.includes(v.id)} onChange={on => setEdit({ ...edit, evaluator_ids: on ? [...edit.evaluator_ids, v.id] : edit.evaluator_ids.filter(x => x !== v.id), self_ids: on ? edit.self_ids : edit.self_ids.filter(x => x !== v.id) })} />)}</div></Field>
+        {edit.status !== "done" && <>
+        <Field label="Evaluator team" help={savedEv.size ? "Evaluators who saved scores here can't be taken out." : undefined}><div className="row" style={{ gap: 12, flexWrap: "wrap" }}>{(meta?.data?.evaluators || []).filter(v => v.active || edit.evaluator_ids.includes(v.id)).map(v => <Check key={v.id} label={`${v.name}${savedEv.has(v.id) ? " (has scores)" : ""}`} disabled={savedEv.has(v.id)} checked={edit.evaluator_ids.includes(v.id)} onChange={on => setEdit({ ...edit, evaluator_ids: on ? [...edit.evaluator_ids, v.id] : edit.evaluator_ids.filter(x => x !== v.id), self_ids: on ? edit.self_ids : edit.self_ids.filter(x => x !== v.id) })} />)}</div></Field>
         <Field label="Who types their own scores" help="Ticked evaluators score on their own login and can only change their own column. You type the scores of the others.">
           <div className="stack s4">{edit.evaluator_ids.map(eid => { const v = (meta?.data?.evaluators || []).find(x => x.id === eid); return v ? <Check key={eid} label={`${v.name}${v.account_id ? "" : " (no login yet)"}`} disabled={!v.account_id} checked={edit.self_ids.includes(eid)} onChange={on => setEdit({ ...edit, self_ids: on ? [...edit.self_ids, eid] : edit.self_ids.filter(x => x !== eid) })} /> : null; })}</div></Field>
-        <Field label="Artworks in this session" help="Untick an artwork to take it out of the session.">
-          <div className="stack s4" style={{ maxHeight: 240, overflow: "auto" }}>{entries.map(x => <Check key={x.code} label={`${x.code} · ${x.school || ""} · ${x.title_en || x.group_name || ""}`} checked={!edit.remove.includes(x.code)} onChange={on => setEdit({ ...edit, remove: on ? edit.remove.filter(c => c !== x.code) : [...edit.remove, x.code] })} />)}</div></Field>
+        <Field label="Artworks in this session" help={`Untick an artwork to take it out of the session${savedArt.size ? "; ones with scores saved here stay" : ""}.`}>
+          <div className="stack s4" style={{ maxHeight: 240, overflow: "auto" }}>{entries.map(x => <Check key={x.code} label={`${x.code} · ${x.school || ""} · ${x.title_en || x.group_name || ""}${savedArt.has(x.code) ? " (scored here)" : ""}`} disabled={savedArt.has(x.code)} checked={!edit.remove.includes(x.code)} onChange={on => setEdit({ ...edit, remove: on ? edit.remove.filter(c => c !== x.code) : [...edit.remove, x.code] })} />)}</div></Field>
+        <Field label="Add artworks" help="Schools with artworks of this round still waiting for a session. Ticking a school adds all its waiting artworks; physical ones are requested from storage.">
+          {!pools.data ? <p className="small faint" style={{ margin: 0 }}>Loading…</p> : (() => { const list = pools.data.pools?.[s.round_id] || []; return list.length ? <div className="stack s4" style={{ maxHeight: 200, overflow: "auto" }}>{list.map(g => { const k = g.school_id || "none"; return <Check key={k} label={`${g.name}${g.esis ? ` · eSIS ${g.esis}` : ""} · ${g.count} artwork${g.count === 1 ? "" : "s"}${g.physical ? ` (${g.physical} physical)` : ""}`} checked={edit.add_schools.includes(k)} onChange={on => setEdit({ ...edit, add_schools: on ? [...edit.add_schools, k] : edit.add_schools.filter(x => x !== k) })} />; })}</div> : <p className="small faint" style={{ margin: 0 }}>No artworks of this round are waiting for a session.</p>; })()}</Field>
+        </>}
       </div>}
     </Modal>
   </>;
