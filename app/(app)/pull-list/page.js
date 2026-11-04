@@ -54,23 +54,26 @@ export default function SessionBoards() {
 
 // Upcoming moves: each session (venue on top), and the artworks to bring there, grouped by room and shelf.
 function Plan({ onOpen }) {
-  const d = useApi("/api/sessions/plan", [], { live: 30000 }); const [big, setBig] = useState(null);
+  const d = useApi("/api/sessions/plan", [], { live: 30000 }); const [big, setBig] = useState(null); const [by, setBy] = useState("place");
   if (!d.data) return <Loading error={d.error} />;
   const ss = d.data.sessions;
   if (!ss.length) return <Empty title="Nothing to move">No planned or live session has physical artworks.</Empty>;
   const toBring = ss.reduce((a, x) => a + x.bring.length, 0);
   return <div className="stack" style={{ gap: 14 }}>
-    <p className="small faint" style={{ margin: 0 }}>{ss.length} session{ss.length === 1 ? "" : "s"} · {toBring} artwork{toBring === 1 ? "" : "s"} still to bring from the shelves.</p>
-    {ss.map(x => { const groups = new Map(); x.bring.forEach(r => { const g = r.room ? `${r.room} · ${r.shelf}` : "Not shelved"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
+    <div className="row plan-top" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}><p className="small faint" style={{ margin: 0 }}>{ss.length} session{ss.length === 1 ? "" : "s"} · {toBring} artwork{toBring === 1 ? "" : "s"} still to bring from the shelves.</p><span className="sp" /><Seg value={by} onChange={setBy} items={[["place", "By storage place"], ["school", "By school"]]} /></div>
+    {ss.map(x => { const groups = new Map(); const school = r => `${r.school || "No school"}${r.esis ? ` · eSIS ${r.esis}` : ""}`;
+      // by storage place: room · shelf in shelf order (rows inside); by school: each school's artworks together, in shelf order
+      const list = by === "school" ? [...x.bring].sort((a, b) => String(a.school).localeCompare(String(b.school)) || a.sort - b.sort || a.code.localeCompare(b.code)) : x.bring;
+      list.forEach(r => { const g = by === "school" ? school(r) : r.room ? `${r.room} · ${r.shelf}` : "Not shelved"; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(r); });
       return <section key={x.id} className="card plan-card">
         <div className="plan-h"><div className="stack s4" style={{ minWidth: 0 }}><span className="plan-venue">{x.venue || "Venue not set"}</span>
           <span className="small">{[x.date && dshort(x.date), timeText(x.start, x.end) || x.time].filter(Boolean).join(" · ")}{isOverdue({ ...x, session_date: x.date, end_time: x.end }) ? <span style={{ color: "var(--bad)" }}> · {overdueText({ ...x, session_date: x.date, end_time: x.end })}</span> : ""}</span>
           <span className="small faint">{x.title} · {x.coordinator}</span></div>
           <div className="row" style={{ gap: 6, flexWrap: "wrap", alignItems: "center" }}><Badge tone={STATUS[x.status]?.[1]}>{STATUS[x.status]?.[0]}</Badge><span className="small">{[x.bring.length && `${x.bring.length} to bring`, x.room && `${x.room} in the room`, x.back && `${x.back} handed back`].filter(Boolean).join(" · ") || "Nothing to bring"}</span><Btn sm className="no-print" onClick={() => onOpen(x.id)}>Open board</Btn></div></div>
-        {[...groups.entries()].map(([g, rs]) => <div key={g} className="plan-g"><div className="plan-gh"><b>From {g}</b><span className="small faint">→ {x.venue || "the session room"} · {rs.length}</span></div>
+        {[...groups.entries()].map(([g, rs]) => <div key={g} className="plan-g"><div className="plan-gh"><b>{by === "school" ? g : `From ${g}`}</b><span className="small faint">→ {x.venue || "the session room"} · {rs.length}</span></div>
           {rs.map(r => <div key={r.code} className="plan-r"><span className="bx" /><button type="button" className="sb-th" onClick={() => r.thumb && setBig(r)}>{r.thumb ? <img src={`${r.thumb}?s=120`} alt="" loading="lazy" /> : <span>–</span>}</button>
-            <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[r.school, r.size].filter(Boolean).join(" · ")}</span></div>
-            <span className="small strong">{r.row != null ? `Row ${r.row}` : r.where || "–"}</span></div>)}</div>)}
+            <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[by === "school" ? null : r.school, r.size].filter(Boolean).join(" · ")}</span></div>
+            <span className="small strong plan-where">{by === "school" ? (r.room ? [r.room, r.shelf, r.row != null && `Row ${r.row}`].filter(Boolean).join(" · ") : r.where || "Not shelved") : r.row != null ? `Row ${r.row}` : r.where || "–"}</span></div>)}</div>)}
         {!x.bring.length && <p className="small faint" style={{ margin: 0 }}>Everything for this session is already in the room or back.</p>}
       </section>; })}
     {big && <div className="no-print" onClick={() => setBig(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50 }}><img src={`${big.thumb}?s=1600`} alt="" style={{ maxWidth: "90vw", maxHeight: "85vh", borderRadius: 8 }} /></div>}

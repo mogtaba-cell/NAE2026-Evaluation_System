@@ -81,7 +81,7 @@ export const GET = route(["admin", "coordinator", "evaluator"], async ({ session
   };
 });
 
-// start | finish | reopen (admin) | cancel (planned only) | edit (planned: details, team, entries)
+// start | finish | move_open | reopen (admin) | cancel (planned only) | edit (planned: details, team, entries)
 export const PATCH = route(["admin", "coordinator"], async ({ session, params, request }) => {   // eslint-disable-line
   const b = await body(request);
   const s = await loadSession(params.id, session);
@@ -96,39 +96,71 @@ export const PATCH = route(["admin", "coordinator"], async ({ session, params, r
     await audit(session, `${s.title}: started`, "session", s.id);
     return { ok: true };
   }
+  // Every artwork in a session needs a decision before the session can end: fully scored, marked not visible
+  // (back to its coordinator), stopped (withdrawn or not scored), or moved to another session of the round.
+  // Artworks nobody has scored yet can move; partly scored ones are finished here (or marked absent / not visible).
+  async function openState() {
+    const [res, ents, done] = await Promise.all([
+      ids.length ? q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [],
+      ids.length ? q(db().from("nae_entries").select("id, code, title_en, title_ar, group_name, status, current_round, not_visible_at, not_visible_round").in("id", ids)) : [],
+      ids.length ? q(db().from("nae_scores").select("entry_id, status").eq("round_id", r.id).in("status", ["submitted", "absent"]).in("entry_id", ids)) : []
+    ]);
+    const decided = e => res.find(x => x.entry_id === e.id && x.complete) || (e.not_visible_at && e.not_visible_round === r.round_no) || ["withdrawn", "not_scored"].includes(e.status);
+    const team = (s.evaluator_ids || []).length;
+    const open = ents.filter(e => !decided(e)).map(e => { const n = done.filter(x => x.entry_id === e.id && x.status === "submitted").length, a = done.filter(x => x.entry_id === e.id && x.status === "absent").length; return { id: e.id, code: e.code, title: e.title_en || e.title_ar || e.group_name || "", saved: n, absent: a, team, started: n > 0 }; });
+    return { open, movable: open.filter(x => !x.started) };
+  }
+  async function targetsFor() {
+    return (await q(db().from("nae_sessions").select("id, title, session_date, start_time, end_time, status, coordinator:nae_accounts(display_name)").eq("round_id", r.id).in("status", ["planned", "live"]).neq("id", s.id).order("session_date"))).map(t => ({ id: t.id, title: t.title, date: t.session_date, start: t.start_time, end: t.end_time, status: t.status, coordinator: t.coordinator?.display_name || "" }));
+  }
+  async function moveTo(toId, list) {
+    const target = await q(db().from("nae_sessions").select("*").eq("id", toId).maybeSingle());
+    if (!target || target.round_id !== r.id || !["planned", "live"].includes(target.status) || target.id === s.id) throw bad("Pick a planned or live session of the same round.");
+    const mv = list.map(x => x.id);
+    const pos = (await q(db().from("nae_session_entries").select("position").eq("session_id", target.id).order("position", { ascending: false }).limit(1)))[0]?.position ?? 0;
+    await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", mv));
+    await q(db().from("nae_session_entries").upsert(mv.map((id, i) => ({ session_id: target.id, entry_id: id, position: pos + 1 + i })), { onConflict: "session_id,entry_id", ignoreDuplicates: true }));
+    // physical artworks still waiting for this session now wait for the other one; ones on the shelf are requested for it;
+    // ones in the room are handed back, and are requested for the other session when they are back on the shelves
+    await q(db().from("nae_logistics").update({ session_id: target.id, updated_at: new Date().toISOString() }).eq("session_id", s.id).in("state", ["requested", "picked"]).in("entry_id", mv));
+    await requestForSession(session, target, mv);
+    await releaseFromSession(session, s, mv, `moved to ${target.title}`);
+    await audit(session, `${s.title}: ${mv.length} artwork${mv.length === 1 ? "" : "s"} moved to ${target.title}`, "session", s.id, list.map(x => x.code).slice(0, 40).join(", "));
+    await audit(session, `${target.title}: ${mv.length} artwork${mv.length === 1 ? "" : "s"} moved in from ${s.title}`, "session", target.id, list.map(x => x.code).slice(0, 40).join(", "));
+    return target;
+  }
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+  if (action === "move_open") {
+    if (s.status !== "live") throw bad("Only a live session's artworks can be moved this way.");
+    const { movable } = await openState();
+    if (!movable.length) throw bad("No artworks without scores to move.");
+    const target = await moveTo(b.move_to, movable);
+    return { ok: true, note: `${plural(movable.length, "artwork", "artworks")} moved to ${target.title}.` };
+  }
+
   if (action === "finish") {
     if (s.status !== "live") throw bad("Only a live session can be finished.");
-    const res = ids.length ? await q(db().from("nae_results").select("entry_id, complete").eq("round_id", r.id).in("entry_id", ids)) : [];
-    const open = ids.filter(id => !res.find(x => x.entry_id === id && x.complete));
-    // artworks not started (no saved score) can move to another planned or live session of the same round
-    const started = open.length ? new Set((await q(db().from("nae_scores").select("entry_id").eq("round_id", r.id).eq("status", "submitted").in("entry_id", open))).map(x => x.entry_id)) : new Set();
-    const movable = open.filter(id => !started.has(id));
-    if (open.length && !b.confirm) {
-      const targets = movable.length ? (await q(db().from("nae_sessions").select("id, title, session_date, start_time, end_time, status, coordinator:nae_accounts(display_name)").eq("round_id", r.id).in("status", ["planned", "live"]).neq("id", s.id).order("session_date"))).map(t => ({ id: t.id, title: t.title, date: t.session_date, start: t.start_time, end: t.end_time, status: t.status, coordinator: t.coordinator?.display_name || "" })) : [];
-      return { ok: false, incomplete: open.length, movable: movable.length, partly: open.length - movable.length, targets, note: `${open.length} artwork${open.length === 1 ? " is" : "s are"} not fully scored. Artworks still with you are handed back to storage.` };
-    }
-    let moved = 0, target = null;
-    if (b.move_to && movable.length) {
-      target = await q(db().from("nae_sessions").select("*").eq("id", b.move_to).maybeSingle());
-      if (!target || target.round_id !== r.id || !["planned", "live"].includes(target.status) || target.id === s.id) throw bad("Pick a planned or live session of the same round.");
-      const pos = (await q(db().from("nae_session_entries").select("position").eq("session_id", target.id).order("position", { ascending: false }).limit(1)))[0]?.position ?? 0;
-      await q(db().from("nae_session_entries").delete().eq("session_id", s.id).in("entry_id", movable));
-      await q(db().from("nae_session_entries").upsert(movable.map((id, i) => ({ session_id: target.id, entry_id: id, position: pos + 1 + i })), { onConflict: "session_id,entry_id", ignoreDuplicates: true }));
-      // physical artworks still waiting for this session now wait for the other one; ones on the shelf are requested for it
-      await q(db().from("nae_logistics").update({ session_id: target.id, updated_at: new Date().toISOString() }).eq("session_id", s.id).in("state", ["requested", "picked"]).in("entry_id", movable));
-      await requestForSession(session, target, movable);
-      moved = movable.length;
-      await audit(session, `${s.title}: ${moved} artwork${moved === 1 ? "" : "s"} moved to ${target.title}`, "session", s.id, "");
-      await audit(session, `${target.title}: ${moved} artwork${moved === 1 ? "" : "s"} moved in from ${s.title}`, "session", target.id, "");
+    let { open, movable } = await openState();
+    let target = null, moved = 0;
+    // moving the ones not started is only part of the decision when nothing else is left open
+    if (b.move_to && movable.length && movable.length === open.length) { target = await moveTo(b.move_to, movable); moved = movable.length; open = []; }
+    // admins can still end it with a reason (recorded); coordinators can't leave artworks without a decision
+    const forced = open.length && session.role === "admin" && b.force && String(b.reason || "").trim();
+    if (open.length && !forced) {
+      return { ok: false, undecided: open.length, open, movable: movable.length, partly: open.length - movable.length, targets: movable.length ? await targetsFor() : [],
+        note: `${plural(open.length, "artwork needs", "artworks need")} a decision before the session can end.` };
     }
     await q(db().from("nae_sessions").update({ status: "done" }).eq("id", s.id));
     // artworks still out go back: never handed over → straight back to storage; with the coordinator → handed
     // back (Logistics confirms receipt and the shelf)
-    await releaseFromSession(session, s, ids, "session finished");
-    for (const id of open) await recompute(id, r.round_no, { S, quiet: true });
-    await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, open.length ? `${open.length} not fully scored${moved ? `, ${moved} moved to ${target.title}` : ""}` : "");
-    return { ok: true, note: moved ? `Session finished. ${moved} artwork${moved === 1 ? "" : "s"} moved to ${target.title}.` : null };
+    const left = (await q(db().from("nae_session_entries").select("entry_id").eq("session_id", s.id))).map(x => x.entry_id);
+    await releaseFromSession(session, s, left, "session finished");
+    for (const x of open) await recompute(x.id, r.round_no, { S, quiet: true });
+    await audit(session, `${s.title}: finished, artworks back to storage`, "session", s.id, [moved && `${moved} moved to ${target.title}`, forced && `ended by an admin with ${plural(open.length, "artwork", "artworks")} still open: ${String(b.reason).trim()}`].filter(Boolean).join(" · "));
+    return { ok: true, note: moved ? `Session finished. ${plural(moved, "artwork", "artworks")} moved to ${target.title}.` : null };
   }
+
   if (action === "reopen") {
     if (session.role !== "admin") throw forbidden("Only an admin can reopen a finished session.");
     if (s.status !== "done") throw bad("Only a finished session can be reopened.");
