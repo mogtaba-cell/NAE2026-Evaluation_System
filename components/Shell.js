@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { MetaProvider, ToastProvider, useMeta, Banner, Btn, Modal } from "@/components/ui";
 import { NAV } from "@/components/nav";
 
-const ROLE_LABEL = { admin: "Administrator", coordinator: "Coordinator", evaluator: "Evaluator", management: "Management", storage: "Logistics", leadership: "HQ" };
+const ROLE_LABEL = { admin: "Administrator", coordinator: "Coordinator", evaluator: "Evaluator", management: "Management", storage: "Logistics", leadership: "HQ", proofreader: "Proofreader", reviewer: "Reviewer" };
 
 function isOn(href, path, sp) {
   const [p, qs] = href.split("?");
@@ -27,7 +27,7 @@ function Side({ session, open, onNav }) {
   </aside>;
 }
 
-const GROUP = { coordinator: "Coordinators", evaluator: "Evaluators", management: "Management", storage: "Logistics", leadership: "HQ", admin: "Admins" };
+const GROUP = { coordinator: "Coordinators", evaluator: "Evaluators", management: "Management", storage: "Logistics", leadership: "HQ", proofreader: "Proofreaders", reviewer: "Reviewers", admin: "Admins" };
 // Admins: see the system exactly as someone else would (read only).
 function ViewAs({ session }) {
   const [open, setOpen] = useState(false); const [groups, setGroups] = useState(null); const [f, setF] = useState(""); const [busy, setBusy] = useState(null);

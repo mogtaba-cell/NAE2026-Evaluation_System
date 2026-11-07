@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getRealSession, signViewAs, VIEWAS_COOKIE } from "@/lib/auth";
 import { db, q } from "@/lib/db";
 import { audit } from "@/lib/audit";
-const ROLE_ORDER = ["coordinator", "evaluator", "management", "storage", "leadership", "admin"];
+const ROLE_ORDER = ["coordinator", "evaluator", "management", "storage", "leadership", "proofreader", "reviewer", "admin"];
 const err = (m, s = 400) => NextResponse.json({ error: m }, { status: s });
 const cookie = (res, v) => { res.cookies.set(VIEWAS_COOKIE, v || "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", ...(v ? { maxAge: 4 * 3600 } : { expires: new Date(0) }) }); return res; };
 // Admins only: the people they can view the system as, grouped by role.

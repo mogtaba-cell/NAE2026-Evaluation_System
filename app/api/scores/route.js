@@ -1,4 +1,5 @@
 import { questionsOf, normAnswers, missingAnswer } from "@/lib/questions";
+import { saveDisplay } from "@/lib/handling";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
 import { myEvaluatorId } from "@/lib/perms";
@@ -75,6 +76,7 @@ export const POST = route(["evaluator", "coordinator", "admin"], async ({ sessio
 
   // framing (physical work in Round 2): one pair of boxes per artwork
   if (b.framing && roundNo === 2) await saveFraming(e.id, b.framing);
+  if (b.display && roundNo === 2) await saveDisplay(session, e.id, b.display).catch(() => null);
 
   let res = null;
   if (row.status !== "draft") {

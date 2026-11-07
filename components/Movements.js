@@ -1,4 +1,5 @@
 "use client";
+import { displayLabel, sizeLabel } from "@/lib/display";
 import LocPicker from "@/components/LocPicker";
 // Artwork movements in the browser: a list grouped into batches (a session, a collection, a shelf ...) where
 // people tick a whole batch or single artworks and apply the next step; and one artwork's details and history.
@@ -16,8 +17,7 @@ export const STEPS = {
   return_room:   ["Hand back to storage", ["coordinator", "handed_over"], ["admin", "coordinator", "storage"]],
   receive_back:  ["Back on the shelves", ["returning", "coordinator", "handed_over"], ["admin", "storage"], "location", true],
   move:          ["Move to…", ["storage", "showcase"], ["admin", "storage"], "location"],
-  to_framer:     ["Send to the framer", ["storage"], ["admin", "storage"], "framer"],
-  from_framer:   ["Back from the framer", ["framer"], ["admin", "storage"], "location"],
+  from_framer:   ["Back to storage (from the framer)", ["framer"], ["admin", "storage"], "location"],
   showcase:      ["Ready for showcase", ["storage"], ["admin", "storage"]],
   unshowcase:    ["Back to storage list", ["showcase"], ["admin", "storage"]],
   return_school: ["Returned to the school", ["storage", "showcase"], ["admin", "storage"], "note"],
@@ -67,7 +67,7 @@ export function ArtworkBatch({ rows, groups, role, steps, onDone, empty = "Nothi
           <span className="m small faint">{[r.entry.school?.name, r.sub, r.entry.size_text].filter(Boolean).join(" · ")}</span>
         </button>
         <span className="mv-where small">{r.state === "storage" || r.state === "requested" || r.state === "picked" || r.state === "showcase" ? (r.where || "Not shelved") : r.state === "received" ? "At the office: choose its shelf" : r.state === "missing" ? (r.missing_outcome ? MISSING[r.missing_outcome] : "Not decided") : r.state === "to_collect" ? (r.collection ? `Batch ${r.collection.scheduled_on ? dshort(r.collection.scheduled_on) : "not dated"}` : "Not scheduled") : r.state === "framer" ? (r.framing_vendor || "Framer") + (r.framing_due ? ` · due ${dshort(r.framing_due)}` : "") : r.session ? r.session.coordinator || "" : ""}</span>
-        <span className="mv-st">{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.needs_framing && <Badge>{r.glass_framing ? "Frame + glass" : "Frame"}</Badge>}<StateBadge s={r.state} /></span>
+        <span className="mv-st">{r.damaged && <Badge tone="warn">Damaged</Badge>}{r.display_option && <Badge>{displayLabel(r.display_option)}</Badge>}<StateBadge s={r.state} /></span>
       </div>)}
     </div>; })}
     <Modal open={!!ask} title={ask ? `${STEPS[ask.action][0]} · ${picked.filter(r => STEPS[ask.action][1].includes(r.state)).length} artwork(s)` : ""} onClose={() => setAsk(null)} footer={<><Btn onClick={() => setAsk(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={ask && ["move", "found"].includes(ask.action) && !ask.location_id} onClick={() => run(ask.action, { location_id: ask.location_id || null, vendor: ask.vendor, due: ask.due || null, note: ask.note })}>Confirm</Btn></>}>
@@ -92,7 +92,8 @@ export function ArtworkDrawer({ row, onClose, role, onChanged }) {
     ["Delivered", row.collected_on ? `${dshort(row.collected_on)}${row.collected_by ? ` · received by ${row.collected_by}` : ""}` : row.collection ? `Batch ${row.collection.code}${row.collection.scheduled_on ? `, ${dshort(row.collection.scheduled_on)}` : ""}` : "Not yet"],
     ["Handover", row.handed_at ? `${row.handed_by || ""} → ${row.received_by || ""}, ${when(row.handed_at)}` : "–"],
     ["Condition", `${row.condition || "Good"}${row.damaged ? " (damaged)" : ""}`],
-    ["Framing", row.needs_framing ? `${row.glass_framing ? "Needs framing with protective glass" : "Needs framing"}${row.framed ? " · framed" : ""}` : "Not needed"],
+    ["Display option", row.display_option ? `${displayLabel(row.display_option)}${row.display_note ? ` (${row.display_note})` : ""}${row.framed ? " · framed" : ""}` : "Not chosen"],
+    ["Size", sizeLabel(row.size_class) || "Not set"],
     ["Round 2", row.scored ? `${row.r2?.final ?? ""} · grade ${row.r2?.grade || ""}${row.selected ? " · selected" : ""}` : "Not scored yet"]
   ];
   return <Modal open wide title={`${row.entry.code} · ${SHORT[row.state] || row.state}`} sub={[row.entry.title_en || row.entry.group_name, row.entry.school?.name, row.sub].filter(Boolean).join(" · ")} onClose={onClose} footer={<><Btn href={`/entries/${row.entry.code}`}>Open artwork</Btn><span className="sp" /><Btn onClick={onClose}>Close</Btn></>}>

@@ -136,7 +136,7 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
         received: marked.map(i => ({ code: i.entry.code, title: tOf(i.entry.code), pathway: pwName(i.entry.pathway_code), damaged: !!(b.damaged || {})[i.entry.code], condition: String((b.conditions || {})[i.entry.code] || "").trim() || ((b.damaged || {})[i.entry.code] ? "Damaged" : "Good") })),
         missing: notIn.map(i => ({ code: i.entry.code, title: tOf(i.entry.code), pathway: pwName(i.entry.pathway_code) })),
         boxPhotos: vPhotos.filter(p => p.kind === "box").slice(0, 8), eidPhotos: vPhotos.filter(p => p.kind === "eid"), note: String(b.note || "").trim() });
-      const path = await storeDoc({ school, when: nowD, name: `Delivery confirmation - ${school.esis || ""} ${school.name || ""}.pdf`, buf: pdf, mime: "application/pdf", id: visit.id });
+      const path = await storeDoc({ school, when: nowD, name: `Receiving note - ${school.esis || ""} ${school.name || ""}.pdf`, buf: pdf, mime: "application/pdf", id: visit.id });
       await q(db().from("nae_collection_visits").update({ note_path: path }).eq("id", visit.id));
     } catch (e) { console.error("delivery note not made", e.message); }
   }

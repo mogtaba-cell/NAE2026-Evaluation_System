@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { api, useApi, useMeta, useToast, PageHead, Card, Table, Btn, Badge, Banner, Loading, Modal, Field, Check, Tabs, Person, when, Switch } from "@/components/ui";
 
-const ROLES = [["admin", "Admin"], ["coordinator", "Coordinator"], ["evaluator", "Evaluator"], ["management", "Management"], ["storage", "Logistics"], ["leadership", "HQ (higher management)"]];
+const ROLES = [["admin", "Admin"], ["coordinator", "Coordinator"], ["evaluator", "Evaluator"], ["management", "Management"], ["storage", "Logistics"], ["leadership", "HQ (higher management)"], ["proofreader", "Proofreader"], ["reviewer", "Reviewer (final check)"]];
 const RL = Object.fromEntries(ROLES);
 
 function PwPicker({ value, onChange, pws }) {

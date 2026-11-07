@@ -70,12 +70,12 @@ export const GET = route("*", async ({ session, params, url }) => {
     entry: { ...e, raw: undefined, search_text: undefined, pathway: S.P[e.pathway_code]?.name, sub: sub?.name, is_physical: !!sub?.is_physical, coordinator: accName(e.coordinator_id), mgmt_viewed_name: accName(e.mgmt_viewed_by), not_visible_name: accName(e.not_visible_by) },
     students: session.role === "evaluator" ? students.map(s => ({ position: s.position, grade: s.grade, gender: s.gender, nationality: s.nationality })) : students,
     cycle: isCompetition(S, e.pathway_code) && session.role !== "evaluator" ? { ...cycleOf([...students.map(s => s.grade), e.grades_text], e.cycle_choice), cycles: CYCLES } : null,
-    files: files.map(fileView), rounds, logistics: lg, sessions: links.map(l => l.session).filter(Boolean), history, scoreHistory: scoreHist,
+    files: files.map(fileView), rounds, logistics: lg, photos: showStaff ? await q(db().from("nae_photo_files").select("drive_id, name").eq("entry_id", e.id).order("name")) : [], sessions: links.map(l => l.session).filter(Boolean), history, scoreHistory: scoreHist,
     can: { editScore: can(session, "editScore") && full, flag: can(session, "flag") && full, allocate: can(session, "allocate"), download: true, markViewed: session.role !== "evaluator", admin: session.role === "admin", editDetails: ["admin", "management"].includes(session.role) || await runsIt(session, e), cycle: ["admin", "management"].includes(session.role) || (session.role === "coordinator" && e.coordinator_id === session.sub) }
   };
 });
 
-export const PATCH = route(["admin", "coordinator", "management", "storage", "leadership", "evaluator"], async ({ session, params, request }) => {
+export const PATCH = route(["admin", "coordinator", "management", "storage", "leadership", "evaluator", "proofreader", "reviewer"], async ({ session, params, request }) => {
   const e = await loadEntry(params.code, session); const b = await body(request); const patch = {};
   // People of Determination: anyone scoring or working on the artwork can tick it
   if (b.pod !== undefined) {
@@ -85,6 +85,7 @@ export const PATCH = route(["admin", "coordinator", "management", "storage", "le
     return { ok: true };
   }
   if (session.role === "evaluator") throw forbidden();
+  if (["proofreader", "reviewer"].includes(session.role) && !b.details) throw forbidden();
   if (b.details) return editDetails(session, await loadStructure(), e, b.details);
   if (b.coordinator_id !== undefined) { if (session.role !== "admin") throw forbidden(); patch.coordinator_id = b.coordinator_id || null; }
   if (b.mgmt_viewed !== undefined) {

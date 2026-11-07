@@ -5,6 +5,7 @@ import LocPicker from "@/components/LocPicker";
 //    inside) and the representative's Emirates ID, enter who delivered them, confirm. A confirmation note (PDF) is
 //    saved with the photos in the Shared Drive. Mistakes can be corrected afterwards (received <-> missing).
 // 2. To store: Logistics puts the received artworks away (room, shelf, row), each pathway together.
+import Returns from "@/components/Returns";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { StateBadge } from "@/components/Movements";
@@ -69,7 +70,7 @@ export default function Collections() {
   const d = useApi("/api/collections", [], { live: true }); const meta = useMeta();
   const [q, setQ] = useState(""); const [f, setF] = useState("todo"); const [moving, setMoving] = useState(false); const toast = useToast();
   async function copyToDrive() { setMoving(true); try { let r; do { r = await api("/api/collections/photos/backfill", { method: "POST" }); } while (r.moved && r.left); toast(r.left ? `${r.left} still to copy` : "All photos are in Google Drive"); d.reload(); } catch (e) { toast(e.message, "err"); } setMoving(false); }
-  const sel = sp.get("c"); const view = sp.get("view") === "store" ? "store" : "deliveries";
+  const sel = sp.get("c"); const view = ["store", "returns"].includes(sp.get("view")) ? sp.get("view") : "deliveries";
   const open = id => router.replace(id ? `/collections?c=${id}` : "/collections", { scroll: false });
   const st = useApi("/api/collections?store=1", [], { live: true });
   if (!d.data) return <Loading error={d.error} />;
@@ -82,9 +83,9 @@ export default function Collections() {
     .sort((a, b) => isTodo(a) !== isTodo(b) ? (isTodo(a) ? -1 : 1) : String(a.scheduled_on || "9").localeCompare(String(b.scheduled_on || "9")) || String(a.school?.name).localeCompare(String(b.school?.name)));
   const n = k => all.filter(k).length;
   return <>
-    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="Two steps. 1. Delivery: schools bring their artworks to the GVC office; mark each one received or missing, count and photograph the boxes and the representative's Emirates ID, and confirm (a confirmation note is saved in the Shared Drive). 2. To store: Logistics puts the received artworks on their shelves." actions={<Btn href="/logistics">Artwork logistics</Btn>} />
-      <div style={{ margin: "12px 0" }}><Seg value={view} onChange={v => router.replace(v === "store" ? "/collections?view=store" : "/collections", { scroll: false })} items={[["deliveries", "1. Deliveries"], ["store", `2. To store${st.data?.count ? ` ${st.data.count}` : ""}`]]} /></div></div>
-    {view === "store" ? <ToStore d={st} role={meta?.data?.me?.role} onChanged={() => { st.reload(); d.reload(); }} /> : <>
+    <div className={sel ? "cl-hide-phone" : ""}><PageHead title="Collections" sub="1. Receiving: schools bring their artworks to the GVC office; mark each one received or missing, count and photograph the boxes and the representative's Emirates ID, and confirm (a receiving note is saved in the Shared Drive). 2. To store: Logistics puts the received artworks on their shelves. 3. Returning: artworks go back to their schools (not selected, the wrong artwork, or after the exhibition) with a return note." actions={<Btn href="/logistics">Artwork logistics</Btn>} />
+      <div style={{ margin: "12px 0" }}><Seg value={view} onChange={v => router.replace(v === "deliveries" ? "/collections" : `/collections?view=${v}`, { scroll: false })} items={[["deliveries", "1. Receiving from schools"], ["store", `2. To store${st.data?.count ? ` ${st.data.count}` : ""}`], ["returns", "3. Returning to schools"]]} /></div></div>
+    {view === "returns" ? <Returns /> : view === "store" ? <ToStore d={st} role={meta?.data?.me?.role} onChanged={() => { st.reload(); d.reload(); }} /> : <>
     {d.data.offDrive > 0 && <Banner tone="warn" title={`${d.data.offDrive} collection photo${d.data.offDrive === 1 ? " is" : "s are"} not in Google Drive yet`} action={<Btn sm busy={moving} onClick={copyToDrive}>Copy to Drive</Btn>}>Google Drive couldn't be reached when they were taken, so they were kept in the website for now.</Banner>}
     {!all.length ? <Empty title="No collections yet">Prepare them from Artwork logistics (To do → Deliveries from schools) once physical artworks are shortlisted for Round 2.</Empty> : <div className={`cl-wrap${sel ? " has-sel" : ""}`}>
       <section className="cl-list">
@@ -205,7 +206,7 @@ function Detail({ id, can, onBack, onChanged }) {
       {x.visits.map(v => <div key={v.id} className="cl-visit">
         <div className="row between" style={{ gap: 8, flexWrap: "wrap" }}><b>{when(v.at)}</b><span className="small faint">by {v.by_name}</span></div>
         {v.contact_name && <span className="small">Delivered by <b>{v.contact_name}</b>{v.contact_phone ? <> · <a href={`tel:${v.contact_phone.replace(/[^0-9+]/g, "")}`}>{v.contact_phone}</a></> : ""}{v.boxes ? ` · ${v.boxes} box${v.boxes === 1 ? "" : "es"}` : ""}{v.location ? ` · stored in ${v.location}` : ""}</span>}
-        {v.note_path && <a className="small link" href={`/api/collections/visits/${v.id}/note`} target="_blank" rel="noreferrer">Delivery confirmation note (PDF)</a>}
+        {v.note_path && <a className="small link" href={`/api/collections/visits/${v.id}/note`} target="_blank" rel="noreferrer">Receiving note (PDF)</a>}
         <span className="small faint">{[v.received.length && `${v.received.length} received`, v.missing.length && `${v.missing.length} missing (${v.missing.join(", ")})`, v.later.length && `${v.later.length} not yet`].filter(Boolean).join(" · ") || "Nothing delivered"}</span>
         {v.photos.some(p => p.kind === "box") && <span className="small faint">{v.photos.filter(p => p.kind === "box").length} box photos (above)</span>}
         <Thumbs photos={v.photos.filter(p => p.kind !== "box")} canRemove={can} onRemove={removePhoto} />
@@ -214,7 +215,7 @@ function Detail({ id, can, onBack, onChanged }) {
 
     <Modal open={conf} title="Confirm delivery" onClose={() => setConf(false)} footer={<><Btn onClick={() => setConf(false)}>Back</Btn><Btn v="primary" busy={busy} onClick={handover}>Confirm</Btn></>}>
       <p><b>{received}</b> received{Object.values(dmg).filter(Boolean).length ? ` (${Object.values(dmg).filter(Boolean).length} damaged)` : ""}{missingN ? <>, <b>{missingN}</b> missing: they stay in this collection until the school brings them</> : ""}.</p>
-      {received > 0 && <p className="muted">Delivered by {contact.name} ({contact.phone}) in {boxes} box{Number(boxes) === 1 ? "" : "es"}. {boxNew.length} box photo{boxNew.length === 1 ? "" : "s"} and the Emirates ID photo are saved with this delivery, with a confirmation note. The artworks then wait in “To store” for Logistics to shelve them.</p>}
+      {received > 0 && <p className="muted">Delivered by {contact.name} ({contact.phone}) in {boxes} box{Number(boxes) === 1 ? "" : "es"}. {boxNew.length} box photo{boxNew.length === 1 ? "" : "s"} and the Emirates ID photo are saved with this delivery, with a receiving note. The artworks then wait in “To store” for Logistics to shelve them.</p>}
     </Modal>
     <Modal open={!!fix} title={fix?.to === "missing" ? `Mark ${fix?.code} missing?` : `${fix?.code} was received`} sub={fix?.to === "missing" ? "It goes back into this collection until the school brings it." : ""} onClose={() => setFix(null)} footer={<><Btn onClick={() => setFix(null)}>Cancel</Btn><Btn v="primary" busy={busy} disabled={fix?.to === "missing" && !fix?.note.trim()} onClick={correct}>Save</Btn></>}>
       {fix && <div className="stack" style={{ gap: 12 }}>

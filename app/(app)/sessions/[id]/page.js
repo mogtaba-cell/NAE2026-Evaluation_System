@@ -12,6 +12,7 @@ import { total, gradeFor } from "@/components/ScoreForm";
 import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/components/lang";
 import { answersOf, answerOf, qLabel } from "@/lib/questions";
 import ChoicePick from "@/components/ChoicePick";
+import DisplayPick from "@/components/DisplayPick";
 
 const qsOf = e => e?.rubric?.questions || [];
 const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identityPass && idn !== true) return false; return true; };
@@ -136,7 +137,7 @@ export default function Session({ params }) {
       const nx = nextOpen(); if (nx) go(nx.code); else d.reload();
     } catch (x) { setErr(x.message); } setBusy(null);
   }
-  async function framing(needs, glass) { try { await api("/api/logistics", { body: { action: "framing", entry_code: e.code, needs, glass: needs && glass } }); d.reload(); } catch (x) { toast(x.message, "err"); } }
+  async function display(patch) { try { await api("/api/logistics", { body: { action: "display", entry_code: e.code, ...patch } }); d.reload(); } catch (x) { toast(x.message, "err"); } }
   async function act(action, extra = {}) {
     setBusy(action);
     try {
@@ -215,7 +216,7 @@ export default function Session({ params }) {
           </div>}
           {res && <div className="x-tot"><div className="stack s4"><span className="s">{T.teamResult}</span><span className="v">{res.team != null ? res.final ?? res.team : "–"}</span></div><div className="stack s4"><span className="s">{T.grade}</span><span style={{ fontSize: 18, fontWeight: 600 }}>{res.team != null ? res.grade || gradeFor(res.team, bands) : "–"}</span></div><span className="s" dir="ltr" style={{ marginInlineStart: "auto", textAlign: "end" }}>{resultText}</span></div>}
           {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
-            <div className="stack s4"><Check label={T.needs} disabled={!runs} checked={!!e.logistics?.needs_framing} onChange={v => framing(v, e.logistics?.glass_framing)} /><Check label={T.glass} disabled={!runs || !e.logistics?.needs_framing} checked={!!e.logistics?.glass_framing} onChange={v => framing(true, v)} /></div></div>}
+            <DisplayPick value={e.logistics} disabled={!runs} ar={ar} onSave={display} /></div>}
           {err && <Banner tone="bad" title={err} />}
           {editable && open_.length > 0 && <div className="sheet-save">
             <div className="stack s4" style={{ flex: 1, minWidth: 0 }}>

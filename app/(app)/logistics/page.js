@@ -5,8 +5,8 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, useApi, useMeta, useToast, PageHead, Btn, Badge, Banner, Loading, Modal, Field, Card, Table, Tabs, Check, Seg, Search, dshort } from "@/components/ui";
-import Framing from "@/components/Framing";
-import { Photography, Exhibition } from "@/components/Curation";
+import Handling from "@/components/Handling";
+import { Photography, Exhibition, ExhibitionDispatch } from "@/components/Curation";
 import { ArtworkBatch, ArtworkDrawer, bySession, SHORT } from "@/components/Movements";
 
 const CHAIN = ["to_collect", "received", "storage", "requested", "coordinator", "returning"];
@@ -60,7 +60,8 @@ export default function Logistics() {
     ...(staff || coord ? [["todo", "To do", todoN]] : []),
     ["all", coord ? "My artworks" : "All artworks", rows.length],
     ...(coord ? [] : [["exceptions", "Exceptions", exc.length]]),
-    ...(staff || role === "management" ? [["framing", "Framing"], ["photography", "Photography"], ["exhibition", "Exhibition"]] : []),
+    ...(staff || coord || ["management", "leadership"].includes(role) ? [["handling", "Artworks handling"]] : []),
+    ...(staff || ["management", "leadership"].includes(role) ? [["photography", "Photography"], ["dispatch", "Exhibition: sending"], ["exhibition", "Exhibition: curation"]] : []),
     ...(staff ? [["locations", "Storage locations"], ["venues", "Session venues"]] : [])
   ];
   const showState = st => { setF({ ...f, state: st }); setTab("all"); };
@@ -84,7 +85,7 @@ export default function Logistics() {
       <Sessions />
       {(unbatched.length > 0 || scheduled.length > 0) && <div className="mv-sec"><Card title="Deliveries from schools" right={<span className="row" style={{ gap: 8 }}>{unbatched.length > 0 && <Btn v="primary" sm onClick={() => setMk({ mode: "all", date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Dubai" }), codes: [] })}>Prepare deliveries</Btn>}<Btn sm href="/collections">Open collections</Btn></span>}>
         <p className="muted">{unbatched.length ? `${unbatched.length} artwork${unbatched.length === 1 ? " is" : "s are"} not in a collection yet. ` : ""}{scheduled.length ? `${scheduled.length} collection${scheduled.length === 1 ? " is" : "s are"} scheduled and waiting to be checked in.` : ""}</p></Card></div>}
-      {framing.length > 0 && <div className="mv-sec"><Card title="Framing for the showcase" right={<Btn sm v="primary" onClick={() => setTab("framing")}>Open framing</Btn>}><p className="muted" style={{ margin: 0 }}>{framing.filter(r => r.state === "storage").length} selected artwork{framing.filter(r => r.state === "storage").length === 1 ? "" : "s"} to send to the framer{framing.filter(r => r.state === "framer").length ? `, ${framing.filter(r => r.state === "framer").length} at the framer` : ""}. Open Framing for photos, the checklist export and sending them.</p></Card></div>}
+      {framing.length > 0 && <div className="mv-sec"><Card title="Artworks handling" right={<Btn sm v="primary" onClick={() => setTab("handling")}>Open artworks handling</Btn>}><p className="muted" style={{ margin: 0 }}>{framing.filter(r => r.state === "storage").length} selected artwork{framing.filter(r => r.state === "storage").length === 1 ? "" : "s"} to send to the framer{framing.filter(r => r.state === "framer").length ? `, ${framing.filter(r => r.state === "framer").length} at the framer` : ""}. Open Framing for photos, the checklist export and sending them.</p></Card></div>}
     </>}
 
     {tab === "todo" && coord && <Sessions />}
@@ -100,8 +101,9 @@ export default function Logistics() {
         ].filter(g => g.rows.length)} /></Card>}
 
     {tab === "locations" && staff && <Locations />}
-    {tab === "framing" && <Framing canAct={staff} />}
-    {tab === "photography" && <Photography canAct={staff} />}
+    {(tab === "handling" || tab === "framing") && <Handling />}
+    {tab === "photography" && <Photography />}
+    {tab === "dispatch" && <ExhibitionDispatch canAct={staff} />}
     {tab === "exhibition" && <Exhibition canAct={staff} />}
     {tab === "venues" && staff && <Venues admin={role === "admin"} />}
 

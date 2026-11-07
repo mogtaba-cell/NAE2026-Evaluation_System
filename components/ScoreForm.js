@@ -1,4 +1,5 @@
 "use client";
+import DisplayPick from "@/components/DisplayPick";
 // Rubric scoring form. Used by evaluators in their queue and by admins correcting scores.
 import { useEffect, useMemo, useState } from "react";
 import { api, Btn, Banner, Badge, useToast, Modal, Field, Check } from "@/components/ui";
@@ -17,8 +18,9 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
   const [s, setS] = useState({}); const [ans, setAns] = useState({}); const [comment, setComment] = useState(""); const [toRev, setToRev] = useState(false); const [nv, setNv] = useState(null);
   const [busy, setBusy] = useState(null); const [err, setErr] = useState(null); const [confirm, setConfirm] = useState(false);
   const bands = round?.rubric?.grade_bands; const qs = round?.rubric?.questions || [];
-  const [fr, setFr] = useState({ needs: !!framing?.needs_framing, glass: !!framing?.glass_framing });
-  useEffect(() => { setFr({ needs: !!framing?.needs_framing, glass: !!framing?.glass_framing }); }, [code, framing?.needs_framing, framing?.glass_framing]);
+  const fr0 = () => ({ display_option: framing?.display_option || null, display_note: framing?.display_note || "", size_class: framing?.size_class || null });
+  const [fr, setFr] = useState(fr0);
+  useEffect(() => { setFr(fr0()); }, [code, framing?.display_option, framing?.display_note, framing?.size_class]); // eslint-disable-line
   useEffect(() => { setS(mine?.scores || {}); setAns(answersOf(mine, qs)); setComment(mine?.comment || ""); setToRev(!!mine?.to_review); setErr(null); }, [code, round?.id, mine?.id, mine?.status]); // eslint-disable-line
   const done = mine?.status === "submitted";
   const filled = crit.filter(c => s[c.key] !== "" && s[c.key] != null).length;
@@ -28,7 +30,7 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
   async function save(submit) {
     setBusy(submit ? "submit" : "draft"); setErr(null);
     try {
-      const r = await api("/api/scores", { body: { entry_code: code, round_no: round.round_no, scores: s, answers: ans, to_review: toRev, comment, submit, evaluator_id: evaluatorId, session_id: sessionId, ...(framing ? { framing: fr } : {}) } });
+      const r = await api("/api/scores", { body: { entry_code: code, round_no: round.round_no, scores: s, answers: ans, to_review: toRev, comment, submit, evaluator_id: evaluatorId, session_id: sessionId, ...(framing ? { display: { option: fr.display_option || null, note: fr.display_note || null, size_class: fr.size_class || null } } : {}) } });
       toast(submit ? `Submitted ${code}: total ${r.total}` : "Draft saved"); setConfirm(false); onSaved && onSaved(submit, r);
     } catch (e) { setErr(e.message); setConfirm(false); } finally { setBusy(null); }
   }
@@ -50,8 +52,7 @@ export default function ScoreForm({ code, round, mine, evaluatorId, sessionId, o
         <span className="f3-yn lg"><button type="button" disabled={done} className={ans[x.key] === true ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: true })}>{T.yes}</button><button type="button" disabled={done} className={ans[x.key] === false ? "on" : ""} onClick={() => setAns({ ...ans, [x.key]: false, [`${x.key}_choice`]: undefined })}>{T.no}</button></span></div>)}
     </div>
     {framing && <div className="f3-crit"><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
-      <div className="stack s4"><Check label={T.needs} disabled={done} checked={fr.needs} onChange={v => setFr({ needs: v, glass: v && fr.glass })} />
-      <Check label={T.glass} disabled={done || !fr.needs} checked={fr.glass} onChange={v => setFr({ ...fr, glass: v })} /></div></div>}
+      <DisplayPick value={fr} disabled={done} ar={ar} onSave={p => setFr(f => ({ ...f, ...(p.option !== undefined ? { display_option: p.option, display_note: p.note || "" } : {}), ...(p.size_class !== undefined ? { size_class: p.size_class } : {}) }))} /></div>}
     <Field label={T.comment}><textarea className="textarea" rows={2} value={comment} disabled={done} onChange={e => setComment(e.target.value)} placeholder={T.commentPh} /></Field>
     <div className="sc-ticks">
       <Check label={T.toReview} disabled={done} checked={toRev} onChange={setToRev} />

@@ -5,6 +5,7 @@ import { loadStructure, ENTRY_COLS } from "@/lib/structure";
 import { mySessionEntryIds } from "@/lib/perms";
 import { assignEntries, recompute } from "@/lib/scoring";
 import { saveFraming } from "@/lib/sessions";
+import { saveDisplay } from "@/lib/handling";
 import { applyMove, logEvents, ACTIONS, STATES } from "@/lib/movements";
 
 // Every physical artwork of the current program, with where it is, its session and its Round 2 result.
@@ -70,8 +71,9 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
     // photography goes in numbered batches; exhibition walls are named "Section · Wall" in the history
     let batchNo = b.batch || null, wallLabels = null;
     if (b.action === "to_photo" && !batchNo) { const mx = await q(db().from("nae_logistics").select("photo_batch").not("photo_batch", "is", null).order("photo_batch", { ascending: false }).limit(1)); batchNo = (mx[0]?.photo_batch || 0) + 1; }
-    if (["to_exhibition", "exhibit_move"].includes(b.action)) { const ws = await q(db().from("nae_exhibit_walls").select("id, name, active, section:nae_exhibit_sections(name, active)")); const want = [b.wall_id, ...Object.values(b.walls || {})].filter(Boolean); if (!want.length) throw bad("Choose the section and the wall."); if (want.some(w => !ws.find(x => x.id === w && x.active && x.section?.active))) throw bad("Pick an active wall."); wallLabels = Object.fromEntries(ws.map(w => [w.id, `${w.section?.name} · ${w.name}`])); }
-    const r = await applyMove(session, b.action, ids, { location_id: b.location_id || null, locations: b.locations || {}, received_by: receivedBy, note: b.note || null, vendor: b.vendor, due: b.due, check, ref_type: b.session_id ? "session" : null, ref_id: b.session_id || null, batch: batchNo, wall_id: b.wall_id || null, walls: b.walls || null, wallLabels });
+    if (b.action === "to_exhibition" && !batchNo) { const mx = await q(db().from("nae_logistics").select("exhibit_batch").not("exhibit_batch", "is", null).order("exhibit_batch", { ascending: false }).limit(1)); batchNo = (mx[0]?.exhibit_batch || 0) + 1; }
+    if (["to_exhibition", "exhibit_move"].includes(b.action)) { const ws = await q(db().from("nae_exhibit_walls").select("id, name, active, section:nae_exhibit_sections(name, active)")); const want = [b.wall_id, ...Object.values(b.walls || {})].filter(Boolean); if (!want.length && b.action === "exhibit_move") throw bad("Choose the section and the wall."); if (want.some(w => !ws.find(x => x.id === w && x.active && x.section?.active))) throw bad("Pick an active wall."); wallLabels = Object.fromEntries(ws.map(w => [w.id, `${w.section?.name} · ${w.name}`])); }
+    const r = await applyMove(session, b.action, ids, { location_id: b.location_id || null, locations: b.locations || {}, received_by: receivedBy, note: b.note || null, vendor: b.vendor, due: b.due, check, ref_type: b.session_id ? "session" : null, ref_id: b.session_id || null, batch: batchNo, space: b.space ? String(b.space).slice(0, 60) : null, wall_id: b.wall_id || null, walls: b.walls || null, wallLabels });
     if (r.done.length) await audit(session, `${r.label}: ${r.done.length} artwork${r.done.length === 1 ? "" : "s"}`, b.session_id ? "session" : "logistics", b.session_id || null, r.done.slice(0, 40).join(", "));
     const skipNote = r.skipped.length ? ` ${r.skipped.length} skipped (${[...new Set(r.skipped.map(x => x.why))].join(", ")}).` : "";
     return { ok: true, done: r.done, skipped: r.skipped, note: `${r.label}: ${r.done.length} artwork${r.done.length === 1 ? "" : "s"}.${skipNote}` };
@@ -115,6 +117,13 @@ export const POST = route(["admin", "storage", "coordinator"], async ({ session,
   const lg = await q(db().from("nae_logistics").select("*").eq("entry_id", e.id).maybeSingle());
   if (!lg) throw bad("This artwork has no artwork record (it isn't physical).");
 
+  // display option and size class, chosen during the physical evaluation (the session's coordinator, Logistics, admin)
+  if (b.action === "display") {
+    if (!staff) { const mine = new Set(await mySessionEntryIds(session)); if (!mine.has(e.id) && e.coordinator_id !== session.sub) throw forbidden(); }
+    const ev = await saveDisplay(session, e.id, { option: b.option, note: b.note, size_class: b.size_class });
+    if (ev.length) await audit(session, ev.join("; "), "entry", e.id);
+    return { ok: true };
+  }
   if (b.action === "framing") {
     if (!staff) { const mine = new Set(await mySessionEntryIds(session)); if (!mine.has(e.id)) throw forbidden(); }
     await saveFraming(e.id, { needs: b.needs, glass: b.glass });

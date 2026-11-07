@@ -62,7 +62,7 @@ export const GET = route(["admin", "coordinator", "evaluator"], async ({ session
       coordComment: comments.find(c => c.entry_id === e.id)?.comment || null,
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,
-      logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.label}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, damaged: lg.damaged } : null,
+      logistics: lg ? { state: lg.state, batch: lg.batch_no, handed_at: lg.handed_at, where: lg.loc ? `${lg.loc.label}` : lg.location, needs_framing: lg.needs_framing, glass_framing: lg.glass_framing, display_option: lg.display_option, display_note: lg.display_note, size_class: lg.size_class, damaged: lg.damaged } : null,
       files: null
     });
   }

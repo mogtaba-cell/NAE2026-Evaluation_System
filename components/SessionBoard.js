@@ -36,10 +36,10 @@ export default function SessionBoard({ sessionId, role, compact, onChanged }) {
   const groupKey = r => by === "school" ? `${r.school || "No school"}${r.esis ? ` · eSIS ${r.esis}` : ""}` : r.room ? `${r.room} · ${r.shelf}` : r.from_venue ? `Still in ${r.from_venue} (${r.from_title}): bring from there` : "Not shelved";
   const grouped = list => { const m = new Map(); [...list].sort(by === "school" ? (a, b) => String(a.school).localeCompare(String(b.school)) || a.sort - b.sort || a.code.localeCompare(b.code) : (a, b) => a.sort - b.sort || a.code.localeCompare(b.code)).forEach(r => { const g = groupKey(r); if (!m.has(g)) m.set(g, []); m.get(g).push(r); }); return [...m.entries()]; };
   const canTick = k => (k === "waiting" && staff) || (k === "room" && (coord || staff)) || (k === "back" && staff);
-  const Groups = ({ list, k }) => grouped(list).map(([g, rs]) => <div key={g} className="sb-grp">
+  const Groups = ({ list, k }) => grouped(list).map(([g, rs]) => <div key={g} className={`sb-grp${by === "place" && rs.some(r => r.from_venue) ? " xfer" : ""}`}>
     <div className="sb-gh">{k && canTick(k) && <Check label="" checked={rs.every(r => sel[k].has(r.code))} onChange={v => setAll(k, rs.map(r => r.code), v)} />}<b>{g}</b><span className="small faint">{rs.length}</span></div>
     {rs.map(r => <Row key={r.code} r={r} k={k} />)}</div>);
-  const Row = ({ r, k }) => <div className={`sb-row${sel[k]?.has(r.code) ? " on" : ""}`}>
+  const Row = ({ r, k }) => <div className={`sb-row${sel[k]?.has(r.code) ? " on" : ""}${r.from_venue ? " xfer" : ""}`}>
     {k && canTick(k) ? <Check label="" checked={sel[k].has(r.code)} onChange={v => toggle(k, r.code, v)} /> : <span />}
     <button type="button" className="sb-th" onClick={() => r.thumb && setBig(r)} aria-label={`Photo of ${r.code}`}>{r.thumb ? <img src={`${r.thumb}?s=120`} alt="" loading="lazy" /> : <span>–</span>}</button>
     <div className="sb-main"><span className="code">{r.code}</span><span className="t" dir="auto">{r.title}</span><span className="m small faint">{[by === "school" ? null : r.school, r.sub, r.size].filter(Boolean).join(" · ")}</span></div>
