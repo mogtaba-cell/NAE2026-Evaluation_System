@@ -167,7 +167,7 @@ export default function Session({ params }) {
   const resultText = !res ? null : e.review?.status === "open" ? `With management: ${e.review.reason}` : res.complete ? (e.review ? `Decided by management (${e.review.status})` : res.passed ? `Complete · passes Round ${s.round_no}` : `Complete · does not pass Round ${s.round_no}`) : `Provisional: ${res.scored} of ${res.needed} scores${e.min ? ` (needs at least ${e.min})` : ""}`;
   const statusLabel = { live: "In progress", done: "Done", planned: "Planned", cancelled: "Cancelled" }[s.status];
   return <>
-    <PageHead back={[isEv ? "My sessions" : "Scoring sessions", "/sessions"]} title={s.title} sub={[s.session_date ? dshort(s.session_date) : null, timeText(s.start_time, s.end_time) || s.time_text, s.venue, s.coordinator ? `coordinator ${s.coordinator}` : null].filter(Boolean).join(" · ")}
+    <PageHead back={[isEv ? "My evaluations" : "Evaluations", "/sessions"]} title={s.title} sub={[s.session_date ? dshort(s.session_date) : null, timeText(s.start_time, s.end_time) || s.time_text, s.venue, s.coordinator ? `coordinator ${s.coordinator}` : null].filter(Boolean).join(" · ")}
       badges={<><Badge tone={s.status === "live" ? "info" : s.status === "done" ? "ok" : s.status === "cancelled" ? "bad" : ""}>{statusLabel}</Badge>{isOverdue(s) && <Badge tone="bad">{overdueText(s)}</Badge>}</>}
       actions={isEv ? null : <>
         {s.status === "planned" && <Btn v="primary" busy={busy === "start"} onClick={() => act("start")}>Start session</Btn>}
