@@ -33,10 +33,11 @@ export const GET = route("*", async ({ session, scope }) => {
     const lgm = (await q(db().from("nae_logistics").select("state, session_id").in("state", ["handed_over", "coordinator"]))).filter(x => mine.has(x.session_id));
     out.logistics.toMe = lgm.filter(x => x.state === "handed_over").length; out.logistics.withMe = lgm.filter(x => x.state === "coordinator").length;
   }
-  // artworks marked "not visible" during scoring: the coordinator fixes the files and reopens them
-  if (["admin", "coordinator"].includes(session.role)) {
-    const nv = (await q(db().from("nae_entries").select("code, title_en, pathway_code, coordinator_id, not_visible_note, not_visible_at").not("not_visible_at", "is", null).order("not_visible_at"))).filter(e => has(e.pathway_code));
-    out.notVisible = (session.role === "coordinator" ? nv.filter(e => e.coordinator_id === session.sub) : nv).slice(0, 20).map(e => ({ code: e.code, title: e.title_en, note: e.not_visible_note }));
+  // corrections waiting on coordinators (contacting schools for the right file or details)
+  if (["admin", "coordinator", "management"].includes(session.role)) {
+    const cs = (await q(db().from("nae_corrections").select("id, reason, note, opened_at, coordinator_id, entry:nae_entries(code, title_en, pathway_code, coordinator_id)").eq("status", "open").order("opened_at"))).filter(c => c.entry && (session.role === "coordinator" || has(c.entry.pathway_code)));
+    const mine = session.role === "coordinator" ? cs.filter(c => c.coordinator_id === session.sub) : cs;
+    out.corrections = { open: mine.length, late: mine.filter(c => Date.now() - Date.parse(c.opened_at) > 3 * 86400000).length, list: mine.slice(0, 12).map(c => ({ id: c.id, code: c.entry.code, title: c.entry.title_en, note: c.note, at: c.opened_at })) };
   }
   // rounds still open after their closing date (dates don't close rounds by themselves)
   const today = new Date().toISOString().slice(0, 10);

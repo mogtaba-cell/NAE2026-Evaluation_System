@@ -2,7 +2,7 @@
 import { use, useEffect, useState } from "react";
 import RoundEditor from "@/components/RoundEditor";
 import Readiness from "@/components/Readiness";
-import { api, useMeta, useToast, PageHead, Card, Table, Btn, Badge, Banner, Loading, Field, Switch, Modal, fmt } from "@/components/ui";
+import { api, useApi, useMeta, useToast, PageHead, Card, Table, Btn, Badge, Banner, Loading, Field, Switch, Modal, fmt } from "@/components/ui";
 
 export default function PathwaySetup({ params }) {
   const { code } = use(params);
@@ -40,6 +40,7 @@ export default function PathwaySetup({ params }) {
     </Modal>
     <PageHead back={["Program setup", "/setup"]} title={p.name} sub={`${meta.data.program?.name} · ${p.eval_type || "Participation"} · ${p.code} · ${fmt(p.entries)} artworks · ${fmt(p.students)} students`} actions={<><Btn href={`/entries?pathway=${code}`}>Artworks</Btn><Btn href={`/allocation?pathway=${code}`}>Artwork Distribution</Btn><Btn href="/rounds">Rounds</Btn></>} />
     {p.rounds.map(r => <div key={r.id} className="stack s8"><span className="small faint">Round {r.round_no} · {r.status === "setup" ? "ready to open?" : r.status}</span><Readiness checks={r.readiness?.checks || []} /></div>)}
+    <DefaultText code={code} name={p.name} />
     <Card title="Subpathways and rubrics" sub="Each subpathway has its own rubric for each round. Add subpathways here, or let the import add new ones it finds. Round 1 is always online. In Round 2, subpathways switched to Physical are delivered by schools and scored in the room; the rest are scored online." flush right={<div className="row nowrap" style={{ gap: 8 }}><Btn sm onClick={() => { setErr(null); setAdd({ name: "", code: "", is_physical: false, rubric_r1: "", rubric_r2: "" }); }}>Add subpathway</Btn><Btn v="primary" sm disabled={!dirty || (needReason && !reason.trim())} busy={busy} onClick={saveSubs}>Save</Btn></div>}>
       {subs && <Table minw={820} cols={["Subpathway", { h: "Artworks", cls: "r" }, "Physical artworks", "Round 1 rubric", "Round 2 rubric"]} rows={subs.map((s, i) => [
         <div key="n" className="stack s4"><span className="strong">{s.name} <span className="code faint">{s.code}</span>{!s.entries && <button type="button" className="link small" style={{ marginLeft: 8 }} onClick={() => removeSub(s.code)}>Remove</button>}</span>{s.rubric_inherited && !s.confirm_rubrics && <span className="row" style={{ gap: 6 }}><Badge tone="warn">Rubrics copied at import</Badge><button type="button" className="link small" onClick={() => upd(i, "confirm_rubrics", true)}>Looks right</button></span>}</div>,
@@ -48,4 +49,20 @@ export default function PathwaySetup({ params }) {
     </Card>
     <div id="rounds" className="stack" style={{ gap: 16 }}>{p.rounds.map(r => <RoundEditor key={r.id} r={r} p={p} onSaved={meta.reload} />)}</div>
   </>;
+}
+
+// the default title and description used when a school doesn't respond to a correction about missing or wrong text
+function DefaultText({ code, name }) {
+  const d = useApi(`/api/pathways/${code}`); const toast = useToast(); const [f, setF] = useState(null); const [busy, setBusy] = useState(false);
+  const v = f || d.data?.defaults; if (!v) return null;
+  const set = (k, x) => setF({ ...v, [k]: x });
+  async function save() { setBusy(true); try { await api(`/api/pathways/${code}`, { method: "PATCH", body: { defaults: v } }); toast("Default text saved"); setF(null); d.reload(); } catch (e) { toast(e.message, "err"); } setBusy(false); }
+  return <Card title="Default text when a school doesn't respond" sub={`Used in Corrections: if a school doesn't send the missing or corrected title and description for a ${name} artwork, the coordinator applies this text and the artwork goes on. Leave a box empty to keep what the school submitted for that field.`} right={f && <Btn sm v="primary" busy={busy} onClick={save}>Save</Btn>}>
+    <div className="grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 12 }}>
+      <Field label="Title (English)"><input className="input" value={v.default_title_en || ""} onChange={e => set("default_title_en", e.target.value)} /></Field>
+      <Field label="Title (Arabic)"><input className="input" dir="rtl" value={v.default_title_ar || ""} onChange={e => set("default_title_ar", e.target.value)} /></Field>
+      <Field label="Description (English)"><textarea className="textarea" rows={3} value={v.default_description_en || ""} onChange={e => set("default_description_en", e.target.value)} /></Field>
+      <Field label="Description (Arabic)"><textarea className="textarea" rows={3} dir="rtl" value={v.default_description_ar || ""} onChange={e => set("default_description_ar", e.target.value)} /></Field>
+    </div>
+  </Card>;
 }

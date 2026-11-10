@@ -13,6 +13,7 @@ import { useLang, LangToggle, scoreLang, SL, critIn, AR_FONT } from "@/component
 import { answersOf, answerOf, qLabel } from "@/lib/questions";
 import ChoicePick from "@/components/ChoicePick";
 import DisplayPick from "@/components/DisplayPick";
+import CanEvaluate, { WithCoordinator } from "@/components/CanEvaluate";
 
 const qsOf = e => e?.rubric?.questions || [];
 const passesRule = (rule, t, g, idn) => { if (t == null) return null; if (rule?.min_score != null && t < Number(rule.min_score)) return false; if (rule?.grades?.length && !rule.grades.includes(g)) return false; if (rule?.identityPass && idn !== true) return false; return true; };
@@ -42,7 +43,7 @@ export default function Session({ params }) {
   const d = useApi(`/api/sessions/${id}${cur ? `?entry=${encodeURIComponent(cur)}` : ""}`, [], { live: 15000 });
   const [m, setM] = useState({}); const [idn, setIdn] = useState({}); const [toRev, setToRev] = useState(false); const [nv, setNv] = useState(null); const [cc, setCc] = useState(null); const [selfEdit, setSelfEdit] = useState(null); const [abs, setAbs] = useState({}); const [cm, setCm] = useState({}); const [busy, setBusy] = useState(null); const [err, setErr] = useState(null);
   const [finishAsk, setFinishAsk] = useState(null); const [editD, setEditD] = useState(false);
-  const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null);
+  const [edit, setEdit] = useState(null); const [board, setBoard] = useState(false); const [only, setOnly] = useState(null); const [canEv, setCanEv] = useState({});
   // schools with artworks waiting for a session in this round, to add to the session while editing it
   const pools = useApi(edit && edit.status !== "done" ? "/api/sessions?pools=1" : null, [edit ? 1 : 0]);
   const me = meta?.data?.me;
@@ -160,6 +161,9 @@ export default function Session({ params }) {
   const pv = e ? preview() : null;
   const hasDraft = code => { const dr = readDraft(id, code); return !!dr && Object.values(dr.m || {}).some(o => Object.values(o || {}).some(v => v !== "" && v != null)); };
   const res = e?.result;
+  // online artworks: "Can this artwork be evaluated?" comes first; the sheet opens on Yes (or once scoring started)
+  const askFirst = !!e && !e.physical && !!e.rubric && !nvHere && editable && open_.length > 0;
+  const gated = askFirst && !canEv[e.code] && !e.scores.length && !hasDraft(e.code);
   const resultText = !res ? null : e.review?.status === "open" ? `With management: ${e.review.reason}` : res.complete ? (e.review ? `Decided by management (${e.review.status})` : res.passed ? `Complete · passes Round ${s.round_no}` : `Complete · does not pass Round ${s.round_no}`) : `Provisional: ${res.scored} of ${res.needed} scores${e.min ? ` (needs at least ${e.min})` : ""}`;
   const statusLabel = { live: "In progress", done: "Done", planned: "Planned", cancelled: "Cancelled" }[s.status];
   return <>
@@ -182,16 +186,17 @@ export default function Session({ params }) {
     <div className="f3-sc f3-sess">
       <section className="card f3-queue"><div className="qh"><b>{shown.length} artworks</b><span className="small faint">{entries.filter(x => x.result?.complete).length} of {entries.length} fully scored</span></div>
         {physical && <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--rule)" }}><Seg value={filter} onChange={setOnly} items={[["room", `In the room ${roomN}`], ["all", `All ${entries.length}`]]} /></div>}
-        <div className="qb">{shown.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => go(x.code)} onKeyDown={k => k.key === "Enter" && go(x.code)}><div className="t tf"><b dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</b><span className="cd">{x.code}</span>{isNew(x) && <span className="room-chip new">Just arrived</span>}{x.not_visible && <span className="room-chip new">Not visible</span>}{x.pod && <span className="room-chip">POD</span>}{x.logistics && <span className={`room-chip${inRoom(x) ? " in" : ""}`}>{inRoom(x) ? `In the room${x.logistics.batch ? ` · batch ${x.logistics.batch}` : ""}` : x.logistics.state === "returning" ? "Handed back" : x.logistics.state === "missing" ? "Missing" : "On the shelf"}</span>}</div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status !== "draft").length}/${team.length}`}{hasDraft(x.code) && !x.result?.complete ? " ·" : ""}</span></div>)}
+        <div className="qb">{shown.map(x => <div key={x.code} role="button" tabIndex={0} className={`f3-qi${x.code === e?.code ? " on" : ""}`} onClick={() => go(x.code)} onKeyDown={k => k.key === "Enter" && go(x.code)}><div className="t tf"><b dir="auto">{x.title_en || x.title_ar || x.group_name || "Untitled"}</b><span className="cd">{x.code}</span>{isNew(x) && <span className="room-chip new">Just arrived</span>}{x.not_visible && <span className="room-chip new">With coordinator</span>}{x.pod && <span className="room-chip">POD</span>}{x.logistics && <span className={`room-chip${inRoom(x) ? " in" : ""}`}>{inRoom(x) ? `In the room${x.logistics.batch ? ` · batch ${x.logistics.batch}` : ""}` : x.logistics.state === "returning" ? "Handed back" : x.logistics.state === "missing" ? "Missing" : "On the shelf"}</span>}</div><span className="s">{x.result?.complete ? x.result.final ?? x.result.team : `${x.scores.filter(y => y.status !== "draft").length}/${team.length}`}{hasDraft(x.code) && !x.result?.complete ? " ·" : ""}</span></div>)}
           {!shown.length && <p className="small faint" style={{ padding: 12 }}>{filter === "room" ? "No artworks in the room right now. Logistics brings the next batch." : "No artworks."}</p>}</div></section>
       {e ? <div className="stack sticky-view" style={{ gap: 12, minWidth: 0 }}>
         <div className="row" style={{ gap: 8, flexWrap: "wrap" }}><span className="code" style={{ fontSize: 15, fontWeight: 600 }}>{e.code}</span><Badge>{e.sub}</Badge>{e.r1 && <Badge tone="ok">Round 1: {e.r1.final ?? e.r1.team} · {e.r1.grade}</Badge>}{e.logistics?.damaged && <Badge tone="warn">Damaged</Badge>}{e.logistics?.where && <Badge>{e.logistics.where}</Badge>}{d.data?.canEditDetails && <Btn sm onClick={() => setEditD(true)} style={{ marginLeft: "auto" }}>Edit details</Btn>}</div>
-        <FileViewer files={e.files || []} tall title="Photos for reference; judge the artwork in the room" />
+        <FileViewer files={e.files || []} tall title={e.physical ? "Photos for reference; judge the artwork in the room" : "Artwork files"} />
       </div> : <Loading />}
       {e && <div className="stack" style={{ gap: 16, minWidth: 0 }}>
         <section className={`card score-card${ar ? " is-ar" : ""}`} dir={ar ? "rtl" : "ltr"} lang={ar ? "ar" : "en"} style={ar ? { fontFamily: AR_FONT } : undefined}>
           <div className="card-h"><div className="tt"><h3>{T.scores}</h3><span className="sub">{T.rubric} <span dir="ltr">{e.rubric?.code} v{e.rubric?.version}</span> · {T.each}</span></div><LangToggle lang={lang} onChange={setLang} both={false} /></div>
-          {!e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>{T.criterion}</th>{team.map(t => <th key={t.id} title={t.name} className={canCol(t) && !saved(t.id) ? "mine" : ""}>{isEv && t.id === myEv ? "You" : t.name}{t.self && <span className="own">own login</span>}
+          {askFirst && <CanEvaluate code={e.code} roundNo={s.round_no} sessionId={s.id} T={T} ar={ar} value={!gated} onYes={() => setCanEv(c => ({ ...c, [e.code]: true }))} onDone={() => d.reload()} />}
+          {gated ? null : !e.rubric ? <Banner tone="warn" title={`No published Round ${s.round_no} rubric`} /> : <div className="tw"><table className="x-cmp sess-mx"><thead><tr><th>{T.criterion}</th>{team.map(t => <th key={t.id} title={t.name} className={canCol(t) && !saved(t.id) ? "mine" : ""}>{isEv && t.id === myEv ? "You" : t.name}{t.self && <span className="own">own login</span>}
               <span className="th-act">{saved(t.id) ? <Badge tone="ok">{T.saved}</Badge> : absent(t.id) ? <Badge>{T.absent}</Badge> : staff ? (abs[t.id] ? <button type="button" className="th-btn on" onClick={() => setAb(t.id, false)}>{T.undo}</button> : <button type="button" className="th-btn" onClick={() => setAb(t.id, true)}>{T.absent}</button>) : null}</span></th>)}</tr></thead><tbody>
             {crit.map(c => { const ct = critIn(c, lang); return <tr key={c.key}><td><div className="cl"><b>{ct.label} <span className="w">{c.weight}%</span></b>{ct.desc && <span className="d">{ct.desc}</span>}{ct.missing && ar && <span className="d">{T.noAr}</span>}</div></td>
               {team.map(t => <td key={t.id}>{absent(t.id) || abs[t.id] ? <span className="faint small">{T.absent}</span> : !canCol(t) && !saved(t.id) ? <span className="faint">–</span> : <input className="sc-in" inputMode="numeric" aria-label={`${t.name}, ${c.label}`} disabled={!canCol(t) || saved(t.id)} value={m[t.id]?.[c.key] ?? ""} onChange={x => setScore(t.id, c.key, x.target.value.replace(/\D/g, "").slice(0, 3))} />}</td>)}</tr>; })}
@@ -199,16 +204,16 @@ export default function Session({ params }) {
               {idn[t.id]?.[x.key] === true && x.options?.length > 0 && !(absent(t.id) || abs[t.id]) && (saved(t.id) ? <span className="small d-choice" dir="auto">{idn[t.id][`${x.key}_choice`] || "–"}</span> : canCol(t) && <ChoicePick compact q={x} ar={ar} value={idn[t.id][`${x.key}_choice`]} onChange={v => setId(t.id, `${x.key}_choice`, v)} />)}</td>)}</tr>)}
             <tr className="tot"><td>{T.total}</td>{team.map(t => <td key={t.id}>{saved(t.id) ? scoreOf(t.id).total : absent(t.id) || abs[t.id] ? "–" : crit.some(c => m[t.id]?.[c.key]) ? total(crit, m[t.id]) : "–"}</td>)}</tr>
           </tbody></table></div>}
-          {e.rubric && team.some(t => !(absent(t.id) || abs[t.id]) && (saved(t.id) || canCol(t))) && <div className="sc-cms"><b className="small">{T.comment}</b>
+          {!gated && e.rubric && team.some(t => !(absent(t.id) || abs[t.id]) && (saved(t.id) || canCol(t))) && <div className="sc-cms"><b className="small">{T.comment}</b>
             {team.filter(t => !(absent(t.id) || abs[t.id]) && (saved(t.id) || canCol(t))).map(t => <div key={t.id} className="sc-cmr"><span className="small">{isEv && t.id === myEv ? "You" : t.name}</span>
               {saved(t.id) ? <span className="small" dir="auto">{scoreOf(t.id).comment || <span className="faint">–</span>}</span> : <textarea className="sc-cm" dir="auto" rows={1} disabled={!canCol(t)} value={cm[t.id] || ""} placeholder={T.commentPh} onChange={x => setCom(t.id, x.target.value)} aria-label={`${t.name}, ${T.comment}`} />}</div>)}
           </div>}
-          {nvHere && <Banner tone="warn" title={T.notVisible} action={runs ? <Btn sm v="primary" busy={busy === "reopen"} onClick={reopenNV}>Files fixed: reopen</Btn> : null}>“{e.not_visible.note}”. Scoring is paused until the coordinator fixes the files (or marks it not scored on the artwork page).</Banner>}
-          {e.rubric && !nvHere && <div className="sc-ticks">
+          {nvHere && <WithCoordinator nv={e.not_visible} coord={runs && s.mine} onOpen={isEv ? null : `/corrections?entry=${encodeURIComponent(e.code)}`} />}
+          {!gated && e.rubric && !nvHere && <div className="sc-ticks">
             {editable && open_.length > 0 && <Check label={T.toReview} checked={toRev} onChange={setRev} />}
             {!(editable && open_.length > 0) && team.some(t => saved(t.id) && scoreOf(t.id).to_review) && <span className="small" style={{ color: "var(--warn)" }}>Sent to management review</span>}
             {(runs || isEv) && <Check label={T.pod} checked={!!e.pod} onChange={setPod} />}
-            {editable && <Check label={T.notVisible} checked={false} onChange={v => v && setNv("")} />}
+            {e.physical && editable && open_.length > 0 && <CanEvaluate mode="match" code={e.code} roundNo={s.round_no} sessionId={s.id} T={T} ar={ar} onDone={() => d.reload()} />}
           </div>}
           {!isEv && (runs || e.coordComment) && <div className="cc-box">
             <div className="row" style={{ gap: 8 }}><b className="small">{T.coordComment}</b><span className="sp" />{runs && cc === null && <Btn sm v="ghost" onClick={() => setCc(e.coordComment || "")}>{e.coordComment ? "Edit" : "Add"}</Btn>}</div>
@@ -218,7 +223,7 @@ export default function Session({ params }) {
           {e.logistics && <div className="f3-crit" style={{ borderTop: "1px solid var(--rule)" }}><div className="lab"><b>{T.framing}</b><span>{T.framingQ}</span></div>
             <DisplayPick value={e.logistics} disabled={!runs} ar={ar} onSave={display} /></div>}
           {err && <Banner tone="bad" title={err} />}
-          {editable && open_.length > 0 && <div className="sheet-save">
+          {!gated && editable && open_.length > 0 && <div className="sheet-save">
             <div className="stack s4" style={{ flex: 1, minWidth: 0 }}>
               {pv?.complete ? (pv.why.length ? <span className="small"><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· goes to review: {pv.why.join(", ")}</span></span> : <span className="small"><b>Team result {pv.team} · grade {pv.grade}</b> <span className="faint">· {pv.passes ? `passes Round ${s.round_no}` : `does not pass Round ${s.round_no}`}</span></span>) : null}
               {missingCols.length > 0 && <span className="small" style={{ color: "var(--warn)" }}>{T.needFill(missingCols.map(t => t.name).join(", "))}</span>}
@@ -234,10 +239,6 @@ export default function Session({ params }) {
     {editD && e && <EditDetails e={e} onClose={() => setEditD(false)} onDone={() => { setEditD(false); d.reload(); }} />}
     <Modal open={!!selfEdit} title="Who types their own scores" sub="Ticked evaluators score on their own login. You type the others' scores." onClose={() => setSelfEdit(null)} footer={<><Btn onClick={() => setSelfEdit(null)}>Cancel</Btn><Btn v="primary" busy={busy === "self"} onClick={saveSelf}>Save</Btn></>}>
       {selfEdit && <div className="stack s8">{team.map(t => <Check key={t.id} label={`${t.name}${t.has_login ? "" : " (no login yet)"}${saved(t.id) ? " · saved" : ""}`} disabled={!t.has_login} checked={selfEdit.includes(t.id)} onChange={on => setSelfEdit(on ? [...selfEdit, t.id] : selfEdit.filter(x => x !== t.id))} />)}</div>}
-    </Modal>
-    <Modal open={nv !== null} title={T.notVisible} sub={e?.code} onClose={() => setNv(null)} footer={<><Btn onClick={() => setNv(null)}>Back</Btn><Btn v="primary" busy={busy === "nv"} disabled={!String(nv || "").trim()} onClick={notVis}>Send to the coordinator</Btn></>}>
-      <p className="muted" style={{ marginTop: 0 }}>{T.notVisibleHint}</p>
-      <Field label="What's wrong?"><textarea className="textarea" rows={3} value={nv || ""} onChange={x => setNv(x.target.value)} placeholder="For example: the video doesn't play, the photo is blurred or cut off" /></Field>
     </Modal>
     <Modal open={!!finishAsk} title="Artworks still need a decision" onClose={() => setFinishAsk(null)} footer={<><Btn onClick={() => setFinishAsk(null)}>Back</Btn><span className="sp" />
       {finishAsk?.movable > 0 && finishAsk?.targets?.length > 0 && (finishAsk.partly

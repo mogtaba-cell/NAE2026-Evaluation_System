@@ -1,7 +1,7 @@
 import { readTimes } from "@/lib/sessiontime";
 import { route, body, bad, forbidden } from "@/lib/api";
 import { db, q } from "@/lib/db";
-import { loadStructure, versionById, versionView, rubricFor } from "@/lib/structure";
+import { loadStructure, versionById, versionView, rubricFor, isPhysicalRound } from "@/lib/structure";
 import { pinnedVersion, scorePlan, recompute, ruleText, flagLine, passThreshold, DEFAULT_BANDS } from "@/lib/scoring";
 import { entryFiles } from "@/lib/files";
 import { fileView } from "@/lib/entryview";
@@ -58,7 +58,7 @@ export const GET = route(["admin", "coordinator", "evaluator"], async ({ session
       rubric: ver, min: plan.min, inThisSession: plan.session?.id === s.id,
       // evaluators see their own drafts, and only saved (submitted or absent) scores of the others
       scores: scores.filter(x => x.entry_id === e.id && (!evaluator || x.status !== "draft" || x.evaluator_id === s.__ev)).map(x => evaluator && x.evaluator_id !== s.__ev ? { ...x, entered_by: undefined } : x),
-      pod: !!e.pod, not_visible: e.not_visible_at && e.not_visible_round === r.round_no ? { at: e.not_visible_at, note: e.not_visible_note } : null,
+      physical: isPhysicalRound(S, e, r.round_no), pod: !!e.pod, not_visible: e.not_visible_at && e.not_visible_round === r.round_no ? { at: e.not_visible_at, note: e.not_visible_note } : null,
       coordComment: comments.find(c => c.entry_id === e.id)?.comment || null,
       result: results.find(x => x.entry_id === e.id && x.round_no === r.round_no) || null,
       review: rv.find(x => x.status === "open") ? { status: "open", reason: rv.find(x => x.status === "open").reason } : rv[0] ? { status: rv[0].status } : null,

@@ -1314,3 +1314,25 @@ h1,h2,h3{color:var(--deep)} h1{font-weight:800} h2,h3{font-weight:700}
 @media (max-width:640px){.pr-stu{grid-template-columns:minmax(0,1fr)}}
 .ph-actions{gap:6px;flex-wrap:wrap;padding:0 16px 8px;align-items:center}
 .f3-queue .qh .search{min-width:0 !important;flex:none !important;width:100%}
+.ce-q{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;width:100%;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--r);background:var(--wash)}
+.ce-yn{display:flex;gap:6px}
+.cr-file{display:flex;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--rule);min-width:0}
+.ce-q.ask{border-color:var(--accent,var(--ink));background:var(--paper,#fff)}
+.ce-q.ok{margin-bottom:4px}
+/* corrections: the log of contact with the school */
+.cr-log{display:flex;flex-direction:column;gap:0;border-left:2px solid var(--rule);margin:4px 0 10px 6px}
+.cr-l{display:flex;flex-direction:column;gap:2px;padding:6px 0 8px 12px;position:relative}
+.cr-l::before{content:"";position:absolute;left:-6px;top:10px;width:10px;height:10px;border-radius:50%;background:var(--sheet);border:2px solid var(--rule2)}
+.cr-l.k-contacted::before{border-color:var(--info)} .cr-l.k-replied::before{border-color:var(--ok)} .cr-l.k-closed::before{background:var(--ink3);border-color:var(--ink3)} .cr-l.k-opened::before{border-color:var(--warn)}
+.cr-add{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--rule);padding-top:10px}
+.cr-out{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid var(--rule)}
+.cr-out:first-child{border-top:0}
+/* proofreading: students (read only), as it came in vs now */
+.pr-stud{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid var(--rule);border-radius:var(--r);background:var(--wash)}
+.pr-cmp{display:flex;flex-direction:column}
+.pr-c{display:grid;grid-template-columns:minmax(0,.7fr) minmax(0,1fr) minmax(0,1fr);gap:10px;padding:8px 0;border-top:1px solid var(--rule)}
+.pr-c:first-child{border-top:0}
+.pr-c.diff{background:var(--warn-wash)}
+.pr-corr{border-top:1px solid var(--rule);padding:6px 0}
+@media (max-width:640px){.pr-c{grid-template-columns:minmax(0,1fr)}}
+.pr-c.pr-h{padding-top:0}

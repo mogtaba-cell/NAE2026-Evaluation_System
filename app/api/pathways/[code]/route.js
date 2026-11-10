@@ -35,6 +35,11 @@ export const PATCH = route(["admin"], async ({ session, params, request }) => {
     changes.push({ sub: cur.name, before: Object.fromEntries(Object.keys(patch).map(k => [k, cur[k]])), after: patch });
     if (patch.is_physical !== undefined) await resyncPhysical(S, P, cur.code, patch.is_physical, session);
   }
+  // the default text used when a school doesn't respond about missing or wrong text (Corrections)
+  if (b.defaults && typeof b.defaults === "object") {
+    const d = {}; ["default_title_en", "default_title_ar", "default_description_en", "default_description_ar"].forEach(k => { if (b.defaults[k] !== undefined) d[k] = String(b.defaults[k] || "").trim().slice(0, 4000) || null; });
+    if (Object.keys(d).length) { await q(db().from("nae_pathways").update(d).eq("code", P.code)); changes.push({ defaults: Object.keys(d) }); }
+  }
   if (b.status) { if (!["setup", "open", "closed"].includes(b.status)) throw bad("Unknown status."); await q(db().from("nae_pathways").update({ status: b.status }).eq("code", P.code)); changes.push({ status: b.status }); }
   if (changes.length) await audit(session, "Pathway settings changed", "pathway", P.code, [JSON.stringify(changes).slice(0, 1500), reason].filter(Boolean).join(" · "));
   return { ok: true };
@@ -62,3 +67,10 @@ async function resyncPhysical(S, P, subCode, physical, session) {
   }
   await audit(session, `${physical ? "Physical" : "Online"} in Round 2: ${ents.length} artworks updated`, "pathway", P.code, subCode);
 }
+
+// the pathway's default text (title and description) for Corrections
+export const GET = route(["admin", "management", "coordinator"], async ({ params }) => {
+  const p = await q(db().from("nae_pathways").select("default_title_en, default_title_ar, default_description_en, default_description_ar").eq("code", params.code).maybeSingle());
+  if (!p) throw bad("Pathway not found.");
+  return { defaults: p };
+});

@@ -118,8 +118,8 @@ export default function EntryPage({ params }) {
       <Check label="Viewed by management" checked={!!e.mgmt_viewed_at} disabled={me === "management" && e.mgmt_viewed_how === "opened"} onChange={markViewed} />
       {e.mgmt_viewed_at && <span className="small faint">{e.mgmt_viewed_how === "opened" ? `Opened by ${e.mgmt_viewed_name || "management"}` : `Marked by ${e.mgmt_viewed_name || "someone"}`} · {when(e.mgmt_viewed_at)}</span>}
     </div>}
-    {e.not_visible_at && <Banner tone="warn" title={`Not visible: scoring paused (Round ${e.not_visible_round})`} action={access === "full" && ["admin", "coordinator", "management"].includes(me) ? <Btn sm v="primary" busy={busy} onClick={reopenNV}>Files fixed: reopen for scoring</Btn> : null}>
-      {e.not_visible_name || "Someone"} said: “{e.not_visible_note}” · {when(e.not_visible_at)}. Fix the files (Submission files, Check for new files), then reopen it. If it can't be fixed, use “Mark not scored” in the round below.</Banner>}
+    {e.not_visible_at && <Banner tone="warn" title={`With the coordinator for correction: scoring paused (Round ${e.not_visible_round})`} action={["admin", "coordinator", "management"].includes(me) ? <Btn sm v="primary" href={`/corrections?entry=${encodeURIComponent(e.code)}`}>Open the correction</Btn> : null}>
+      {e.not_visible_name || "Someone"}: “{e.not_visible_note}” · {when(e.not_visible_at)}. The coordinator gets the correct file or details from the school and sends it back for scoring, or marks it not scored if the school doesn't respond.</Banner>}
     {access === "view" && <Banner title="View only">{me === "storage" ? "Scores and results are not shown to the Logistics team." : "This artwork isn't allocated to you. You can see its files and details; scores and actions are for its coordinator."}</Banner>}
     <div className="x-side x-rec">
       <div className="stack" style={{ gap: 16, minWidth: 0 }}>
