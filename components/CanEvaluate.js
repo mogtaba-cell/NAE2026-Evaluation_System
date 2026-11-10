@@ -16,14 +16,14 @@ export default function CanEvaluate({ code, roundNo, sessionId, T, ar, onDone, v
   return <>
     {match ? <div className="ce-q ok"><div className="stack s4" style={{ flex: 1, minWidth: 0 }}><b className="small">{T.matchQ}</b><span className="small faint">{T.matchHint}</span></div>
       <span className="f3-yn lg" role="group" aria-label={T.matchQ}><button type="button" disabled={disabled} className={said ? "on" : ""} onClick={() => setSaid(true)}>{T.yes}</button><button type="button" disabled={disabled} onClick={() => setAsk({ reason: "artwork_mismatch", note: "" })}>{T.no}</button></span></div>
-    : <div className={`ce-q${value ? " ok" : " ask"}`}><div className="stack s4" style={{ flex: 1, minWidth: 0 }}><b className="small">{T.notVisible}</b>{!value && <span className="small faint">{T.canEvalFirst}</span>}</div>
+    : <div className={`ce-q${value ? " ok" : " ask"}`}><div className="stack s4" style={{ flex: 1, minWidth: 0 }}><b className="small">{T.notVisible}</b></div>
       <span className="f3-yn lg" role="group" aria-label={T.notVisible}><button type="button" disabled={disabled} className={value ? "on" : ""} onClick={() => onYes && onYes()}>{T.yes}</button><button type="button" disabled={disabled} onClick={() => setAsk({ reason: "file_quality", note: "" })}>{T.no}</button></span></div>}
     <Modal open={!!ask} title={ar ? "إرسال إلى المنسق للتصحيح" : "Send to the coordinator for correction"} sub={code} onClose={() => setAsk(null)}
       footer={<><Btn onClick={() => setAsk(null)}>{ar ? "رجوع" : "Back"}</Btn><Btn v="primary" busy={busy} disabled={!String(ask?.note || "").trim()} onClick={send}>{ar ? "إرسال إلى المنسق" : "Send to the coordinator"}</Btn></>}>
       {ask && <div className="stack" style={{ gap: 12 }}>
         {err && <Banner tone="bad" title={err} />}
         <p className="muted" style={{ margin: 0 }}>{T.notVisibleHint}</p>
-        {!match && <Field label={ar ? "السبب" : "Reason"}><div className="stack s4">{REASONS.map(([k, en, a]) => <label key={k} className="row" style={{ gap: 8, alignItems: "flex-start" }}><input type="radio" name="ce-r" checked={ask.reason === k} onChange={() => setAsk({ ...ask, reason: k })} /><span className="small">{ar ? a : en}</span></label>)}</div></Field>}
+        {!match && <Field label={ar ? "السبب" : "Reason"}><div className="stack s4">{REASONS.map(([k, en, a]) => <label key={k} className="ce-r"><input type="radio" name="ce-r" checked={ask.reason === k} onChange={() => setAsk({ ...ask, reason: k })} /><span className="small">{ar ? a : en}</span></label>)}</div></Field>}
         <Field label={ar ? "ما المشكلة؟" : "What's wrong?"} help={ar ? "يستخدمها المنسق عند التواصل مع المدرسة." : "The coordinator uses this when contacting the school."}><textarea className="textarea" rows={3} dir="auto" value={ask.note} onChange={e => setAsk({ ...ask, note: e.target.value })} placeholder={match ? (ar ? "مثال: الاسم على العمل ليس لأحد الطلاب، أو العمل ليس الموصوف" : "For example: the name on the artwork is not one of the students, or it isn't the artwork described") : ar ? "مثال: الفيديو لا يعمل، الصورة غير واضحة، العمل يعود لطالب آخر" : "For example: the video doesn't play, the photo is blurred or cut off, the artwork belongs to a different student"} /></Field>
       </div>}
     </Modal>
