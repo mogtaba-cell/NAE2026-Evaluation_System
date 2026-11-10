@@ -99,7 +99,7 @@ export default function Dashboard() {
   if (role === "management") {
     const m = x.mine;
     return <>
-      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews">Artworks to be reviewed</Btn></>} />
+      <PageHead title={hello(me?.name)} sub={today()} actions={<><Btn href="/insights">Insights</Btn><Btn v="primary" href="/reviews">Management Review</Btn></>} />
       <Kpis items={[["My open reviews", m.open.length, `${m.open.filter(r => Date.parse(r.due_at) < Date.now()).length} overdue`, m.open.some(r => Date.parse(r.due_at) < Date.now()) ? "warn" : ""], ["Decided", m.decided, `${m.overridden} overridden`], ["All open reviews", x.reviews.open, `${x.reviews.overdue} overdue`], ["Artworks", fmt(x.total), `${fmt(x.schools)} schools`], ...outcomeItems(x.outcomes)]} dense />
       <Card title="Waiting for your decision" flush>{m.open.length ? <Table cols={["Artwork", "Reason", { h: "Due", cls: "r" }]} rows={m.open.map(r => { const [t, tone] = dueTxt(r.due_at); return [<Two key="a" a={<span className="code">{r.entry?.code}</span>} b={r.entry?.title_en} />, r.reason, <Badge key="c" tone={tone}>{t}</Badge>]; })} onRow={i => location.assign(`/reviews?id=${m.open[i].id}`)} /> : <div style={{ padding: 20 }}><Empty title="No reviews waiting">Flagged artworks assigned to you appear here.</Empty></div>}</Card>
       <Pathways d={x} />

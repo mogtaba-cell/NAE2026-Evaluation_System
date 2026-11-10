@@ -6,7 +6,7 @@ import FileViewer from "@/components/FileViewer";
 import EntryAbout from "@/components/EntryAbout";
 import { answerOf, choiceOf } from "@/lib/questions";
 
-// Artworks to be reviewed: the same workspace as a scoring session. The list of artworks on the left, the artwork's
+// Management Review: the same workspace as a scoring session. The list of artworks on the left, the artwork's
 // files in the middle, the scores and the decision on the right. Every manager can open and decide any of them;
 // each shows who it is with and who reviewed it.
 const outcomeTxt = r => r.status === "overridden" ? `Overridden: ${r.new_passed === true ? (r.round_no === 2 ? "selected" : "shortlisted") : r.new_passed === false ? (r.round_no === 2 ? "not selected" : "not shortlisted") : `result ${r.new_result}`}${r.new_passed != null && r.new_result != null ? `, result ${r.new_result}` : ""}` : "Confirmed";
@@ -24,7 +24,7 @@ export default function Reviews() {
   const x = d.data;
   const pws = [...new Set((x.rows || []).map(r => r.entry.pathway_code))];
   return <>
-    <PageHead title="Artworks to be reviewed" sub="Flagged automatically (close to the pass mark or grade A line, evaluators far apart or disagreeing on a yes/no question), sent to review during scoring, or flagged by a coordinator. Any manager can review any artwork; each is due within the round's review time." />
+    <PageHead title="Management Review" sub="Flagged automatically (close to the pass mark or grade A line, evaluators far apart or disagreeing on a yes/no question), sent to review during scoring, or flagged by a coordinator. Any manager can review any artwork; each is due within the round's review time." />
     <Kpis dense items={[["To review", x.totals.open], ["Overdue", x.totals.overdue, "", x.totals.overdue ? "warn" : "ok"], ["Reviewed", x.totals.decided], ["Overridden", x.totals.overridden]]} />
     <div className="f3-sc f3-sess rv-ws">
       <section className="card f3-queue">
